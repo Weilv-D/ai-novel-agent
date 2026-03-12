@@ -17,11 +17,12 @@
 | Chapter | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Scene | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Suggestion | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Dependency | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 测试现状
-- **总计**: 165 tests passed (no failures)
+- **总计**: 213 tests passed (no failures)
 - **覆盖**: API endpoints, Service layer, Schema validation
-- **Suggestion**: 49 tests (Service + API + Schemas)
+- **Dependency**: 48 tests (Service + API + Schemas)
 
 ---
 
@@ -32,7 +33,6 @@
 |------|--------|---------|-----|---------|-------|
 | Memory | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Snapshot | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Dependency | ✅ | ✅ | ❌ | ❌ | ❌ |
 
 ### 低优先级 (后续)
 | 模块 | Models | Schemas | API | Service | Tests |
@@ -49,11 +49,16 @@
 - [x] 建议操作端点 (confirm, discard, commit)
 - [x] API + Service 集成测试
 
+### 已完成: Dependency (影响分析与依赖追踪)
+- [x] DependencyService (CRUD + 影响分析)
+- [x] Dependencies API (/api/v1/dependencies)
+- [x] 影响分析端点 (analyze, analyze/reverse)
+- [x] API + Service 集成测试
+
 ### 后续批次
 1. Memory (向量检索、叙事事实存储)
 2. Snapshot (版本控制、回滚)
-3. Dependency (影响分析、依赖追踪)
-4. User (认证、权限)
+3. User (认证、权限)
 
 ---
 

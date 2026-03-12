@@ -12,6 +12,17 @@ from app.schemas.chapter import (
     VolumeUpdate,
 )
 from app.schemas.character import CharacterCreate, CharacterResponse, CharacterUpdate
+from app.schemas.dependency import (
+    DependencyCreate,
+    DependencyQueryRequest,
+    DependencyResponse,
+    DependencyUpdate,
+    DependencyType,
+    DependencyTypeLiteral,
+    ImpactAnalysisRequest,
+    ImpactAnalysisResponse,
+    ImpactDetail,
+)
 from app.schemas.project import (
     ProjectCreate,
     ProjectResponse,
@@ -62,4 +73,13 @@ __all__ = [
     "SuggestionUpdate",
     "SuggestionActionRequest",
     "SuggestionActionResult",
+    "DependencyCreate",
+    "DependencyResponse",
+    "DependencyUpdate",
+    "DependencyTypeLiteral",
+    "DependencyType",
+    "DependencyQueryRequest",
+    "ImpactAnalysisRequest",
+    "ImpactAnalysisResponse",
+    "ImpactDetail",
 ]
