@@ -5,7 +5,6 @@ from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BadRequestException, NotFoundException
 from app.models.suggestion import Suggestion, SuggestionStatus

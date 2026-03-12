@@ -19,8 +19,9 @@
 | Suggestion | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 测试现状
-- **总计**: 165 tests passed
+- **总计**: 165 tests passed (no failures)
 - **覆盖**: API endpoints, Service layer, Schema validation
+- **Suggestion**: 49 tests (Service + API + Schemas)
 
 ---
 
