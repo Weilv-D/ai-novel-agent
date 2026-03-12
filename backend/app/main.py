@@ -2,11 +2,17 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as api_v1_router
 from app.core.config import get_settings
+from app.core.exceptions import (
+    AppException,
+    app_exception_handler,
+    generic_exception_handler,
+    http_exception_handler,
+)
 from app.core.logging import get_logger, setup_logging
 
 settings = get_settings()
@@ -53,6 +59,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register exception handlers
+app.add_exception_handler(AppException, app_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 # Include routers
 app.include_router(api_v1_router)
