@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chapter import Chapter, Scene, Volume
@@ -46,7 +46,7 @@ class CRUDVolume(CRUDBase[Volume, VolumeCreate, VolumeUpdate]):
         project_id: Any,
     ) -> Volume:
         """Create a new volume for a specific project."""
-        obj_dict = obj_in.model_dump()
+        obj_dict = obj_in.model_dump(exclude={"project_id"})
         db_obj = Volume(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()
@@ -101,7 +101,7 @@ class CRUDChapter(CRUDBase[Chapter, ChapterCreate, ChapterUpdate]):
         project_id: Any,
     ) -> Chapter:
         """Create a new chapter for a specific project."""
-        obj_dict = obj_in.model_dump()
+        obj_dict = obj_in.model_dump(exclude={"project_id", "volume_id"})
         db_obj = Chapter(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()
@@ -138,7 +138,7 @@ class CRUDScene(CRUDBase[Scene, SceneCreate, SceneUpdate]):
         chapter_id: Any,
     ) -> Scene:
         """Create a new scene for a specific chapter."""
-        obj_dict = obj_in.model_dump()
+        obj_dict = obj_in.model_dump(exclude={"chapter_id"})
         db_obj = Scene(**obj_dict, chapter_id=chapter_id)
         db.add(db_obj)
         await db.flush()

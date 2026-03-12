@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.world_setting import WorldSetting
@@ -59,7 +59,7 @@ class CRUDWorldSetting(CRUDBase[WorldSetting, WorldSettingCreate, WorldSettingUp
         project_id: Any,
     ) -> WorldSetting:
         """Create a new world setting for a specific project."""
-        obj_dict = obj_in.model_dump()
+        obj_dict = obj_in.model_dump(exclude={"project_id"})
         db_obj = WorldSetting(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()

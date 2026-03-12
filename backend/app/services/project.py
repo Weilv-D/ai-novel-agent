@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import Project

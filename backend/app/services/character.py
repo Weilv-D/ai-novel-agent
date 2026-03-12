@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.character import Character
@@ -39,7 +39,7 @@ class CRUDCharacter(CRUDBase[Character, CharacterCreate, CharacterUpdate]):
         project_id: Any,
     ) -> Character:
         """Create a new character for a specific project."""
-        obj_dict = obj_in.model_dump()
+        obj_dict = obj_in.model_dump(exclude={"project_id"})
         db_obj = Character(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()
