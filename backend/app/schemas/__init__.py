@@ -16,9 +16,9 @@ from app.schemas.dependency import (
     DependencyCreate,
     DependencyQueryRequest,
     DependencyResponse,
-    DependencyUpdate,
     DependencyType,
     DependencyTypeLiteral,
+    DependencyUpdate,
     ImpactAnalysisRequest,
     ImpactAnalysisResponse,
     ImpactDetail,
@@ -29,6 +29,15 @@ from app.schemas.project import (
     ProjectStatus,
     ProjectStatusLiteral,
     ProjectUpdate,
+)
+from app.schemas.snapshot import (
+    RollbackRequest,
+    RollbackResponse,
+    SnapshotCreate,
+    SnapshotQueryRequest,
+    SnapshotResponse,
+    SnapshotTargetTypeLiteral,
+    SnapshotUpdate,
 )
 from app.schemas.suggestion import (
     SuggestionActionRequest,
@@ -82,4 +91,11 @@ __all__ = [
     "ImpactAnalysisRequest",
     "ImpactAnalysisResponse",
     "ImpactDetail",
+    "SnapshotCreate",
+    "SnapshotResponse",
+    "SnapshotUpdate",
+    "SnapshotQueryRequest",
+    "SnapshotTargetTypeLiteral",
+    "RollbackRequest",
+    "RollbackResponse",
 ]

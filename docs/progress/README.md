@@ -18,11 +18,12 @@
 | Scene | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Suggestion | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Dependency | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Snapshot | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 测试现状
-- **总计**: 213 tests passed (no failures)
+- **总计**: 260 tests passed (no failures)
 - **覆盖**: API endpoints, Service layer, Schema validation
-- **Dependency**: 48 tests (Service + API + Schemas)
+- **Snapshot**: 47 tests (11 Schemas + 18 Service + 18 API)
 
 ---
 
@@ -31,8 +32,7 @@
 ### 高优先级 (下一批)
 | 模块 | Models | Schemas | API | Service | Tests |
 |------|--------|---------|-----|---------|-------|
-| Memory | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Snapshot | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Memory | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 ### 低优先级 (后续)
 | 模块 | Models | Schemas | API | Service | Tests |
@@ -55,10 +55,16 @@
 - [x] 影响分析端点 (analyze, analyze/reverse)
 - [x] API + Service 集成测试
 
+### 已完成: Snapshot (版本控制、回滚)
+- [x] SnapshotService (CRUD + 版本查询)
+- [x] Snapshots API (/api/v1/snapshots)
+- [x] 按目标查询 (get_by_target, get_latest_by_target)
+- [x] 回滚准备端点 (rollback, data retrieval)
+- [x] API + Service + Schemas 测试
+
 ### 后续批次
-1. Memory (向量检索、叙事事实存储)
-2. Snapshot (版本控制、回滚)
-3. User (认证、权限)
+1. Memory (向量检索、叙事事实存储) - Schemas/Service/API 已完成，待测试
+2. User (认证、权限)
 
 ---
 
@@ -71,4 +77,4 @@
 
 ---
 
-*最后更新: 2026-03-12*
+*最后更新: 2026-03-13*
