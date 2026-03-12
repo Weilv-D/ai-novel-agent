@@ -85,3 +85,25 @@ ai-novel-agent/
 - 数据库: PostgreSQL 16 + pgvector
 - 向量存储: MVP 使用 pgvector (V2 迁移到 Qdrant)
 - 认证: MVP 简化为 API Key (无复杂权限)
+
+## 数据库兼容性
+
+### SQLite 测试支持
+项目支持 SQLite 进行本地测试和开发，无需运行 PostgreSQL：
+
+- **测试**: 使用 `sqlite+aiosqlite:///:memory:` 运行单元测试
+- **Alembic 迁移**: 方言感知，自动适配 PostgreSQL 和 SQLite
+  - PostgreSQL: `UUID`, `JSON` (JSONB), `now()`
+  - SQLite: `String(36)`, `JSON` (TEXT), `CURRENT_TIMESTAMP`
+- **向量搜索**: PostgreSQL 使用 pgvector，SQLite 回退到 TEXT 存储
+
+### 验证 SQLite 兼容性
+```bash
+# 运行 SQLite 迁移测试
+python backend/scripts/test_sqlite_migration.py
+
+# 或直接运行测试套件
+cd backend && python -m pytest tests/
+```
+
+**注意**: 生产环境必须使用 PostgreSQL 16 + pgvector。SQLite 仅用于测试和快速本地开发。

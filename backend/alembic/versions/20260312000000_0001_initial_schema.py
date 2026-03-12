@@ -28,24 +28,40 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create all database tables."""
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+
+    # Determine column types and defaults based on dialect
+    # PostgreSQL: UUID, JSON, now()
+    # SQLite: String(36) for UUID, JSON (mapped to TEXT), CURRENT_TIMESTAMP
+    if dialect == "postgresql":
+        uuid_type = postgresql.UUID(as_uuid=True)
+        json_type = postgresql.JSON()
+        timestamp_default = sa.text("now()")
+    else:
+        # SQLite compatibility
+        uuid_type = sa.String(36)  # UUID stored as string
+        json_type = sa.JSON()  # SQLite maps JSON to TEXT
+        timestamp_default = sa.text("CURRENT_TIMESTAMP")
+
     # Create users table
     op.create_table(
         "users",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("api_key_hash", sa.String(255), nullable=True),
         sa.Column("name", sa.String(255), nullable=True),
-        sa.Column("metadata", postgresql.JSON(), nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("metadata", json_type, nullable=False, server_default="{}"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
     )
     op.create_index("ix_users_email", "users", ["email"], unique=True)
 
     # Create projects table
     op.create_table(
         "projects",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("user_id", uuid_type, nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("genre", sa.String(100), nullable=True),
         sa.Column("target_audience", sa.String(100), nullable=True),
@@ -53,9 +69,9 @@ def upgrade() -> None:
         sa.Column("status", sa.String(50), nullable=False, server_default="drafting"),
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("metadata", postgresql.JSON(), nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("metadata", json_type, nullable=False, server_default="{}"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_projects_user_id", "projects", ["user_id"])
@@ -63,16 +79,16 @@ def upgrade() -> None:
     # Create characters table
     op.create_table(
         "characters",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("role", sa.String(100), nullable=True),
-        sa.Column("profile", postgresql.JSON(), nullable=False, server_default="{}"),
-        sa.Column("relationships", postgresql.JSON(), nullable=False, server_default="{}"),
-        sa.Column("arc_state", postgresql.JSON(), nullable=False, server_default="{}"),
+        sa.Column("profile", json_type, nullable=False, server_default="{}"),
+        sa.Column("relationships", json_type, nullable=False, server_default="{}"),
+        sa.Column("arc_state", json_type, nullable=False, server_default="{}"),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_characters_project_id", "characters", ["project_id"])
@@ -80,14 +96,14 @@ def upgrade() -> None:
     # Create world_settings table
     op.create_table(
         "world_settings",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
         sa.Column("category", sa.String(100), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("content", sa.Text(), nullable=True),
-        sa.Column("metadata", postgresql.JSON(), nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("metadata", json_type, nullable=False, server_default="{}"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_world_settings_project_id", "world_settings", ["project_id"])
@@ -96,14 +112,14 @@ def upgrade() -> None:
     # Create volumes table
     op.create_table(
         "volumes",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
         sa.Column("volume_number", sa.Integer(), nullable=True),
         sa.Column("title", sa.String(255), nullable=True),
         sa.Column("outline", sa.Text(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_volumes_project_id", "volumes", ["project_id"])
@@ -111,17 +127,17 @@ def upgrade() -> None:
     # Create chapters table
     op.create_table(
         "chapters",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("volume_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
+        sa.Column("volume_id", uuid_type, nullable=True),
         sa.Column("chapter_number", sa.Integer(), nullable=False),
         sa.Column("title", sa.String(255), nullable=True),
         sa.Column("outline", sa.Text(), nullable=True),
         sa.Column("content", sa.Text(), nullable=True),
         sa.Column("status", sa.String(50), nullable=False, server_default="draft"),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["volume_id"], ["volumes.id"], ondelete="SET NULL"),
         sa.UniqueConstraint("project_id", "volume_id", "chapter_number", name="unique_chapter_number"),
@@ -131,25 +147,19 @@ def upgrade() -> None:
     # Create scenes table
     op.create_table(
         "scenes",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("chapter_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("chapter_id", uuid_type, nullable=False),
         sa.Column("scene_order", sa.Integer(), nullable=False),
-        sa.Column("pov_character_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("pov_character_id", uuid_type, nullable=True),
         sa.Column("location", sa.String(255), nullable=True),
         sa.Column("content", sa.Text(), nullable=True),
-        sa.Column("metadata", postgresql.JSON(), nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("metadata", json_type, nullable=False, server_default="{}"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["chapter_id"], ["chapters.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["pov_character_id"], ["characters.id"], ondelete="SET NULL"),
     )
     op.create_index("ix_scenes_chapter_id", "scenes", ["chapter_id"])
-
-    # Create memories table with pgvector support
-    # For PostgreSQL: use VECTOR type with pgvector extension
-    # For SQLite: use TEXT as fallback (stores JSON array as string)
-    bind = op.get_bind()
-    dialect = bind.dialect.name
 
     # Ensure pgvector extension is enabled (PostgreSQL only)
     if dialect == "postgresql":
@@ -162,16 +172,19 @@ def upgrade() -> None:
         # SQLite fallback: use TEXT to store JSON array
         embedding_type = sa.Text()
 
+    # Create memories table with pgvector support
+    # For PostgreSQL: use VECTOR type with pgvector extension
+    # For SQLite: use TEXT as fallback (stores JSON array as string)
     op.create_table(
         "memories",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
         sa.Column("memory_type", sa.String(50), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("embedding", embedding_type, nullable=True),
-        sa.Column("metadata", postgresql.JSON(), nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("metadata", json_type, nullable=False, server_default="{}"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_memories_project_id", "memories", ["project_id"])
@@ -188,17 +201,17 @@ def upgrade() -> None:
     # Create suggestions table
     op.create_table(
         "suggestions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
         sa.Column("target_type", sa.String(50), nullable=False),
-        sa.Column("target_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("target_id", uuid_type, nullable=False),
         sa.Column("type", sa.String(50), nullable=False),
-        sa.Column("content", postgresql.JSON(), nullable=False),
+        sa.Column("content", json_type, nullable=False),
         sa.Column("status", sa.String(50), nullable=False, server_default="draft"),
-        sa.Column("impact_analysis", postgresql.JSON(), nullable=True),
+        sa.Column("impact_analysis", json_type, nullable=True),
         sa.Column("committed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_suggestions_project_id", "suggestions", ["project_id"])
@@ -207,13 +220,13 @@ def upgrade() -> None:
     # Create snapshots table
     op.create_table(
         "snapshots",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
         sa.Column("target_type", sa.String(50), nullable=False),
-        sa.Column("target_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("data", postgresql.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("target_id", uuid_type, nullable=False),
+        sa.Column("data", json_type, nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_snapshots_project_id", "snapshots", ["project_id"])
@@ -221,15 +234,15 @@ def upgrade() -> None:
     # Create dependencies table
     op.create_table(
         "dependencies",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", uuid_type, primary_key=True, nullable=False),
+        sa.Column("project_id", uuid_type, nullable=False),
         sa.Column("source_type", sa.String(50), nullable=False),
-        sa.Column("source_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("source_id", uuid_type, nullable=False),
         sa.Column("target_type", sa.String(50), nullable=False),
-        sa.Column("target_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("target_id", uuid_type, nullable=False),
         sa.Column("dependency_type", sa.String(50), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.UniqueConstraint(
             "project_id", "source_type", "source_id", "target_type", "target_id", name="unique_dependency"
