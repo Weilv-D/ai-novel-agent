@@ -79,11 +79,13 @@ class SuggestionCreate(SuggestionBase):
 
 
 class SuggestionUpdate(BaseModel):
-    """Schema for updating a suggestion."""
+    """Schema for updating a suggestion.
+
+    Note: Only 'content' can be updated via PATCH. Status changes must go through
+    the confirm/discard/commit actions to ensure proper state transitions.
+    """
 
     content: dict[str, Any] | None = None
-    status: SuggestionStatusLiteral | None = None
-    impact_analysis: dict[str, Any] | None = None
 
 
 class SuggestionResponse(SuggestionBase):

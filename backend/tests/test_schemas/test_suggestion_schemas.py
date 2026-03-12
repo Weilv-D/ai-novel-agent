@@ -50,15 +50,14 @@ class TestSuggestionSchemas:
         assert schema.status == "draft"
 
     def test_suggestion_update(self):
-        """Test SuggestionUpdate schema."""
+        """Test SuggestionUpdate schema (content only, no status changes)."""
         data = {
-            "status": "patched",
             "content": {"name": "Bob", "age": 30},
         }
         schema = SuggestionUpdate(**data)
-        assert schema.status == "patched"
         assert schema.content == {"name": "Bob", "age": 30}
-        assert schema.impact_analysis is None
+        # Note: status and impact_analysis cannot be updated via PATCH
+        # Use the action endpoint (confirm/discard/commit) for state transitions
 
     def test_suggestion_action_request_confirm(self):
         """Test SuggestionActionRequest for confirm action."""
