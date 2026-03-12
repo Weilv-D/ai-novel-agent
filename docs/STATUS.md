@@ -16,7 +16,7 @@
   - User, Project, Character, WorldSetting
   - Volume, Chapter, Scene
   - Suggestion, Memory, Snapshot, Dependency
-- [x] Pydantic Schemas (health, project, character, world_setting, chapter, scene, suggestion)
+- [x] Pydantic Schemas (health, project, character, world_setting, chapter, scene, suggestion, memory, snapshot, dependency)
 - [x] FastAPI main.py 入口
 - [x] API 路由结构 + health check endpoint (无数据库依赖)
 - [x] Alembic 迁移配置
@@ -29,6 +29,28 @@
 - [ ] 环境依赖安装验证 (需 Python 3.11+ + pip/venv 或 Docker)
 - [ ] 启动并验证所有服务 (需 Docker 或本地 PostgreSQL)
 - [ ] LLM Service 基础封装
+
+### Phase 1 新增 API 功能
+- [x] Memory API - 叙事事实存储与向量相似度搜索
+  - 模型: Memory (支持 pgvector/SQLite 双模式)
+  - Schema: MemoryCreate, MemoryResponse, MemorySearchRequest
+  - 服务: 向量搜索、语义检索、事实查询
+  - API: POST /memories, GET /memories, GET /memories/search, DELETE /memories/{id}
+  - 测试: schemas (✓), services (✓), API (✓)
+
+- [x] Snapshot API - 版本控制与回滚
+  - 模型: Snapshot
+  - Schema: SnapshotCreate, SnapshotResponse
+  - 服务: 创建快照、获取快照列表、回滚到指定快照
+  - API: POST /snapshots, GET /snapshots, POST /snapshots/{id}/rollback
+  - 测试: schemas (✓), services (✓), API (✓)
+
+- [x] Dependency API - 影响分析与关系追踪
+  - 模型: Dependency
+  - Schema: DependencyCreate, DependencyResponse, DependencyAnalysis
+  - 服务: 创建依赖、获取依赖图、影响分析
+  - API: POST /dependencies, GET /dependencies, GET /dependencies/analysis
+  - 测试: schemas (✓), services (✓), API (✓)
 
 ## 下一步 (Phase 2)
 - 前端 Next.js 项目初始化

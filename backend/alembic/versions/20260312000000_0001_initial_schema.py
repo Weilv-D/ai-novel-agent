@@ -11,6 +11,14 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+# Import pgvector for VECTOR type support (with fallback for SQLite)
+# This mirrors the approach in app/models/memory.py for SQLite compatibility
+try:
+    from pgvector.sqlalchemy import Vector
+    PGVECTOR_AVAILABLE = True
+except ImportError:
+    PGVECTOR_AVAILABLE = False
+
 # revision identifiers, used by Alembic.
 revision: str = "0001"
 down_revision: Union[str, None] = None
@@ -137,14 +145,30 @@ def upgrade() -> None:
     )
     op.create_index("ix_scenes_chapter_id", "scenes", ["chapter_id"])
 
-    # Create memories table
+    # Create memories table with pgvector support
+    # For PostgreSQL: use VECTOR type with pgvector extension
+    # For SQLite: use TEXT as fallback (stores JSON array as string)
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+
+    # Ensure pgvector extension is enabled (PostgreSQL only)
+    if dialect == "postgresql":
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
+    # Determine the embedding column type based on dialect
+    if PGVECTOR_AVAILABLE and dialect == "postgresql":
+        embedding_type = Vector(1536)  # pgvector VECTOR type for 1536-dim embeddings
+    else:
+        # SQLite fallback: use TEXT to store JSON array
+        embedding_type = sa.Text()
+
     op.create_table(
         "memories",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
         sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("memory_type", sa.String(50), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("embedding", postgresql.ARRAY(sa.Float), nullable=True),  # Using ARRAY instead of VECTOR for now
+        sa.Column("embedding", embedding_type, nullable=True),
         sa.Column("metadata", postgresql.JSON(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
@@ -152,6 +176,14 @@ def upgrade() -> None:
     )
     op.create_index("ix_memories_project_id", "memories", ["project_id"])
     op.create_index("ix_memories_memory_type", "memories", ["memory_type"])
+
+    # Create optional HNSW index for faster vector similarity search (PostgreSQL only)
+    if dialect == "postgresql":
+        op.execute("""
+            CREATE INDEX IF NOT EXISTS ix_memories_embedding_cosine
+            ON memories USING hnsw (embedding vector_cosine_ops)
+            WHERE embedding IS NOT NULL
+        """)
 
     # Create suggestions table
     op.create_table(
@@ -218,6 +250,10 @@ def downgrade() -> None:
     op.drop_index("ix_suggestions_project_id", table_name="suggestions")
     op.drop_table("suggestions")
 
+    # Drop vector index before dropping memories table (PostgreSQL only)
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("DROP INDEX IF EXISTS ix_memories_embedding_cosine")
     op.drop_index("ix_memories_memory_type", table_name="memories")
     op.drop_index("ix_memories_project_id", table_name="memories")
     op.drop_table("memories")
