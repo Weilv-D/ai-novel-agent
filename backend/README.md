@@ -15,8 +15,17 @@ Backend service for AI Novel Agent - a long-form novel writing system with agent
 
 ### Prerequisites
 
+**Option 1: Full Docker Setup (Recommended)**
+- Docker & Docker Compose
+- No Python installation required
+
+**Option 2: Local Python Setup**
 - Python 3.11+
-- Docker & Docker Compose (for full stack with PostgreSQL)
+- pip and venv module
+- PostgreSQL 16 + pgvector (for full features)
+- Redis (for caching/celery)
+
+> **Note**: The `verify.py` script and basic tests require Python dependencies to be installed.
 
 ### Quick Start (No Database Required)
 

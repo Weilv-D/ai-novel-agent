@@ -16,7 +16,7 @@
   - User, Project, Character, WorldSetting
   - Volume, Chapter, Scene
   - Suggestion, Memory, Snapshot, Dependency
-- [x] Pydantic Schemas (health, project, character, world_setting)
+- [x] Pydantic Schemas (health, project, character, world_setting, chapter, scene, suggestion)
 - [x] FastAPI main.py 入口
 - [x] API 路由结构 + health check endpoint (无数据库依赖)
 - [x] Alembic 迁移配置
@@ -25,8 +25,9 @@
 - [x] Health check 测试通过
 
 ### 待办 (Phase 1 剩余)
-- [ ] Docker Compose 本地开发配置
-- [ ] 启动并验证所有服务
+- [x] Docker Compose 本地开发配置 (已存在于 infra/docker-compose.yml)
+- [ ] 环境依赖安装验证 (需 Python 3.11+ + pip/venv 或 Docker)
+- [ ] 启动并验证所有服务 (需 Docker 或本地 PostgreSQL)
 - [ ] LLM Service 基础封装
 
 ## 下一步 (Phase 2)
