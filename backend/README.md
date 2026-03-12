@@ -137,5 +137,5 @@ Phase 1 (Backend Skeleton) - In Progress
 - ✅ Health check API endpoint (no DB dependency)
 - ✅ Initial Alembic migration
 - ✅ Basic test suite with isolated tests
+- ✅ Docker Compose setup (postgres, redis, backend services)
 - ⏳ LLM service integration
-- ⏳ Docker Compose setup

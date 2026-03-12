@@ -1,11 +1,15 @@
 """Chapter and Scene schemas."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+# ============ Enums ============
+
+ChapterStatusLiteral = Literal["draft", "writing", "completed"]
+TargetTypeLiteral = Literal["character", "world_setting", "chapter", "scene"]
 
 # ============ Volume Schemas ============
 
@@ -46,8 +50,9 @@ class VolumeResponse(VolumeBase):
 
 # ============ Chapter Schemas ============
 
-class ChapterStatus(str):
-    """Chapter status values."""
+# Status constants for backward compatibility and convenience
+class ChapterStatus:
+    """Chapter status constants."""
 
     DRAFT = "draft"
     WRITING = "writing"
@@ -61,7 +66,7 @@ class ChapterBase(BaseModel):
     title: str | None = Field(None, max_length=255)
     outline: str | None = None
     content: str | None = None
-    status: str = Field(default=ChapterStatus.DRAFT)
+    status: ChapterStatusLiteral = Field(default=ChapterStatus.DRAFT)
     notes: str | None = None
 
 
@@ -79,7 +84,7 @@ class ChapterUpdate(BaseModel):
     title: str | None = Field(None, max_length=255)
     outline: str | None = None
     content: str | None = None
-    status: str | None = None
+    status: ChapterStatusLiteral | None = None
     notes: str | None = None
     volume_id: UUID | None = None
 

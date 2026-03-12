@@ -1,7 +1,7 @@
 """Suggestion schemas for three-state modification system."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -9,8 +9,29 @@ from pydantic import BaseModel, Field
 
 # ============ Enums ============
 
-class SuggestionStatus(str):
-    """Suggestion status values."""
+# Status literals for suggestions
+SuggestionStatusLiteral = Literal["draft", "patched", "committed", "discarded"]
+
+# Type literals for suggestions
+SuggestionTypeLiteral = Literal[
+    "character_edit",
+    "world_edit",
+    "chapter_edit",
+    "scene_edit",
+    "content_gen",
+    "outline_gen",
+    "continuity_fix",
+]
+
+# Target type literals
+TargetTypeLiteral = Literal["character", "world_setting", "chapter", "scene"]
+
+# Action literals
+SuggestionActionLiteral = Literal["confirm", "discard", "commit"]
+
+# Status constants for backward compatibility and convenience
+class SuggestionStatus:
+    """Suggestion status constants."""
 
     DRAFT = "draft"
     PATCHED = "patched"
@@ -18,8 +39,8 @@ class SuggestionStatus(str):
     DISCARDED = "discarded"
 
 
-class SuggestionType(str):
-    """Types of suggestions."""
+class SuggestionType:
+    """Suggestion type constants."""
 
     CHARACTER_EDIT = "character_edit"
     WORLD_EDIT = "world_edit"
@@ -30,14 +51,24 @@ class SuggestionType(str):
     CONTINUITY_FIX = "continuity_fix"
 
 
+class SuggestionAction:
+    """Suggestion action constants."""
+
+    CONFIRM = "confirm"
+    DISCARD = "discard"
+    COMMIT = "commit"
+
+
 # ============ Suggestion Schemas ============
 
 class SuggestionBase(BaseModel):
     """Base suggestion schema."""
 
-    target_type: str = Field(..., description="Type of target object (character, world_setting, chapter, scene)")
+    target_type: TargetTypeLiteral = Field(
+        ..., description="Type of target object (character, world_setting, chapter, scene)"
+    )
     target_id: UUID = Field(..., description="ID of the target object")
-    type: str = Field(..., description="Type of suggestion")
+    type: SuggestionTypeLiteral = Field(..., description="Type of suggestion")
     content: dict[str, Any] = Field(..., description="Suggestion content (JSON)")
 
 
@@ -45,14 +76,14 @@ class SuggestionCreate(SuggestionBase):
     """Schema for creating a suggestion."""
 
     project_id: UUID
-    status: str = Field(default=SuggestionStatus.DRAFT)
+    status: SuggestionStatusLiteral = Field(default=SuggestionStatus.DRAFT)
 
 
 class SuggestionUpdate(BaseModel):
     """Schema for updating a suggestion."""
 
     content: dict[str, Any] | None = None
-    status: str | None = None
+    status: SuggestionStatusLiteral | None = None
     impact_analysis: dict[str, Any] | None = None
 
 
@@ -61,7 +92,7 @@ class SuggestionResponse(SuggestionBase):
 
     id: UUID
     project_id: UUID
-    status: str
+    status: SuggestionStatusLiteral
     impact_analysis: dict[str, Any] | None
     committed_at: datetime | None
     created_at: datetime
@@ -75,8 +106,12 @@ class SuggestionResponse(SuggestionBase):
 class SuggestionActionRequest(BaseModel):
     """Schema for suggestion actions (confirm, discard, commit)."""
 
-    action: str = Field(..., description="Action to perform: confirm, discard, or commit")
-    impact_analysis: dict[str, Any] | None = Field(None, description="Impact analysis results (required for commit)")
+    action: SuggestionActionLiteral = Field(
+        ..., description="Action to perform: confirm, discard, or commit"
+    )
+    impact_analysis: dict[str, Any] | None = Field(
+        None, description="Impact analysis results (required for commit)"
+    )
 
 
 class SuggestionActionResult(BaseModel):
@@ -85,4 +120,4 @@ class SuggestionActionResult(BaseModel):
     success: bool
     message: str
     suggestion_id: UUID
-    action: str
+    action: SuggestionActionLiteral
