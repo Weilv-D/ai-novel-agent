@@ -4,7 +4,7 @@ import uuid
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import Column, ForeignKey, JSON, String, DateTime
+from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 

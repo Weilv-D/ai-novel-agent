@@ -1,9 +1,8 @@
 """Database initialization utilities."""
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import async_session_maker, engine
+from app.db import engine
 
 
 async def create_pgvector_extension() -> None:

@@ -1,10 +1,25 @@
 """Project schemas."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+# ============ Enums ============
+
+ProjectStatusLiteral = Literal["drafting", "writing", "revising", "completed"]
+
+
+# ============ Status Constants ============
+
+class ProjectStatus:
+    """Project status constants."""
+
+    DRAFTING = "drafting"
+    WRITING = "writing"
+    REVISING = "revising"
+    COMPLETED = "completed"
 
 
 class ProjectBase(BaseModel):
@@ -16,13 +31,13 @@ class ProjectBase(BaseModel):
     target_word_count: int | None = Field(None, ge=0)
     summary: str | None = None
     notes: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict, alias="metadata")
 
 
 class ProjectCreate(ProjectBase):
     """Schema for creating a project."""
 
-    status: str = "drafting"
+    status: ProjectStatusLiteral = Field(default=ProjectStatus.DRAFTING)
 
 
 class ProjectUpdate(BaseModel):
@@ -32,10 +47,10 @@ class ProjectUpdate(BaseModel):
     genre: str | None = Field(None, max_length=100)
     target_audience: str | None = Field(None, max_length=100)
     target_word_count: int | None = Field(None, ge=0)
-    status: str | None = None
+    status: ProjectStatusLiteral | None = None
     summary: str | None = None
     notes: str | None = None
-    metadata: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = Field(None, alias="metadata")
 
 
 class ProjectResponse(ProjectBase):
@@ -43,8 +58,8 @@ class ProjectResponse(ProjectBase):
 
     id: UUID
     user_id: UUID
-    status: str
+    status: ProjectStatusLiteral
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}

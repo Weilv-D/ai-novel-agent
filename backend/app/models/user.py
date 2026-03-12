@@ -1,10 +1,8 @@
 """User model for authentication and ownership."""
 
-import uuid
 from typing import Any
 
-from sqlalchemy import JSON, Column, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -20,7 +18,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # JSONB fields for extensibility
-    metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False, name="metadata")
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, email={self.email!r})"

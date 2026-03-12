@@ -5,7 +5,8 @@ import sys
 from typing import Any
 
 import structlog
-from structlog.types import EventDict, Processor
+from structlog.types import Processor
+
 
 def setup_logging(settings: Any) -> None:
     """Configure structured logging for the application."""

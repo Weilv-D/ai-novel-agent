@@ -1,9 +1,9 @@
 """Dependency model for impact analysis."""
 
 import uuid
-from typing import Any
+from enum import Enum
 
-from sqlalchemy import Column, ForeignKey, JSON, String, UniqueConstraint
+from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,9 +17,6 @@ class DependencyType(str, Enum):
     INFLUENCES = "influences"  # e.g., setting influences character
     CONTAINS = "contains"  # e.g., volume contains chapter
     PRECEDES = "precedes"  # e.g., chapter precedes another chapter
-
-
-from enum import Enum
 
 
 class Dependency(Base, UUIDMixin, TimestampMixin):

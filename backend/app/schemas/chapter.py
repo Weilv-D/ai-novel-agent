@@ -45,7 +45,7 @@ class VolumeResponse(VolumeBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 # ============ Chapter Schemas ============
@@ -98,7 +98,7 @@ class ChapterResponse(ChapterBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 # ============ Scene Schemas ============
@@ -110,7 +110,7 @@ class SceneBase(BaseModel):
     pov_character_id: UUID | None = None
     location: str | None = Field(None, max_length=255)
     content: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict, alias="metadata")
 
 
 class SceneCreate(SceneBase):
@@ -126,7 +126,7 @@ class SceneUpdate(BaseModel):
     pov_character_id: UUID | None = None
     location: str | None = Field(None, max_length=255)
     content: str | None = None
-    metadata: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = Field(None, alias="metadata")
 
 
 class SceneResponse(SceneBase):
@@ -137,4 +137,4 @@ class SceneResponse(SceneBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}

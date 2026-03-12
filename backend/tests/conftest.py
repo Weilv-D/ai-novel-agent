@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.main import app
 from app.models import Base
 
-
 # Test database URL - using SQLite for isolated, dependency-free testing
 # Note: For production-like testing with PostgreSQL, override via environment variable
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

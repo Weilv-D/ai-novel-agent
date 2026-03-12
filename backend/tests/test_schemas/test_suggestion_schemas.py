@@ -6,11 +6,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas import (
-    SuggestionCreate,
-    SuggestionUpdate,
-    SuggestionResponse,
     SuggestionActionRequest,
     SuggestionActionResult,
+    SuggestionCreate,
+    SuggestionUpdate,
 )
 
 

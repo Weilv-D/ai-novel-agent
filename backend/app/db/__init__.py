@@ -1,7 +1,6 @@
 """Database session and connection management."""
 
-from collections.abc import AsyncGenerator
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (

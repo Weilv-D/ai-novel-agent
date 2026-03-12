@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import Column, ForeignKey, JSON, String
+from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 

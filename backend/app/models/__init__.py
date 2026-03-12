@@ -1,8 +1,8 @@
 """SQLAlchemy models."""
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.chapter import Chapter, ChapterStatus, Scene, Volume
 from app.models.character import Character
-from app.models.chapter import Chapter, Scene, Volume, ChapterStatus
 from app.models.dependency import Dependency, DependencyType
 from app.models.memory import Memory, MemoryType
 from app.models.project import Project, ProjectStatus

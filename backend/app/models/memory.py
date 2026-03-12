@@ -4,8 +4,9 @@ import uuid
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import Column, ForeignKey, JSON, String, Text
-from sqlalchemy.dialects.postgresql import UUID, VECTOR
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -36,10 +37,10 @@ class Memory(Base, UUIDMixin, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Vector embedding (1536 dimensions for OpenAI embeddings)
-    embedding: Mapped[list[float] | None] = mapped_column(VECTOR(1536), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
 
     # Metadata
-    metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False, name="metadata")
 
     def __repr__(self) -> str:
         return f"Memory(id={self.id!r}, type={self.memory_type!r}, content={self.content[:50]!r}...)"

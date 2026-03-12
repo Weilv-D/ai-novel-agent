@@ -1,9 +1,10 @@
 """Chapter and Scene models for novel structure."""
 
 import uuid
+from enum import Enum
 from typing import Any
 
-from sqlalchemy import Column, ForeignKey, JSON, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,9 +34,6 @@ class ChapterStatus(str, Enum):
     DRAFT = "draft"
     WRITING = "writing"
     COMPLETED = "completed"
-
-
-from enum import Enum
 
 
 class Chapter(Base, UUIDMixin, TimestampMixin):
@@ -95,7 +93,7 @@ class Scene(Base, UUIDMixin, TimestampMixin):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # JSONB for extensibility (characters present, time, weather, etc.)
-    metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False, name="metadata")
 
     def __repr__(self) -> str:
         return f"Scene(id={self.id!r}, chapter_id={self.chapter_id!r}, order={self.scene_order!r})"

@@ -1,9 +1,10 @@
 """WorldSetting model for world-building elements."""
 
 import uuid
+from enum import Enum
 from typing import Any
 
-from sqlalchemy import Column, ForeignKey, JSON, String, Text
+from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,9 +26,6 @@ class WorldSettingCategory(str, Enum):
     OTHER = "other"
 
 
-from enum import Enum
-
-
 class WorldSetting(Base, UUIDMixin, TimestampMixin):
     """WorldSetting model for world-building elements."""
 
@@ -46,7 +44,7 @@ class WorldSetting(Base, UUIDMixin, TimestampMixin):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # JSONB for extensibility
-    metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False, name="metadata")
 
     def __repr__(self) -> str:
         return f"WorldSetting(id={self.id!r}, name={self.name!r}, category={self.category!r})"

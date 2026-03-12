@@ -1,21 +1,17 @@
 """Tests for chapter and scene schemas."""
 
 import uuid
-from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
 
 from app.schemas import (
-    VolumeCreate,
-    VolumeUpdate,
-    VolumeResponse,
     ChapterCreate,
     ChapterUpdate,
-    ChapterResponse,
     SceneCreate,
     SceneUpdate,
-    SceneResponse,
+    VolumeCreate,
+    VolumeUpdate,
 )
 
 
@@ -138,7 +134,7 @@ class TestSceneSchemas:
         assert schema.scene_order == 1
         assert schema.pov_character_id == character_id
         assert schema.location == "Castle"
-        assert schema.metadata == {"time": "morning", "weather": "rainy"}
+        assert schema.meta == {"time": "morning", "weather": "rainy"}
 
     def test_scene_create_minimal(self):
         """Test SceneCreate with minimal required fields."""
@@ -147,7 +143,7 @@ class TestSceneSchemas:
         assert schema.chapter_id == chapter_id
         assert schema.scene_order == 1
         assert schema.pov_character_id is None
-        assert schema.metadata == {}
+        assert schema.meta == {}
 
     def test_scene_order_validation(self):
         """Test scene order must be >= 1."""
