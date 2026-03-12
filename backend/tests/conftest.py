@@ -12,8 +12,9 @@ from app.main import app
 from app.models import Base
 
 
-# Test database URL
-TEST_DATABASE_URL = "postgresql+asyncpg://user:password@localhost:5432/novel_agent_test"
+# Test database URL - using SQLite for isolated, dependency-free testing
+# Note: For production-like testing with PostgreSQL, override via environment variable
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture(scope="session")

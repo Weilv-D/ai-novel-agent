@@ -3,6 +3,7 @@
 from collections.abc import AsyncGenerator
 from typing import AsyncIterator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
