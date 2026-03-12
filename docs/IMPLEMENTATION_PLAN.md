@@ -61,7 +61,7 @@
 
 **Day 1-3：Pydantic Schemas**
 - [ ] 定义所有 Pydantic Schema
-  - [ ] project.py, character.py, world_view.py
+  - [ ] project.py, character.py, world_setting.py
   - [ ] chapter.py, scene.py
   - [ ] suggestion.py, agent.py
 - [ ] 添加单元测试验证 Schema
@@ -151,7 +151,7 @@
 - [ ] 编写 API 测试
 
 **Day 3-4：世界观与结构**
-- [ ] 实现 WorldSetting CRUD API
+- [ ] 实现 WorldSetting CRUD API（表名：world_settings，模型：WorldSetting）
 - [ ] 实现 Volume CRUD API
 - [ ] 实现 Chapter CRUD API
 - [ ] 实现 Scene CRUD API

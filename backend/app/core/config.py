@@ -1,0 +1,79 @@
+"""Application configuration."""
+
+from functools import lru_cache
+from typing import Any
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Application
+    app_name: str = "AI Novel Agent API"
+    app_version: str = "0.1.0"
+    debug: bool = False
+    environment: str = Field(default="development", pattern="^(development|staging|production)$")
+
+    # Server
+    host: str = "0.0.0.0"
+    port: int = 8000
+    workers: int = 1
+
+    # Database
+    database_url: str = "postgresql+asyncpg://user:password@localhost:5432/novel_agent"
+
+    # Redis
+    redis_url: str = "redis://localhost:6379/0"
+
+    # CORS
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
+
+    # API Keys
+    secret_key: str = "change-this-in-production-min-32-chars-long"
+    api_key_header: str = "X-API-Key"
+    admin_api_key: str = ""
+
+    # LLM
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
+    max_tokens: int = 4096
+    temperature: float = 0.7
+
+    # Celery
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
+        """Parse CORS origins from string or list."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production."""
+        return self.environment == "production"
+
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development."""
+        return self.environment == "development"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings()

@@ -136,7 +136,7 @@ backend/
 │   │   │   ├── auth.py         # 认证相关（MVP: 简单 API key）
 │   │   │   ├── projects.py     # 项目 CRUD
 │   │   │   ├── characters.py   # 人物 CRUD
-│   │   │   ├── world_view.py   # 世界观 CRUD
+│   │   │   ├── world_settings.py   # 世界观 CRUD
 │   │   │   ├── chapters.py     # 章节 CRUD
 │   │   │   ├── scenes.py       # 场景 CRUD
 │   │   │   ├── suggestions.py  # 建议/补丁/提交
@@ -152,7 +152,7 @@ backend/
 │   │   ├── base.py             # Base 类
 │   │   ├── project.py          # 项目模型
 │   │   ├── character.py        # 人物模型
-│   │   ├── world_view.py       # 世界观模型
+│   │   ├── world_setting.py    # 世界观模型
 │   │   ├── chapter.py          # 章节模型
 │   │   ├── scene.py            # 场景模型
 │   │   ├── suggestion.py       # 建议模型
@@ -162,7 +162,7 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── project.py
 │   │   ├── character.py
-│   │   ├── world_view.py
+│   │   ├── world_setting.py
 │   │   ├── chapter.py
 │   │   ├── scene.py
 │   │   ├── suggestion.py
@@ -172,7 +172,7 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── project_service.py
 │   │   ├── character_service.py
-│   │   ├── world_view_service.py
+│   │   ├── world_setting_service.py
 │   │   ├── chapter_service.py
 │   │   ├── scene_service.py
 │   │   ├── suggestion_service.py
@@ -222,7 +222,7 @@ frontend/
 │   │   │   ├── [id]/
 │   │   │   │   ├── page.tsx
 │   │   │   │   ├── characters/
-│   │   │   │   ├── worldview/
+│   │   │   │   ├── world-settings/
 │   │   │   │   └── chapters/
 │   │   │   └── new/page.tsx
 │   │   └── api/                # API Route（如有需要）
@@ -244,7 +244,7 @@ frontend/
 │   ├── features/               # 功能模块（业务逻辑）
 │   │   ├── projects/
 │   │   ├── characters/
-│   │   ├── worldview/
+│   │   ├── world-settings/
 │   │   └── chapters/
 │   ├── hooks/                  # 自定义 Hooks
 │   │   ├── useAgent.ts
