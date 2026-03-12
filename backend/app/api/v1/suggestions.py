@@ -105,7 +105,7 @@ async def suggestion_action(
 
     - **confirm**: Move suggestion from draft to patched (with optional impact analysis)
     - **discard**: Discard the suggestion (draft/patched only)
-    - **commit**: Commit the suggestion to the target object (patched only)
+    - **commit**: Mark the suggestion as committed (records intent to apply changes)
     """
     action = action_req.action
     impact_analysis = action_req.impact_analysis
@@ -118,7 +118,7 @@ async def suggestion_action(
         message = "Suggestion discarded"
     elif action == "commit":
         await suggestion_service.commit(db, suggestion_id=suggestion_id)
-        message = "Suggestion committed to target"
+        message = "Suggestion committed (application to target pending)"
     else:
         # This should not happen due to Pydantic validation
         message = f"Unknown action: {action}"

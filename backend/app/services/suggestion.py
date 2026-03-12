@@ -103,7 +103,12 @@ class CRUDSuggestion(CRUDBase[Suggestion, SuggestionCreate, SuggestionUpdate]):
         return suggestion
 
     async def commit(self, db: AsyncSession, *, suggestion_id: Any) -> Suggestion:
-        """Commit a suggestion (patched -> committed)."""
+        """Commit a suggestion (patched -> committed).
+
+        Note: This records the commit decision and marks the suggestion as committed.
+        The actual content application to the target object will be implemented separately
+        as it requires type-specific logic for each target (character, chapter, scene, etc.).
+        """
         suggestion = await self.get(db, id=suggestion_id)
         if suggestion.status != SuggestionStatus.PATCHED.value:
             raise BadRequestException(

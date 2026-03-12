@@ -318,7 +318,7 @@ class TestSuggestionServiceStateTransitions:
 
     @pytest.mark.asyncio
     async def test_commit_patched_suggestion(self, db_session: AsyncSession, test_project: Project):
-        """Test committing a patched suggestion."""
+        """Test committing a patched suggestion marks it as committed."""
         suggestion = await suggestion_service.create_with_project(
             db_session,
             obj_in=SuggestionCreate(
@@ -336,6 +336,8 @@ class TestSuggestionServiceStateTransitions:
 
         assert result.status == SuggestionStatus.COMMITTED
         assert result.committed_at is not None
+        # Note: The suggestion is marked committed but the actual content application
+        # to the target object is not yet implemented - this records the commit decision.
 
     @pytest.mark.asyncio
     async def test_commit_non_patched_fails(self, db_session: AsyncSession, test_project: Project):
