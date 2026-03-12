@@ -4,12 +4,39 @@ import uuid
 from enum import Enum
 from typing import Any
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+
+# Import Vector type conditionally for SQLite compatibility
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    # Fallback for SQLite testing: use a TypeDecorator that stores as JSON
+    from sqlalchemy import TypeDecorator, TEXT
+    import json
+
+    class Vector(TypeDecorator):
+        """Fallback Vector type for SQLite compatibility."""
+
+        impl = TEXT
+        cache_ok = True
+
+        def __init__(self, dimension: int):
+            super().__init__()
+            self.dimension = dimension
+
+        def process_bind_param(self, value, dialect):
+            if value is None:
+                return None
+            return json.dumps(value)
+
+        def process_result_value(self, value, dialect):
+            if value is None:
+                return None
+            return json.loads(value)
 
 
 class MemoryType(str, Enum):
