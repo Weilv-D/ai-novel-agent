@@ -69,6 +69,8 @@ pytest --cov=app --cov-report=html
 pytest tests/test_api/test_health.py -v
 ```
 
+**Database Note**: Tests use SQLite for isolation and speed. SQLite is sufficient for unit/integration tests, but production requires PostgreSQL 16 + pgvector for full feature support (vector similarity search, JSONB, native UUID).
+
 ### Code Quality
 
 ```bash
