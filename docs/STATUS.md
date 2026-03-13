@@ -93,8 +93,14 @@
 - [x] 场景删除功能 (带确认对话框)
 - [x] 场景内容编辑（富文本域）
 
+### 人物管理 (Characters)
+- [x] 人物列表页面 (/projects/[id]/characters)
+- [x] 人物详情页面 (/projects/[id]/characters/[characterId])
+- [x] 人物创建页面 (/projects/[id]/characters/new)
+- [x] 人物编辑页面 (/projects/[id]/characters/[characterId]/edit)
+- [x] 人物删除功能 (带确认对话框)
+
 ### 待办
-- [ ] 人物管理页面 (Characters CRUD)
 - [ ] 世界观管理页面 (WorldSettings CRUD)
 
 ## 项目结构
