@@ -202,7 +202,7 @@ export default function ProjectDetailPage() {
             <div className="flex flex-wrap gap-4">
               <Button href={`/projects/${project.id}/chapters`}>章节管理</Button>
               <Button variant="outline" href={`/projects/${project.id}/characters`}>人物管理</Button>
-              <Button variant="outline" href={`/projects/${project.id}/worldview`}>世界观</Button>
+              <Button variant="outline" href={`/projects/${project.id}/worldsettings`}>世界观</Button>
             </div>
           </CardContent>
         </Card>

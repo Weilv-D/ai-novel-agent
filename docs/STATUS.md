@@ -100,8 +100,16 @@
 - [x] 人物编辑页面 (/projects/[id]/characters/[characterId]/edit)
 - [x] 人物删除功能 (带确认对话框)
 
+### 世界观管理 (WorldSettings)
+- [x] 设定列表页面 (/projects/[id]/worldsettings)
+- [x] 设定详情页面 (/projects/[id]/worldsettings/[settingId])
+- [x] 设定创建页面 (/projects/[id]/worldsettings/new)
+- [x] 设定编辑页面 (/projects/[id]/worldsettings/[settingId]/edit)
+- [x] 设定删除功能 (带确认对话框)
+- [x] 按分类分组展示
+
 ### 待办
-- [ ] 世界观管理页面 (WorldSettings CRUD)
+- [ ] 所有页面后端真实 API 验证测试
 
 ## 项目结构
 ```
