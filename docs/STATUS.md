@@ -109,14 +109,12 @@
 - [x] 按分类分组展示
 
 ### 待办
-- [ ] 运行 docker-compose 并验证所有服务连通性
-- [ ] 前后端集成端到端测试 (实际 HTTP 请求验证)
-- [ ] Frontend Dockerfile 开发环境配置
-- [ ] docker-compose.yml 添加 frontend 服务
+- [ ] 运行 docker-compose 并验证所有服务连通性（需 Docker 环境）
+- [ ] 前后端集成端到端测试（需运行后端服务）
 
-## API 验证记录
+## 验证记录（区分静态 vs 运行）
 
-### 后端单元测试 (2025-01-13)
+### 后端单元测试 - SQLite (2025-01-13)
 ```bash
 cd backend && python -m pytest tests/
 ```
@@ -223,6 +221,24 @@ cd backend && python -m pytest tests/
 **注意**: 生产环境必须使用 PostgreSQL 16 + pgvector。SQLite 仅用于测试和快速本地开发。
 
 ### 后端数据库兼容性修复 (2025-01-13)
+- [x] 修复 `init_db.py` 中的 pgvector 扩展创建逻辑
+  - 添加数据库方言检测，仅在 PostgreSQL 时创建扩展
+  - SQLite 环境跳过扩展创建，避免启动错误
+  - `reset_database()` 仅支持 PostgreSQL，其他方言抛出明确错误
+
+### 开发环境配置 - 静态验证 (2025-01-13)
+- [x] frontend/Dockerfile - Node 20 Alpine 开发环境
+- [x] infra/docker-compose.yml - 添加 frontend 服务配置
+  - Backend (8000), Frontend (3000), PostgreSQL (5432), Redis (6379)
+  - 卷挂载配置支持实时代码编辑
+- [x] infra/start.sh - 启动脚本（语法检查通过）
+- [x] backend/scripts/verify_api_integration.py - HTTP 集成测试脚本
+  - 字段名已与后端 schema 对齐（name, chapter_number, scene_order, profile dict）
+  - 路由路径已与后端 API 对齐（/api/v1/scenes/chapter/{id} 等）
+  - Python 语法检查通过，AST 解析通过
+- [ ] 运行时验证（需 Docker/PostgreSQL 环境）
+  - 宿主机无 docker/docker-compose，无法实际运行
+  - 脚本已准备就绪，待 Docker 环境可用后执行
 - [x] 修复 `init_db.py` 中的 pgvector 扩展创建逻辑
   - 添加数据库方言检测，仅在 PostgreSQL 时创建扩展
   - SQLite 环境跳过扩展创建，避免启动错误

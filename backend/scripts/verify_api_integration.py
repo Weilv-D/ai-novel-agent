@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """
-API Integration Verification Script (DRAFT - UNVERIFIED)
+API Integration Verification Script
 
 Tests all API endpoints to ensure they work correctly.
 Run this after starting the backend server to verify the integration.
 
-NOTE: This script is currently UNVERIFIED and contains KNOWN ISSUES:
-- Field names may not match actual backend schemas
-  - Project: script uses 'title/description' but backend expects 'name'
-  - Scene: script uses 'scene_number' but backend expects 'scene_order'
-  - Character: script uses 'description/personality' but backend uses 'profile' dict
-- Requires manual verification and fixes before use
+REQUIREMENTS:
+- Backend server running on http://localhost:8000
+- PostgreSQL database initialized with migrations
+- httpx library installed: pip install httpx
 
-TODO: Fix field names to match backend schemas, then run against live backend.
+VERIFICATION STATUS:
+- Schema field names updated to match backend (2025-01-13)
+- NOT YET RUN against live backend - requires running Docker/PostgreSQL
 """
 
 import sys
 import httpx
 from typing import Any
-import json
 
 API_BASE_URL = "http://localhost:8000"
 VERBOSE = True
@@ -79,10 +78,9 @@ async def verify_api() -> dict[str, Any]:
                 print_result("List projects", False, f"Status: {response.status_code}")
                 results["failed"] += 1
 
-            # Create a project
+            # Create a project (using correct schema field: 'name' not 'title')
             project_data = {
-                "title": "Integration Test Project",
-                "description": "A project for API integration testing",
+                "name": "Integration Test Project",
                 "genre": "fiction"
             }
             response = await client.post(
@@ -108,8 +106,8 @@ async def verify_api() -> dict[str, Any]:
                     print_result("Get project by ID", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Update project
-                update_data = {"description": "Updated description"}
+                # Update project (PATCH, not PUT)
+                update_data = {"genre": "fantasy"}
                 response = await client.patch(
                     f"{API_BASE_URL}/api/v1/projects/{project_id}",
                     json=update_data
@@ -142,11 +140,14 @@ async def verify_api() -> dict[str, Any]:
                     print_result("List characters", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Create a character
+                # Create a character (using correct schema: 'profile' dict, not individual fields)
                 character_data = {
                     "name": "Test Character",
-                    "description": "A test character for API integration testing",
-                    "personality": "Brave and curious"
+                    "role": "protagonist",
+                    "profile": {
+                        "personality": "Brave and curious",
+                        "appearance": "Tall with dark hair"
+                    }
                 }
                 response = await client.post(
                     f"{API_BASE_URL}/api/v1/projects/{project_id}/characters",
@@ -185,18 +186,18 @@ async def verify_api() -> dict[str, Any]:
                 # List chapters
                 response = await client.get(f"{API_BASE_URL}/api/v1/projects/{project_id}/chapters")
                 if response.status_code == 200:
-                    chapters = response.json()
+                    data = response.json()
+                    chapters = data.get("items", data)
                     print_result("List chapters", True, f"Found {len(chapters)} chapters")
                     results["passed"] += 1
                 else:
                     print_result("List chapters", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Create a chapter
+                # Create a chapter (using correct schema: 'chapter_number' not 'order')
                 chapter_data = {
-                    "title": "Test Chapter",
-                    "content": "This is test content for API integration testing.",
                     "chapter_number": 1,
+                    "title": "Test Chapter",
                     "status": "draft"
                 }
                 response = await client.post(
@@ -223,8 +224,8 @@ async def verify_api() -> dict[str, Any]:
 
         try:
             if chapter_id:
-                # List scenes
-                response = await client.get(f"{API_BASE_URL}/api/v1/chapters/{chapter_id}/scenes")
+                # List scenes (correct path: /api/v1/scenes/chapter/{chapter_id})
+                response = await client.get(f"{API_BASE_URL}/api/v1/scenes/chapter/{chapter_id}")
                 if response.status_code == 200:
                     scenes = response.json()
                     print_result("List scenes", True, f"Found {len(scenes)} scenes")
@@ -233,14 +234,15 @@ async def verify_api() -> dict[str, Any]:
                     print_result("List scenes", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Create a scene
+                # Create a scene (correct schema: 'scene_order', not 'scene_number')
                 scene_data = {
+                    "chapter_id": str(chapter_id),  # UUID as string
+                    "scene_order": 1,
                     "title": "Test Scene",
-                    "content": "This is test scene content for API integration testing.",
-                    "scene_number": 1
+                    "content": "Test scene content for API integration testing."
                 }
                 response = await client.post(
-                    f"{API_BASE_URL}/api/v1/chapters/{chapter_id}/scenes",
+                    f"{API_BASE_URL}/api/v1/scenes",
                     json=scene_data
                 )
                 if response.status_code in (200, 201):
@@ -275,9 +277,9 @@ async def verify_api() -> dict[str, Any]:
 
                 # Create a world setting
                 setting_data = {
-                    "name": "Test Setting",
-                    "description": "A test world setting for API integration testing.",
-                    "category": "location"
+                    "name": "Test Location",
+                    "category": "geography",
+                    "content": "A test world setting for API integration testing."
                 }
                 response = await client.post(
                     f"{API_BASE_URL}/api/v1/projects/{project_id}/world-settings",
