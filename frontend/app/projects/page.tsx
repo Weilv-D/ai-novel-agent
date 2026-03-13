@@ -1,46 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/Loading";
-import { projectApi } from "@/lib/api-client";
-import type { Project } from "@/lib/types";
-import { ApiError } from "@/lib/api-client";
-
-interface ProjectListResponse {
-  items: Project[];
-  total: number;
-  skip: number;
-  limit: number;
-}
+import { useProjectStore } from "@/lib/stores/projectStore";
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { projects, loading, error, fetchProjects } = useProjectStore();
 
   useEffect(() => {
-    loadProjects();
-  }, []);
-
-  async function loadProjects() {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await projectApi.list({ skip: 0, limit: 100 }) as ProjectListResponse;
-      setProjects(response.items || []);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.detail);
-      } else {
-        setError("Failed to load projects");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
+    fetchProjects();
+  }, [fetchProjects]);
 
   function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
@@ -93,7 +65,7 @@ export default function ProjectsPage() {
             <CardContent>
               <div className="text-center">
                 <p className="text-red-600 mb-4">{error}</p>
-                <Button onClick={loadProjects}>重试</Button>
+                <Button onClick={() => fetchProjects()}>重试</Button>
               </div>
             </CardContent>
           </Card>

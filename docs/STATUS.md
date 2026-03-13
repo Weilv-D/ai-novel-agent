@@ -66,10 +66,12 @@
 - [x] App Router 结构 (app/layout.tsx, app/page.tsx)
 - [x] Tailwind CSS 配置
 - [x] ESLint 配置 (TypeScript + Core Web Vitals)
-- [ ] 基础 UI 组件
-- [ ] 状态管理 (Zustand)
-- [ ] API 客户端封装
-- [ ] 项目列表页面
+- [x] 基础 UI 组件 (Card, Button, LoadingSpinner)
+- [x] 状态管理 (Zustand)
+- [x] API 客户端封装 (lib/api-client.ts)
+- [x] TypeScript 类型定义 (lib/types.ts)
+- [x] 项目列表页面 (/projects)
+- [x] 项目详情页面 (/projects/[id])
 
 ## 项目结构
 ```

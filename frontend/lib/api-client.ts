@@ -93,6 +93,9 @@ export const projectApi = {
       `/api/v1/projects${buildQueryString(params || {})}`
     ),
 
+  getById: (id: string) =>
+    fetchApi<unknown>(`/api/v1/projects/${id}`),
+
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/projects/${id}`),
 

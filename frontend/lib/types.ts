@@ -21,6 +21,8 @@ export enum ProjectStatus {
 export interface Project {
   id: string;
   title: string;
+  summary?: string;
+  notes?: string;
   genre?: string;
   target_audience?: string;
   target_word_count?: number;
