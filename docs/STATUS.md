@@ -111,6 +111,55 @@
 ### 待办
 - [ ] 所有页面后端真实 API 验证测试
 
+## API 验证记录
+
+### 后端测试结果 (2025-01-XX)
+```bash
+cd backend && python -m pytest tests/
+```
+**结果**: 328 passed, 2 skipped, 9 warnings (18.42s)
+
+**覆盖范围**:
+- ✓ Projects API (CRUD + list)
+- ✓ Chapters API (CRUD + list + by_project)
+- ✓ Scenes API (CRUD + list + by_chapter)
+- ✓ Characters API (CRUD + list + by_project)
+- ✓ WorldSettings API (CRUD + list + by_project + by_category)
+- ✓ Memory API (CRUD + search + similarity)
+- ✓ Snapshot API (CRUD + rollback)
+- ✓ Dependency API (CRUD + analysis)
+- ✓ Suggestion API (CRUD + state transitions)
+
+**测试配置**: SQLite in-memory (无外部依赖)
+
+### 前端构建验证 (2025-01-XX)
+```bash
+cd frontend && npm run build
+```
+**结果**: ✓ 成功 (20 routes)
+
+**生成的路由**:
+- / (首页)
+- /projects (项目列表)
+- /projects/new (新建项目)
+- /projects/[id] (项目详情)
+- /projects/[id]/edit (编辑项目)
+- /projects/[id]/chapters (章节列表)
+- /projects/[id]/chapters/new (新建章节)
+- /projects/[id]/chapters/[chapterId] (章节详情)
+- /projects/[id]/chapters/[chapterId]/edit (编辑章节)
+- /projects/[id]/chapters/[chapterId]/scenes/[sceneId] (场景详情)
+- /projects/[id]/chapters/[chapterId]/scenes/new (新建场景)
+- /projects/[id]/chapters/[chapterId]/scenes/[sceneId]/edit (编辑场景)
+- /projects/[id]/characters (人物列表)
+- /projects/[id]/characters/new (新建人物)
+- /projects/[id]/characters/[characterId] (人物详情)
+- /projects/[id]/characters/[characterId]/edit (编辑人物)
+- /projects/[id]/worldsettings (世界观列表)
+- /projects/[id]/worldsettings/new (新建设定)
+- /projects/[id]/worldsettings/[settingId] (设定详情)
+- /projects/[id]/worldsettings/[settingId]/edit (编辑设定)
+
 ## 项目结构
 ```
 ai-novel-agent/
