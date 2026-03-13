@@ -127,7 +127,7 @@ class TestSceneSchemas:
             "pov_character_id": character_id,
             "location": "Castle",
             "content": "The story begins...",
-            "metadata": {"time": "morning", "weather": "rainy"},
+            "meta": {"time": "morning", "weather": "rainy"},
         }
         schema = SceneCreate(**data)
         assert schema.chapter_id == chapter_id
