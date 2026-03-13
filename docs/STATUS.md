@@ -68,13 +68,28 @@
 - [x] ESLint 配置 (TypeScript + Core Web Vitals)
 - [x] 基础 UI 组件 (Card, Button, LoadingSpinner, Input, Textarea, Modal)
 - [x] 状态管理 (Zustand)
-- [x] API 客户端封装 (lib/api-client.ts)
+- [x] API 客户端封装 (lib/api-client.ts，支持空响应处理)
 - [x] TypeScript 类型定义 (lib/types.ts)
+
+### 项目管理 (Projects)
 - [x] 项目列表页面 (/projects)
 - [x] 项目详情页面 (/projects/[id])
 - [x] 项目创建页面 (/projects/new)
 - [x] 项目编辑页面 (/projects/[id]/edit)
 - [x] 项目删除功能 (带确认对话框)
+
+### 章节管理 (Chapters)
+- [x] 章节列表页面 (/projects/[id]/chapters)
+- [x] 章节详情页面 (/projects/[id]/chapters/[chapterId])
+- [x] 章节创建页面 (/projects/[id]/chapters/new)
+- [x] 章节编辑页面 (/projects/[id]/chapters/[chapterId]/edit)
+- [x] 章节删除功能 (带确认对话框)
+- [x] 章节详情页场景列表展示
+
+### 待办
+- [ ] 场景管理页面 (Scenes CRUD)
+- [ ] 人物管理页面 (Characters CRUD)
+- [ ] 世界观管理页面 (WorldSettings CRUD)
 
 ## 项目结构
 ```
