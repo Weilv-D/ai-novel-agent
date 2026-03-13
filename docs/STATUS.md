@@ -109,17 +109,20 @@
 - [x] 按分类分组展示
 
 ### 待办
-- [ ] 所有页面后端真实 API 验证测试
+- [ ] 运行 docker-compose 并验证所有服务连通性
+- [ ] 前后端集成端到端测试 (实际 HTTP 请求验证)
+- [ ] Frontend Dockerfile 开发环境配置
+- [ ] docker-compose.yml 添加 frontend 服务
 
 ## API 验证记录
 
-### 后端测试结果 (2025-01-XX)
+### 后端单元测试 (2025-01-13)
 ```bash
 cd backend && python -m pytest tests/
 ```
 **结果**: 328 passed, 2 skipped, 9 warnings (18.42s)
 
-**覆盖范围**:
+**覆盖范围** (单元测试):
 - ✓ Projects API (CRUD + list)
 - ✓ Chapters API (CRUD + list + by_project)
 - ✓ Scenes API (CRUD + list + by_chapter)
@@ -132,7 +135,10 @@ cd backend && python -m pytest tests/
 
 **测试配置**: SQLite in-memory (无外部依赖)
 
-### 前端构建验证 (2025-01-XX)
+**说明**: 后端单元测试全部通过，验证了 service 层和 API 层的逻辑正确性。
+但未进行前后端 HTTP 集成测试，未验证前端页面与后端 API 的实际连通性。
+
+### 前端构建验证 (2025-01-13)
 ```bash
 cd frontend && npm run build
 ```
@@ -215,3 +221,9 @@ cd backend && python -m pytest tests/
 ```
 
 **注意**: 生产环境必须使用 PostgreSQL 16 + pgvector。SQLite 仅用于测试和快速本地开发。
+
+### 后端数据库兼容性修复 (2025-01-13)
+- [x] 修复 `init_db.py` 中的 pgvector 扩展创建逻辑
+  - 添加数据库方言检测，仅在 PostgreSQL 时创建扩展
+  - SQLite 环境跳过扩展创建，避免启动错误
+  - `reset_database()` 仅支持 PostgreSQL，其他方言抛出明确错误
