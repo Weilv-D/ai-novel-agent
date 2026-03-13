@@ -31,11 +31,11 @@ export default function EditScenePage() {
       const data = await sceneApi.get(chapterId, sceneId) as Scene;
       setScene(data);
       setFormData({
-        title: data.title,
-        content: data.content,
-        order: data.order,
-        location: data.location,
+        scene_order: data.scene_order,
         pov_character_id: data.pov_character_id,
+        location: data.location,
+        content: data.content,
+        meta: data.meta,
       });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -123,18 +123,12 @@ export default function EditScenePage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <Input
-                label="场景标题"
-                placeholder="例如：主角登场"
-                value={formData.title ?? ""}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              />
-
-              <Input
-                label="序号"
+                label="序号 *"
                 type="number"
                 min="1"
-                value={formData.order ?? 1}
-                onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 1 })}
+                value={formData.scene_order ?? 1}
+                onChange={(e) => setFormData({ ...formData, scene_order: parseInt(e.target.value) || 1 })}
+                required
               />
 
               <Input

@@ -35,6 +35,16 @@ export default function CharactersPage() {
     }
   }, [projectId]);
 
+  // Helper function to safely access profile values
+  const getProfileValue = <T,>(character: Character, key: string, defaultValue: T): T => {
+    const value = character.profile?.[key];
+    return value !== undefined ? (value as T) : defaultValue;
+  };
+
+  const hasProfileKey = (character: Character, key: string): boolean => {
+    return character.profile !== undefined && key in character.profile;
+  };
+
   useEffect(() => {
     loadCharacters();
   }, [loadCharacters]);
@@ -128,23 +138,23 @@ export default function CharactersPage() {
                   )}
 
                   <div className="space-y-2 text-sm text-gray-600">
-                    {character.age !== undefined && (
+                    {hasProfileKey(character, "age") && (
                       <div className="flex items-center gap-2">
                         <span>年龄:</span>
-                        <span className="font-medium text-gray-900">{character.age}</span>
+                        <span className="font-medium text-gray-900">{getProfileValue<number>(character, "age", 0)}</span>
                       </div>
                     )}
-                    {character.gender && (
+                    {hasProfileKey(character, "gender") && (
                       <div className="flex items-center gap-2">
                         <span>性别:</span>
-                        <span className="font-medium text-gray-900">{character.gender}</span>
+                        <span className="font-medium text-gray-900">{getProfileValue<string>(character, "gender", "")}</span>
                       </div>
                     )}
                   </div>
 
-                  {character.appearance && (
+                  {hasProfileKey(character, "appearance") && (
                     <p className="mt-4 text-sm text-gray-700 line-clamp-2">
-                      {character.appearance}
+                      {getProfileValue<string>(character, "appearance", "")}
                     </p>
                   )}
 

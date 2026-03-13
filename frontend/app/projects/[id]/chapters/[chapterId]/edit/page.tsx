@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { chapterApi } from "@/lib/api-client";
-import type { Chapter, ChapterUpdate } from "@/lib/types";
+import type { Chapter, ChapterUpdate, ChapterStatus } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
 export default function EditChapterPage() {
@@ -30,11 +30,11 @@ export default function EditChapterPage() {
       const data = await chapterApi.get(projectId, chapterId) as Chapter;
       setChapter(data);
       setFormData({
+        chapter_number: data.chapter_number,
         title: data.title,
-        summary: data.summary || "",
-        notes: data.notes || "",
-        order: data.order,
-        word_count: data.word_count,
+        outline: data.outline,
+        content: data.content,
+        notes: data.notes,
         status: data.status,
       });
     } catch (err) {
@@ -54,8 +54,8 @@ export default function EditChapterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.title?.trim()) {
-      setError("章节标题不能为空");
+    if (!formData.title?.trim() && !formData.content?.trim()) {
+      setError("章节标题或内容不能为空");
       return;
     }
 
@@ -127,27 +127,35 @@ export default function EditChapterPage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <Input
-                label="章节标题 *"
-                placeholder="例如：第一章 开始"
-                value={formData.title || ""}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                label="章节号 *"
+                type="number"
+                min="1"
+                value={formData.chapter_number ?? 1}
+                onChange={(e) => setFormData({ ...formData, chapter_number: parseInt(e.target.value) || 1 })}
                 required
               />
 
               <Input
-                label="序号"
-                type="number"
-                min="1"
-                value={formData.order ?? 1}
-                onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 1 })}
+                label="章节标题"
+                placeholder="例如：第一章 开始"
+                value={formData.title || ""}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               />
 
               <Textarea
-                label="摘要"
+                label="大纲"
                 placeholder="简要描述本章节的主要内容..."
-                value={formData.summary || ""}
-                onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                value={formData.outline || ""}
+                onChange={(e) => setFormData({ ...formData, outline: e.target.value })}
                 rows={3}
+              />
+
+              <Textarea
+                label="内容"
+                placeholder="章节正文..."
+                value={formData.content || ""}
+                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                rows={8}
               />
 
               <Textarea
@@ -158,32 +166,17 @@ export default function EditChapterPage() {
                 rows={3}
               />
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="字数"
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  value={formData.word_count ?? 0}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    word_count: e.target.value ? parseInt(e.target.value) : 0,
-                  })}
-                />
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">状态</label>
-                  <select
-                    value={formData.status || "draft"}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="draft">草稿</option>
-                    <option value="in_progress">进行中</option>
-                    <option value="completed">已完成</option>
-                    <option value="published">已发布</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">状态</label>
+                <select
+                  value={formData.status || "draft"}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as ChapterStatus })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="draft">草稿</option>
+                  <option value="writing">写作中</option>
+                  <option value="completed">已完成</option>
+                </select>
               </div>
 
               {error && (

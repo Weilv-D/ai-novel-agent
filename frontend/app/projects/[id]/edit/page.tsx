@@ -26,7 +26,7 @@ export default function EditProjectPage() {
   } = useProjectStore();
 
   const [formData, setFormData] = useState<ProjectUpdate>({
-    title: "",
+    name: "",
     summary: "",
     notes: "",
     genre: "",
@@ -54,7 +54,7 @@ export default function EditProjectPage() {
   useEffect(() => {
     if (project) {
       setFormData({
-        title: project.title,
+        name: project.name,
         summary: project.summary || "",
         notes: project.notes || "",
         genre: project.genre || "",
@@ -67,8 +67,8 @@ export default function EditProjectPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.title?.trim()) {
-      setSubmitError("项目标题不能为空");
+    if (!formData.name?.trim()) {
+      setSubmitError("项目名称不能为空");
       return;
     }
 
@@ -152,12 +152,12 @@ export default function EditProjectPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Title */}
+              {/* Name */}
               <Input
-                label="项目标题 *"
-                placeholder="输入小说标题"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                label="项目名称 *"
+                placeholder="输入小说名称"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
 
@@ -217,10 +217,9 @@ export default function EditProjectPage() {
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as ProjectStatus })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="conception">构思中</option>
-                  <option value="building">搭建中</option>
-                  <option value="publishing">连载中</option>
-                  <option value="refining">精修中</option>
+                  <option value="drafting">草稿中</option>
+                  <option value="writing">写作中</option>
+                  <option value="revising">修订中</option>
                   <option value="completed">已完成</option>
                 </select>
               </div>

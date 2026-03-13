@@ -110,10 +110,8 @@ export default function SceneDetailPage() {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm font-medium text-gray-500">场景 {scene.order}</span>
-                {scene.title && (
-                  <h1 className="text-3xl font-bold text-gray-900">{scene.title}</h1>
-                )}
+                <span className="text-sm font-medium text-gray-500">场景 {scene.scene_order}</span>
+                <h1 className="text-3xl font-bold text-gray-900">场景详情</h1>
               </div>
               {scene.location && (
                 <p className="text-gray-600">📍 {scene.location}</p>
@@ -139,7 +137,7 @@ export default function SceneDetailPage() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">序号</span>
-                <span className="font-medium">{scene.order}</span>
+                <span className="font-medium">{scene.scene_order}</span>
               </div>
               {scene.pov_character_id && (
                 <div className="flex justify-between">
@@ -194,7 +192,7 @@ export default function SceneDetailPage() {
           onClose={() => setDeleteModalOpen(false)}
           onConfirm={handleDelete}
           title="删除场景"
-          message={`确定要删除场景"${scene.title || `场景 ${scene.order}`}"吗？此操作无法撤销。`}
+          message={`确定要删除场景 ${scene.scene_order} 吗？此操作无法撤销。`}
           confirmText="删除"
           cancelText="取消"
           variant="danger"

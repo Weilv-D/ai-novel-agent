@@ -10,19 +10,33 @@ import { characterApi } from "@/lib/api-client";
 import type { CharacterCreate } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
+interface CharacterFormData {
+  name: string;
+  role: string;
+  age: string;
+  gender: string;
+  appearance: string;
+  personality: string;
+  background: string;
+  notes: string;
+  profile: Record<string, string | number>;
+}
+
 export default function NewCharacterPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
 
-  const [formData, setFormData] = useState<Omit<CharacterCreate, "project_id">>({
+  const [formData, setFormData] = useState<CharacterFormData>({
     name: "",
-    age: undefined,
+    role: "",
+    age: "",
     gender: "",
     appearance: "",
     personality: "",
     background: "",
-    role: "",
+    notes: "",
+    profile: {},
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +51,24 @@ export default function NewCharacterPage() {
     try {
       setLoading(true);
       setError(null);
-      const result = await characterApi.create(projectId, { ...formData, project_id: projectId }) as { id: string };
+
+      // Convert form data to backend format
+      const profile: Record<string, string | number> = {};
+      if (formData.age) profile.age = parseInt(formData.age);
+      if (formData.gender) profile.gender = formData.gender;
+      if (formData.appearance) profile.appearance = formData.appearance;
+      if (formData.personality) profile.personality = formData.personality;
+      if (formData.background) profile.background = formData.background;
+
+      const createData: CharacterCreate = {
+        project_id: projectId,
+        name: formData.name,
+        role: formData.role || undefined,
+        profile: Object.keys(profile).length > 0 ? profile : undefined,
+        notes: formData.notes || undefined,
+      };
+
+      const result = await characterApi.create(projectId, createData) as { id: string };
       router.push(`/projects/${projectId}/characters/${result.id}`);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -85,18 +116,31 @@ export default function NewCharacterPage() {
                   type="number"
                   min="0"
                   placeholder="例如：25"
-                  value={formData.age ?? ""}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    age: e.target.value ? parseInt(e.target.value) : undefined,
-                  })}
+                  value={formData.age}
+                  onChange={(e) => {
+                    const newProfile = { ...formData.profile };
+                    if (e.target.value) {
+                      newProfile.age = parseInt(e.target.value);
+                    } else {
+                      delete newProfile.age;
+                    }
+                    setFormData({ ...formData, age: e.target.value, profile: newProfile });
+                  }}
                 />
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">性别</label>
                   <select
                     value={formData.gender}
-                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                    onChange={(e) => {
+                      const newProfile = { ...formData.profile };
+                      if (e.target.value) {
+                        newProfile.gender = e.target.value;
+                      } else {
+                        delete newProfile.gender;
+                      }
+                      setFormData({ ...formData, gender: e.target.value, profile: newProfile });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">未设置</option>
@@ -118,7 +162,15 @@ export default function NewCharacterPage() {
                 label="外貌描写"
                 placeholder="描述人物的外貌特征..."
                 value={formData.appearance}
-                onChange={(e) => setFormData({ ...formData, appearance: e.target.value })}
+                onChange={(e) => {
+                  const newProfile = { ...formData.profile };
+                  if (e.target.value) {
+                    newProfile.appearance = e.target.value;
+                  } else {
+                    delete newProfile.appearance;
+                  }
+                  setFormData({ ...formData, appearance: e.target.value, profile: newProfile });
+                }}
                 rows={3}
               />
 
@@ -126,7 +178,15 @@ export default function NewCharacterPage() {
                 label="性格特点"
                 placeholder="描述人物的性格特征..."
                 value={formData.personality}
-                onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
+                onChange={(e) => {
+                  const newProfile = { ...formData.profile };
+                  if (e.target.value) {
+                    newProfile.personality = e.target.value;
+                  } else {
+                    delete newProfile.personality;
+                  }
+                  setFormData({ ...formData, personality: e.target.value, profile: newProfile });
+                }}
                 rows={3}
               />
 
@@ -134,8 +194,24 @@ export default function NewCharacterPage() {
                 label="背景故事"
                 placeholder="描述人物的过往经历..."
                 value={formData.background}
-                onChange={(e) => setFormData({ ...formData, background: e.target.value })}
+                onChange={(e) => {
+                  const newProfile = { ...formData.profile };
+                  if (e.target.value) {
+                    newProfile.background = e.target.value;
+                  } else {
+                    delete newProfile.background;
+                  }
+                  setFormData({ ...formData, background: e.target.value, profile: newProfile });
+                }}
                 rows={4}
+              />
+
+              <Textarea
+                label="备注"
+                placeholder="其他备注信息..."
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={3}
               />
 
               {error && (

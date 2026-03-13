@@ -16,10 +16,9 @@ export default function ProjectsPage() {
 
   function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
-      conception: "构思中",
-      building: "搭建中",
-      publishing: "连载中",
-      refining: "精修中",
+      drafting: "草稿中",
+      writing: "写作中",
+      revising: "修订中",
       completed: "已完成",
     };
     return labels[status] || status;
@@ -27,10 +26,9 @@ export default function ProjectsPage() {
 
   function getStatusColor(status: string): string {
     const colors: Record<string, string> = {
-      conception: "bg-gray-100 text-gray-800",
-      building: "bg-blue-100 text-blue-800",
-      publishing: "bg-green-100 text-green-800",
-      refining: "bg-yellow-100 text-yellow-800",
+      drafting: "bg-gray-100 text-gray-800",
+      writing: "bg-blue-100 text-blue-800",
+      revising: "bg-yellow-100 text-yellow-800",
       completed: "bg-purple-100 text-purple-800",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
@@ -95,7 +93,7 @@ export default function ProjectsPage() {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-xl truncate">
-                        {project.title}
+                        {project.name}
                       </CardTitle>
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(project.status)}`}>
                         {getStatusLabel(project.status)}
@@ -107,10 +105,6 @@ export default function ProjectsPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2 text-sm text-gray-600">
-                      <div className="flex justify-between">
-                        <span>当前字数</span>
-                        <span className="font-medium">{project.current_word_count.toLocaleString()}</span>
-                      </div>
                       {project.target_word_count && (
                         <div className="flex justify-between">
                           <span>目标字数</span>

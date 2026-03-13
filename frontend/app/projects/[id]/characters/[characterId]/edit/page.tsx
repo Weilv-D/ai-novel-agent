@@ -31,12 +31,8 @@ export default function EditCharacterPage() {
       setCharacter(data);
       setFormData({
         name: data.name,
-        age: data.age,
-        gender: data.gender,
-        appearance: data.appearance,
-        personality: data.personality,
-        background: data.background,
         role: data.role,
+        profile: data.profile || {},
       });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -141,18 +137,37 @@ export default function EditCharacterPage() {
                   type="number"
                   min="0"
                   placeholder="例如：25"
-                  value={formData.age ?? ""}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    age: e.target.value ? parseInt(e.target.value) : undefined,
-                  })}
+                  value={String((formData.profile?.age as number | undefined) ?? "")}
+                  onChange={(e) => {
+                    const newProfile = { ...(formData.profile || {}) };
+                    if (e.target.value) {
+                      newProfile.age = parseInt(e.target.value);
+                    } else {
+                      delete newProfile.age;
+                    }
+                    setFormData({
+                      ...formData,
+                      profile: newProfile,
+                    });
+                  }}
                 />
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">性别</label>
                   <select
-                    value={formData.gender || ""}
-                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                    value={String((formData.profile?.gender as string | undefined) ?? "")}
+                    onChange={(e) => {
+                      const newProfile = { ...(formData.profile || {}) };
+                      if (e.target.value) {
+                        newProfile.gender = e.target.value;
+                      } else {
+                        delete newProfile.gender;
+                      }
+                      setFormData({
+                        ...formData,
+                        profile: newProfile,
+                      });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">未设置</option>
@@ -173,24 +188,57 @@ export default function EditCharacterPage() {
               <Textarea
                 label="外貌描写"
                 placeholder="描述人物的外貌特征..."
-                value={formData.appearance || ""}
-                onChange={(e) => setFormData({ ...formData, appearance: e.target.value })}
+                value={String((formData.profile?.appearance as string | undefined) ?? "")}
+                onChange={(e) => {
+                  const newProfile = { ...(formData.profile || {}) };
+                  if (e.target.value) {
+                    newProfile.appearance = e.target.value;
+                  } else {
+                    delete newProfile.appearance;
+                  }
+                  setFormData({
+                    ...formData,
+                    profile: newProfile,
+                  });
+                }}
                 rows={3}
               />
 
               <Textarea
                 label="性格特点"
                 placeholder="描述人物的性格特征..."
-                value={formData.personality || ""}
-                onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
+                value={String((formData.profile?.personality as string | undefined) ?? "")}
+                onChange={(e) => {
+                  const newProfile = { ...(formData.profile || {}) };
+                  if (e.target.value) {
+                    newProfile.personality = e.target.value;
+                  } else {
+                    delete newProfile.personality;
+                  }
+                  setFormData({
+                    ...formData,
+                    profile: newProfile,
+                  });
+                }}
                 rows={3}
               />
 
               <Textarea
                 label="背景故事"
                 placeholder="描述人物的过往经历..."
-                value={formData.background || ""}
-                onChange={(e) => setFormData({ ...formData, background: e.target.value })}
+                value={String((formData.profile?.background as string | undefined) ?? "")}
+                onChange={(e) => {
+                  const newProfile = { ...(formData.profile || {}) };
+                  if (e.target.value) {
+                    newProfile.background = e.target.value;
+                  } else {
+                    delete newProfile.background;
+                  }
+                  setFormData({
+                    ...formData,
+                    profile: newProfile,
+                  });
+                }}
                 rows={4}
               />
 

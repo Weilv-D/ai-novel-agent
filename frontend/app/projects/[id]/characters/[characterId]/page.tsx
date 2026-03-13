@@ -95,6 +95,16 @@ export default function CharacterDetailPage() {
     );
   }
 
+  // Helper functions to safely access profile values
+  const getProfileValue = <T,>(key: string, defaultValue: T): T => {
+    const value = character.profile?.[key];
+    return value !== undefined ? (value as T) : defaultValue;
+  };
+
+  const hasProfileKey = (key: string): boolean => {
+    return character.profile !== undefined && key in character.profile;
+  };
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -135,16 +145,16 @@ export default function CharacterDetailPage() {
               <CardTitle className="text-lg">基本信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              {character.age !== undefined && (
+              {hasProfileKey("age") && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">年龄</span>
-                  <span className="font-medium">{character.age}</span>
+                  <span className="font-medium">{getProfileValue<number>("age", 0)}</span>
                 </div>
               )}
-              {character.gender && (
+              {hasProfileKey("gender") && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">性别</span>
-                  <span className="font-medium">{character.gender}</span>
+                  <span className="font-medium">{getProfileValue<string>("gender", "")}</span>
                 </div>
               )}
               <div className="flex justify-between">
@@ -162,38 +172,38 @@ export default function CharacterDetailPage() {
             </CardContent>
           </Card>
 
-          {character.appearance && (
+          {hasProfileKey("appearance") && (
             <Card className="md:col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg">外貌描写</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-700 whitespace-pre-wrap">{character.appearance}</p>
+                <p className="text-gray-700 whitespace-pre-wrap">{getProfileValue<string>("appearance", "")}</p>
               </CardContent>
             </Card>
           )}
         </div>
 
         {/* Personality */}
-        {character.personality && (
+        {hasProfileKey("personality") && (
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="text-lg">性格特点</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700 whitespace-pre-wrap">{character.personality}</p>
+              <p className="text-gray-700 whitespace-pre-wrap">{getProfileValue<string>("personality", "")}</p>
             </CardContent>
           </Card>
         )}
 
         {/* Background */}
-        {character.background && (
+        {hasProfileKey("background") && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">背景故事</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700 whitespace-pre-wrap">{character.background}</p>
+              <p className="text-gray-700 whitespace-pre-wrap">{getProfileValue<string>("background", "")}</p>
             </CardContent>
           </Card>
         )}

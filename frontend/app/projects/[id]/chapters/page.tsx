@@ -23,8 +23,8 @@ export default function ChaptersPage() {
       setLoading(true);
       setError(null);
       const data = await chapterApi.list(projectId) as Chapter[];
-      // Sort by order
-      setChapters(data.sort((a, b) => a.order - b.order));
+      // Sort by chapter_number
+      setChapters(data.sort((a, b) => a.chapter_number - b.chapter_number));
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.detail);
@@ -43,9 +43,8 @@ export default function ChaptersPage() {
   function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
       draft: "草稿",
-      in_progress: "进行中",
+      writing: "写作中",
       completed: "已完成",
-      published: "已发布",
     };
     return labels[status] || status;
   }
@@ -53,9 +52,8 @@ export default function ChaptersPage() {
   function getStatusColor(status: string): string {
     const colors: Record<string, string> = {
       draft: "bg-gray-100 text-gray-800",
-      in_progress: "bg-blue-100 text-blue-800",
+      writing: "bg-blue-100 text-blue-800",
       completed: "bg-green-100 text-green-800",
-      published: "bg-purple-100 text-purple-800",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
   }
@@ -130,22 +128,21 @@ export default function ChaptersPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <span className="text-sm font-medium text-gray-500">
-                          第 {chapter.order} 章
+                          第 {chapter.chapter_number} 章
                         </span>
                         <h3 className="text-xl font-semibold text-gray-900">
-                          {chapter.title}
+                          {chapter.title || "无标题"}
                         </h3>
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(chapter.status)}`}>
                           {getStatusLabel(chapter.status)}
                         </span>
                       </div>
-                      {chapter.summary && (
+                      {chapter.outline && (
                         <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                          {chapter.summary}
+                          {chapter.outline}
                         </p>
                       )}
                       <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <span>{chapter.word_count.toLocaleString()} 字</span>
                         {chapter.updated_at && (
                           <span>
                             更新于 {new Date(chapter.updated_at).toLocaleDateString("zh-CN")}

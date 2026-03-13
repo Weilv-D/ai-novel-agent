@@ -11,44 +11,47 @@ export interface ApiError {
 
 // Project types (aligned with backend schemas)
 export enum ProjectStatus {
-  CONCEPTION = "conception",
-  BUILDING = "building",
-  PUBLISHING = "publishing",
-  REFINING = "refining",
+  DRAFTING = "drafting",
+  WRITING = "writing",
+  REVISING = "revising",
   COMPLETED = "completed",
 }
 
 export interface Project {
   id: string;
-  title: string;
-  summary?: string;
-  notes?: string;
+  name: string;
   genre?: string;
   target_audience?: string;
   target_word_count?: number;
-  current_word_count: number;
+  summary?: string;
+  notes?: string;
+  meta?: Record<string, unknown>;
+  user_id: string;
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
 }
 
 export interface ProjectCreate {
-  title: string;
+  name: string;
   genre?: string;
   target_audience?: string;
   target_word_count?: number;
+  summary?: string;
+  notes?: string;
+  meta?: Record<string, unknown>;
   status?: ProjectStatus;
 }
 
 export interface ProjectUpdate {
-  title?: string;
-  summary?: string;
-  notes?: string;
+  name?: string;
   genre?: string;
   target_audience?: string;
   target_word_count?: number;
+  summary?: string;
+  notes?: string;
+  meta?: Record<string, unknown>;
   status?: ProjectStatus;
-  current_word_count?: number;
 }
 
 // Character types
@@ -56,12 +59,11 @@ export interface Character {
   id: string;
   project_id: string;
   name: string;
-  age?: number;
-  gender?: string;
-  appearance?: string;
-  personality?: string;
-  background?: string;
   role?: string;
+  profile?: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
+  arc_state?: Record<string, unknown>;
+  notes?: string;
   created_at: string;
   updated_at: string;
 }
@@ -69,22 +71,20 @@ export interface Character {
 export interface CharacterCreate {
   project_id: string;
   name: string;
-  age?: number;
-  gender?: string;
-  appearance?: string;
-  personality?: string;
-  background?: string;
   role?: string;
+  profile?: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
+  arc_state?: Record<string, unknown>;
+  notes?: string;
 }
 
 export interface CharacterUpdate {
   name?: string;
-  age?: number;
-  gender?: string;
-  appearance?: string;
-  personality?: string;
-  background?: string;
   role?: string;
+  profile?: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
+  arc_state?: Record<string, unknown>;
+  notes?: string;
 }
 
 // WorldSetting types
@@ -112,16 +112,22 @@ export interface WorldSettingUpdate {
 }
 
 // Chapter types
+export enum ChapterStatus {
+  DRAFT = "draft",
+  WRITING = "writing",
+  COMPLETED = "completed",
+}
+
 export interface Chapter {
   id: string;
   project_id: string;
   volume_id?: string;
-  title: string;
-  summary?: string;
+  chapter_number: number;
+  title?: string;
+  outline?: string;
+  content?: string;
+  status: ChapterStatus;
   notes?: string;
-  order: number;
-  word_count: number;
-  status: string;
   created_at: string;
   updated_at: string;
 }
@@ -129,51 +135,52 @@ export interface Chapter {
 export interface ChapterCreate {
   project_id: string;
   volume_id?: string;
-  title: string;
-  summary?: string;
+  chapter_number: number;
+  title?: string;
+  outline?: string;
+  content?: string;
+  status?: ChapterStatus;
   notes?: string;
-  order: number;
-  word_count?: number;
-  status?: string;
 }
 
 export interface ChapterUpdate {
+  chapter_number?: number;
   title?: string;
-  summary?: string;
+  outline?: string;
+  content?: string;
+  status?: ChapterStatus;
   notes?: string;
-  order?: number;
-  word_count?: number;
-  status?: string;
+  volume_id?: string;
 }
 
 // Scene types
 export interface Scene {
   id: string;
   chapter_id: string;
-  title?: string;
-  content?: string;
-  order: number;
+  scene_order: number;
   pov_character_id?: string;
   location?: string;
+  content?: string;
+  meta?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
 
 export interface SceneCreate {
   chapter_id: string;
-  title?: string;
-  content?: string;
-  order: number;
+  scene_order: number;
   pov_character_id?: string;
   location?: string;
+  content?: string;
+  meta?: Record<string, unknown>;
 }
 
 export interface SceneUpdate {
-  title?: string;
-  content?: string;
-  order?: number;
+  scene_order?: number;
   pov_character_id?: string;
   location?: string;
+  content?: string;
+  meta?: Record<string, unknown>;
 }
 
 // Memory types

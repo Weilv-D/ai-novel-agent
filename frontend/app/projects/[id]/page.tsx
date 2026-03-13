@@ -56,10 +56,9 @@ export default function ProjectDetailPage() {
 
   function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
-      conception: "构思中",
-      building: "搭建中",
-      publishing: "连载中",
-      refining: "精修中",
+      drafting: "草稿中",
+      writing: "写作中",
+      revising: "修订中",
       completed: "已完成",
     };
     return labels[status] || status;
@@ -67,10 +66,9 @@ export default function ProjectDetailPage() {
 
   function getStatusColor(status: string): string {
     const colors: Record<string, string> = {
-      conception: "bg-gray-100 text-gray-800",
-      building: "bg-blue-100 text-blue-800",
-      publishing: "bg-green-100 text-green-800",
-      refining: "bg-yellow-100 text-yellow-800",
+      drafting: "bg-gray-100 text-gray-800",
+      writing: "bg-blue-100 text-blue-800",
+      revising: "bg-yellow-100 text-yellow-800",
       completed: "bg-purple-100 text-purple-800",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
@@ -125,7 +123,7 @@ export default function ProjectDetailPage() {
           </Link>
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">{project.title}</h1>
+              <h1 className="text-3xl font-bold text-gray-900">{project.name}</h1>
               <p className="mt-1 text-sm text-gray-600">{project.summary || "暂无描述"}</p>
             </div>
             <div className="flex items-center gap-3">
@@ -164,10 +162,6 @@ export default function ProjectDetailPage() {
               <div className="flex justify-between">
                 <span className="text-gray-600">目标受众</span>
                 <span className="font-medium">{project.target_audience || "未设定"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">当前字数</span>
-                <span className="font-medium">{project.current_word_count.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">目标字数</span>
@@ -213,7 +207,7 @@ export default function ProjectDetailPage() {
           onClose={() => setDeleteModalOpen(false)}
           onConfirm={handleDelete}
           title="删除项目"
-          message={`确定要删除项目"${project.title}"吗？此操作无法撤销，所有相关数据将被永久删除。`}
+          message={`确定要删除项目"${project.name}"吗？此操作无法撤销，所有相关数据将被永久删除。`}
           confirmText="删除"
           cancelText="取消"
           variant="danger"

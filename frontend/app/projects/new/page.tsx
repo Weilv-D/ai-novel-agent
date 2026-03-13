@@ -11,7 +11,7 @@ import type { ProjectCreate } from "@/lib/types";
 
 export default function NewProjectPage() {
   const [formData, setFormData] = useState<ProjectCreate>({
-    title: "",
+    name: "",
     genre: "",
     target_audience: "",
     target_word_count: undefined,
@@ -21,7 +21,7 @@ export default function NewProjectPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.title.trim()) {
+    if (!formData.name.trim()) {
       setError("项目标题不能为空");
       return;
     }
@@ -67,12 +67,12 @@ export default function NewProjectPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Title */}
+              {/* Name */}
               <Input
-                label="项目标题 *"
-                placeholder="输入小说标题"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                label="项目名称 *"
+                placeholder="输入小说名称"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
 

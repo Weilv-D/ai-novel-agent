@@ -47,7 +47,7 @@ export default function ChapterDetailPage() {
   const loadScenes = useCallback(async () => {
     try {
       const data = await sceneApi.list(chapterId) as Scene[];
-      setScenes(data.sort((a, b) => a.order - b.order));
+      setScenes(data.sort((a, b) => a.scene_order - b.scene_order));
     } catch (err) {
       // Scenes are optional, don't show error if loading fails
       console.error("Failed to load scenes:", err);
@@ -78,9 +78,8 @@ export default function ChapterDetailPage() {
   function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
       draft: "草稿",
-      in_progress: "进行中",
+      writing: "写作中",
       completed: "已完成",
-      published: "已发布",
     };
     return labels[status] || status;
   }
@@ -88,9 +87,8 @@ export default function ChapterDetailPage() {
   function getStatusColor(status: string): string {
     const colors: Record<string, string> = {
       draft: "bg-gray-100 text-gray-800",
-      in_progress: "bg-blue-100 text-blue-800",
+      writing: "bg-blue-100 text-blue-800",
       completed: "bg-green-100 text-green-800",
-      published: "bg-purple-100 text-purple-800",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
   }
@@ -140,14 +138,14 @@ export default function ChapterDetailPage() {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm font-medium text-gray-500">第 {chapter.order} 章</span>
-                <h1 className="text-3xl font-bold text-gray-900">{chapter.title}</h1>
+                <span className="text-sm font-medium text-gray-500">第 {chapter.chapter_number} 章</span>
+                <h1 className="text-3xl font-bold text-gray-900">{chapter.title || "无标题"}</h1>
                 <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(chapter.status)}`}>
                   {getStatusLabel(chapter.status)}
                 </span>
               </div>
-              {chapter.summary && (
-                <p className="text-gray-600">{chapter.summary}</p>
+              {chapter.outline && (
+                <p className="text-gray-600">{chapter.outline}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -168,10 +166,6 @@ export default function ChapterDetailPage() {
               <CardTitle className="text-lg">统计信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">字数</span>
-                <span className="font-medium">{chapter.word_count.toLocaleString()}</span>
-              </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">场景数</span>
                 <span className="font-medium">{scenes.length}</span>
@@ -235,13 +229,13 @@ export default function ChapterDetailPage() {
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">场景 {scene.order}</span>
-                        {scene.title && (
-                          <h4 className="font-medium text-gray-900">{scene.title}</h4>
+                        <span className="text-sm text-gray-500">场景 {scene.scene_order}</span>
+                        {scene.location && (
+                          <span className="text-sm text-gray-600">📍 {scene.location}</span>
                         )}
                       </div>
-                      {scene.location && (
-                        <p className="text-sm text-gray-600 mt-1">📍 {scene.location}</p>
+                      {scene.content && (
+                        <p className="text-sm text-gray-700 mt-1 line-clamp-2">{scene.content}</p>
                       )}
                     </div>
                     <Button
