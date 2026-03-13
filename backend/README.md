@@ -67,6 +67,12 @@ pytest --cov=app --cov-report=html
 
 # Run specific test file
 pytest tests/test_api/test_health.py -v
+
+# Run HTTP integration tests (end-to-end API testing with real DB)
+pytest tests/test_integration/test_http_integration.py -v
+
+# Run SQLite integration verification script
+python scripts/verify_sqlite_integration.py
 ```
 
 **Database Note**: Tests use SQLite for isolation and speed. SQLite is sufficient for unit/integration tests, but production requires PostgreSQL 16 + pgvector for full feature support (vector similarity search, JSONB, native UUID).
