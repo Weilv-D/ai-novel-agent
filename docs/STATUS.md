@@ -226,20 +226,24 @@ cd backend && python -m pytest tests/
   - SQLite 环境跳过扩展创建，避免启动错误
   - `reset_database()` 仅支持 PostgreSQL，其他方言抛出明确错误
 
-### 开发环境配置 - 静态验证 (2025-01-13)
+### 开发环境配置 - 静态校对 (2025-01-13)
 - [x] frontend/Dockerfile - Node 20 Alpine 开发环境
 - [x] infra/docker-compose.yml - 添加 frontend 服务配置
   - Backend (8000), Frontend (3000), PostgreSQL (5432), Redis (6379)
   - 卷挂载配置支持实时代码编辑
 - [x] infra/start.sh - 启动脚本（语法检查通过）
-- [x] backend/scripts/verify_api_integration.py - HTTP 集成测试脚本
+- [x] backend/scripts/verify_api_integration.py - HTTP 集成验证脚本
   - 字段名已与后端 schema 对齐（name, chapter_number, scene_order, profile dict）
-  - 路由路径已与后端 API 对齐（/api/v1/scenes/chapter/{id} 等）
-  - Python 语法检查通过，AST 解析通过
-- [ ] 运行时验证（需 Docker/PostgreSQL 环境）
-  - 宿主机无 docker/docker-compose，无法实际运行
-  - 脚本已准备就绪，待 Docker 环境可用后执行
+  - 路由路径已修正为 flat 结构（/characters, /chapters, /world-settings）
+  - 创建请求已添加 project_id 到 request body
+  - SceneCreate 已移除不存在的 title 字段
+  - Python 语法检查通过
 - [x] 修复 `init_db.py` 中的 pgvector 扩展创建逻辑
   - 添加数据库方言检测，仅在 PostgreSQL 时创建扩展
   - SQLite 环境跳过扩展创建，避免启动错误
   - `reset_database()` 仅支持 PostgreSQL，其他方言抛出明确错误
+
+### 运行时集成验证 - 未执行
+- [ ] verify_api_integration.py 运行时验证
+  - 需 Docker/PostgreSQL 环境可用后执行
+  - 当前仅完成静态校对，未验证与实际后端服务的连通性

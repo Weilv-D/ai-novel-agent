@@ -11,7 +11,9 @@ REQUIREMENTS:
 - httpx library installed: pip install httpx
 
 VERIFICATION STATUS:
-- Schema field names updated to match backend (2025-01-13)
+- Schema field names and route paths updated to match backend (2025-01-13)
+- Routes: flat structure (e.g., /characters, /chapters, /world-settings)
+- Request bodies include project_id for resource creation
 - NOT YET RUN against live backend - requires running Docker/PostgreSQL
 """
 
@@ -130,8 +132,8 @@ async def verify_api() -> dict[str, Any]:
 
         try:
             if project_id:
-                # List characters
-                response = await client.get(f"{API_BASE_URL}/api/v1/projects/{project_id}/characters")
+                # List characters (flat route: /characters/project/{project_id})
+                response = await client.get(f"{API_BASE_URL}/api/v1/characters/project/{project_id}")
                 if response.status_code == 200:
                     characters = response.json()
                     print_result("List characters", True, f"Found {len(characters)} characters")
@@ -140,8 +142,9 @@ async def verify_api() -> dict[str, Any]:
                     print_result("List characters", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Create a character (using correct schema: 'profile' dict, not individual fields)
+                # Create a character (flat route: /characters, with project_id in body)
                 character_data = {
+                    "project_id": str(project_id),
                     "name": "Test Character",
                     "role": "protagonist",
                     "profile": {
@@ -150,7 +153,7 @@ async def verify_api() -> dict[str, Any]:
                     }
                 }
                 response = await client.post(
-                    f"{API_BASE_URL}/api/v1/projects/{project_id}/characters",
+                    f"{API_BASE_URL}/api/v1/characters",
                     json=character_data
                 )
                 if response.status_code in (200, 201):
@@ -162,9 +165,9 @@ async def verify_api() -> dict[str, Any]:
                     print_result("Create character", False, f"Status: {response.status_code}, {response.text}")
                     results["failed"] += 1
 
-                # Get character by ID
+                # Get character by ID (flat route: /characters/{character_id})
                 if character_id:
-                    response = await client.get(f"{API_BASE_URL}/api/v1/projects/{project_id}/characters/{character_id}")
+                    response = await client.get(f"{API_BASE_URL}/api/v1/characters/{character_id}")
                     if response.status_code == 200:
                         print_result("Get character by ID", True)
                         results["passed"] += 1
@@ -183,8 +186,8 @@ async def verify_api() -> dict[str, Any]:
 
         try:
             if project_id:
-                # List chapters
-                response = await client.get(f"{API_BASE_URL}/api/v1/projects/{project_id}/chapters")
+                # List chapters (flat route: /chapters/project/{project_id})
+                response = await client.get(f"{API_BASE_URL}/api/v1/chapters/project/{project_id}")
                 if response.status_code == 200:
                     data = response.json()
                     chapters = data.get("items", data)
@@ -194,14 +197,15 @@ async def verify_api() -> dict[str, Any]:
                     print_result("List chapters", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Create a chapter (using correct schema: 'chapter_number' not 'order')
+                # Create a chapter (flat route: /chapters, with project_id in body)
                 chapter_data = {
+                    "project_id": str(project_id),
                     "chapter_number": 1,
                     "title": "Test Chapter",
                     "status": "draft"
                 }
                 response = await client.post(
-                    f"{API_BASE_URL}/api/v1/projects/{project_id}/chapters",
+                    f"{API_BASE_URL}/api/v1/chapters",
                     json=chapter_data
                 )
                 if response.status_code in (200, 201):
@@ -234,11 +238,11 @@ async def verify_api() -> dict[str, Any]:
                     print_result("List scenes", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Create a scene (correct schema: 'scene_order', not 'scene_number')
+                # Create a scene (schema has no 'title' field, only scene_order, location, content, meta)
                 scene_data = {
                     "chapter_id": str(chapter_id),  # UUID as string
                     "scene_order": 1,
-                    "title": "Test Scene",
+                    "location": "Test Location",
                     "content": "Test scene content for API integration testing."
                 }
                 response = await client.post(
@@ -265,8 +269,8 @@ async def verify_api() -> dict[str, Any]:
 
         try:
             if project_id:
-                # List world settings
-                response = await client.get(f"{API_BASE_URL}/api/v1/projects/{project_id}/world-settings")
+                # List world settings (flat route: /world-settings/project/{project_id})
+                response = await client.get(f"{API_BASE_URL}/api/v1/world-settings/project/{project_id}")
                 if response.status_code == 200:
                     settings = response.json()
                     print_result("List world settings", True, f"Found {len(settings)} settings")
@@ -275,14 +279,15 @@ async def verify_api() -> dict[str, Any]:
                     print_result("List world settings", False, f"Status: {response.status_code}")
                     results["failed"] += 1
 
-                # Create a world setting
+                # Create a world setting (flat route: /world-settings, with project_id in body)
                 setting_data = {
+                    "project_id": str(project_id),
                     "name": "Test Location",
                     "category": "geography",
                     "content": "A test world setting for API integration testing."
                 }
                 response = await client.post(
-                    f"{API_BASE_URL}/api/v1/projects/{project_id}/world-settings",
+                    f"{API_BASE_URL}/api/v1/world-settings",
                     json=setting_data
                 )
                 if response.status_code in (200, 201):
