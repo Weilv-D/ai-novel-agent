@@ -691,6 +691,383 @@ class TestWorldSettingsAPI:
         assert response.status_code in (200, 204)
 
 
+class TestSuggestionsAPI:
+    """Tests for Suggestions API endpoints."""
+
+    async def test_list_suggestions_empty(self, client: AsyncClient) -> None:
+        """Test listing suggestions when none exist."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/v1/suggestions?project_id={project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_create_suggestion(self, client: AsyncClient) -> None:
+        """Test creating a new suggestion."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # First create a chapter as target
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Target Chapter",
+            "status": "draft"
+        }
+        chapter_response = await client.post("/api/v1/chapters", json=chapter_data)
+        chapter_id = chapter_response.json()["id"]
+
+        suggestion_data = {
+            "project_id": project_id,
+            "target_type": "chapter",
+            "target_id": chapter_id,
+            "type": "content_gen",
+            "content": {"suggestion": "Add more dialogue"}
+        }
+        response = await client.post("/api/v1/suggestions", json=suggestion_data)
+
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert "id" in data
+        assert data["target_type"] == "chapter"
+        assert data["status"] == "draft"
+
+    async def test_suggestion_confirm_action(self, client: AsyncClient) -> None:
+        """Test confirming a suggestion."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create chapter and suggestion
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Target Chapter",
+            "status": "draft"
+        }
+        chapter_response = await client.post("/api/v1/chapters", json=chapter_data)
+        chapter_id = chapter_response.json()["id"]
+
+        suggestion_data = {
+            "project_id": project_id,
+            "target_type": "chapter",
+            "target_id": chapter_id,
+            "type": "content_gen",
+            "content": {"suggestion": "Test suggestion"}
+        }
+        create_response = await client.post("/api/v1/suggestions", json=suggestion_data)
+        suggestion_id = create_response.json()["id"]
+
+        action_data = {"action": "confirm"}
+        response = await client.post(f"/api/v1/suggestions/{suggestion_id}/action", json=action_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["action"] == "confirm"
+
+    async def test_suggestion_discard_action(self, client: AsyncClient) -> None:
+        """Test discarding a suggestion."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create chapter and suggestion
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Target Chapter",
+            "status": "draft"
+        }
+        chapter_response = await client.post("/api/v1/chapters", json=chapter_data)
+        chapter_id = chapter_response.json()["id"]
+
+        suggestion_data = {
+            "project_id": project_id,
+            "target_type": "chapter",
+            "target_id": chapter_id,
+            "type": "content_gen",
+            "content": {"suggestion": "Test suggestion to discard"}
+        }
+        create_response = await client.post("/api/v1/suggestions", json=suggestion_data)
+        suggestion_id = create_response.json()["id"]
+
+        action_data = {"action": "discard"}
+        response = await client.post(f"/api/v1/suggestions/{suggestion_id}/action", json=action_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["action"] == "discard"
+
+
+class TestDependenciesAPI:
+    """Tests for Dependencies API endpoints."""
+
+    async def test_query_dependencies_empty(self, client: AsyncClient) -> None:
+        """Test querying dependencies when none exist."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/v1/dependencies?project_id={project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_create_dependency(self, client: AsyncClient) -> None:
+        """Test creating a new dependency."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create chapters as source and target
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Source Chapter",
+            "status": "draft"
+        }
+        source_response = await client.post("/api/v1/chapters", json=chapter_data)
+        source_id = source_response.json()["id"]
+
+        chapter_data["chapter_number"] = 2
+        chapter_data["title"] = "Target Chapter"
+        target_response = await client.post("/api/v1/chapters", json=chapter_data)
+        target_id = target_response.json()["id"]
+
+        dependency_data = {
+            "project_id": project_id,
+            "source_type": "chapter",
+            "source_id": source_id,
+            "target_type": "chapter",
+            "target_id": target_id,
+            "dependency_type": "precedes"
+        }
+        response = await client.post("/api/v1/dependencies", json=dependency_data)
+
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert "id" in data
+        assert data["dependency_type"] == "precedes"
+
+    async def test_get_dependency_by_id(self, client: AsyncClient) -> None:
+        """Test getting a dependency by ID."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create chapters
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Source Chapter",
+            "status": "draft"
+        }
+        source_response = await client.post("/api/v1/chapters", json=chapter_data)
+        source_id = source_response.json()["id"]
+
+        chapter_data["chapter_number"] = 2
+        chapter_data["title"] = "Target Chapter"
+        target_response = await client.post("/api/v1/chapters", json=chapter_data)
+        target_id = target_response.json()["id"]
+
+        dependency_data = {
+            "project_id": project_id,
+            "source_type": "chapter",
+            "source_id": source_id,
+            "target_type": "chapter",
+            "target_id": target_id,
+            "dependency_type": "precedes"
+        }
+        create_response = await client.post("/api/v1/dependencies", json=dependency_data)
+        dependency_id = create_response.json()["id"]
+
+        response = await client.get(f"/api/v1/dependencies/{dependency_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == dependency_id
+
+    async def test_delete_dependency(self, client: AsyncClient) -> None:
+        """Test deleting a dependency."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create chapters
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Source Chapter",
+            "status": "draft"
+        }
+        source_response = await client.post("/api/v1/chapters", json=chapter_data)
+        source_id = source_response.json()["id"]
+
+        chapter_data["chapter_number"] = 2
+        chapter_data["title"] = "Target Chapter"
+        target_response = await client.post("/api/v1/chapters", json=chapter_data)
+        target_id = target_response.json()["id"]
+
+        dependency_data = {
+            "project_id": project_id,
+            "source_type": "chapter",
+            "source_id": source_id,
+            "target_type": "chapter",
+            "target_id": target_id,
+            "dependency_type": "precedes"
+        }
+        create_response = await client.post("/api/v1/dependencies", json=dependency_data)
+        dependency_id = create_response.json()["id"]
+
+        response = await client.delete(f"/api/v1/dependencies/{dependency_id}")
+
+        assert response.status_code in (200, 204)
+
+
+class TestSnapshotsAPI:
+    """Tests for Snapshots API endpoints."""
+
+    async def test_list_snapshots_empty(self, client: AsyncClient) -> None:
+        """Test listing snapshots when none exist."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/v1/snapshots?project_id={project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_create_snapshot(self, client: AsyncClient) -> None:
+        """Test creating a new snapshot."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        snapshot_data = {
+            "project_id": project_id,
+            "target_type": "project",
+            "target_id": project_id,
+            "data": {"name": "Test Project State"}
+        }
+        response = await client.post("/api/v1/snapshots", json=snapshot_data)
+
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert "id" in data
+        assert data["target_type"] == "project"
+
+    async def test_get_snapshot_by_id(self, client: AsyncClient) -> None:
+        """Test getting a snapshot by ID."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        snapshot_data = {
+            "project_id": project_id,
+            "target_type": "project",
+            "target_id": project_id,
+            "data": {"name": "Test State"}
+        }
+        create_response = await client.post("/api/v1/snapshots", json=snapshot_data)
+        snapshot_id = create_response.json()["id"]
+
+        response = await client.get(f"/api/v1/snapshots/{snapshot_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == snapshot_id
+
+    async def test_delete_snapshot(self, client: AsyncClient) -> None:
+        """Test deleting a snapshot."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        snapshot_data = {
+            "project_id": project_id,
+            "target_type": "project",
+            "target_id": project_id,
+            "data": {"name": "Test State"}
+        }
+        create_response = await client.post("/api/v1/snapshots", json=snapshot_data)
+        snapshot_id = create_response.json()["id"]
+
+        response = await client.delete(f"/api/v1/snapshots/{snapshot_id}")
+
+        assert response.status_code in (200, 204)
+
+
+class TestMemoriesAPI:
+    """Tests for Memories API endpoints."""
+
+    async def test_list_memories_empty(self, client: AsyncClient) -> None:
+        """Test listing memories when none exist."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/v1/memories?project_id={project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_create_memory(self, client: AsyncClient) -> None:
+        """Test creating a new memory."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        memory_data = {
+            "project_id": project_id,
+            "content": "The protagonist has a fear of heights",
+            "memory_type": "fact",
+            "auto_embed": False  # Skip embedding for HTTP test
+        }
+        response = await client.post("/api/v1/memories", json=memory_data)
+
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert "id" in data
+        assert data["content"] == "The protagonist has a fear of heights"
+        assert data["memory_type"] == "fact"
+
+    async def test_get_memory_by_id(self, client: AsyncClient) -> None:
+        """Test getting a memory by ID."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        memory_data = {
+            "project_id": project_id,
+            "content": "Test memory fact",
+            "memory_type": "fact",
+            "auto_embed": False
+        }
+        create_response = await client.post("/api/v1/memories", json=memory_data)
+        memory_id = create_response.json()["id"]
+
+        response = await client.get(f"/api/v1/memories/{memory_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == memory_id
+        assert data["content"] == "Test memory fact"
+
+    async def test_delete_memory(self, client: AsyncClient) -> None:
+        """Test deleting a memory."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        memory_data = {
+            "project_id": project_id,
+            "content": "Memory to delete",
+            "memory_type": "fact",
+            "auto_embed": False
+        }
+        create_response = await client.post("/api/v1/memories", json=memory_data)
+        memory_id = create_response.json()["id"]
+
+        response = await client.delete(f"/api/v1/memories/{memory_id}")
+
+        assert response.status_code in (200, 204)
+
+
 class TestCleanup:
     """Tests for cleanup operations."""
 
