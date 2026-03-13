@@ -801,6 +801,85 @@ class TestSuggestionsAPI:
         assert data["success"] is True
         assert data["action"] == "discard"
 
+    async def test_list_suggestions_by_target(self, client: AsyncClient) -> None:
+        """Test listing suggestions filtered by target object."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create two chapters as targets
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Target Chapter 1",
+            "status": "draft"
+        }
+        chapter1_response = await client.post("/api/v1/chapters", json=chapter_data)
+        chapter1_id = chapter1_response.json()["id"]
+
+        chapter_data["chapter_number"] = 2
+        chapter_data["title"] = "Target Chapter 2"
+        chapter2_response = await client.post("/api/v1/chapters", json=chapter_data)
+        chapter2_id = chapter2_response.json()["id"]
+
+        # Create suggestions for different targets
+        suggestion_data = {
+            "project_id": project_id,
+            "target_type": "chapter",
+            "target_id": chapter1_id,
+            "type": "content_gen",
+            "content": {"suggestion": "Fix Chapter 1"}
+        }
+        await client.post("/api/v1/suggestions", json=suggestion_data)
+
+        suggestion_data["target_id"] = chapter2_id
+        suggestion_data["content"] = {"suggestion": "Fix Chapter 2"}
+        await client.post("/api/v1/suggestions", json=suggestion_data)
+
+        # Query suggestions by target
+        response = await client.get(
+            f"/api/v1/suggestions/target/chapter/{chapter1_id}?project_id={project_id}"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["target_id"] == chapter1_id
+
+    async def test_count_pending_suggestions(self, client: AsyncClient) -> None:
+        """Test counting pending (draft/patched) suggestions."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create a chapter as target
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Target Chapter",
+            "status": "draft"
+        }
+        chapter_response = await client.post("/api/v1/chapters", json=chapter_data)
+        chapter_id = chapter_response.json()["id"]
+
+        # Create suggestions with different statuses
+        suggestion_data = {
+            "project_id": project_id,
+            "target_type": "chapter",
+            "target_id": chapter_id,
+            "type": "content_gen",
+            "content": {"suggestion": "Draft suggestion"}
+        }
+        await client.post("/api/v1/suggestions", json=suggestion_data)
+
+        suggestion_data["content"] = {"suggestion": "Another draft"}
+        await client.post("/api/v1/suggestions", json=suggestion_data)
+
+        # Count pending suggestions
+        response = await client.get(f"/api/v1/suggestions/pending/count?project_id={project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 2
+
 
 class TestDependenciesAPI:
     """Tests for Dependencies API endpoints."""
@@ -923,6 +1002,113 @@ class TestDependenciesAPI:
 
         assert response.status_code in (200, 204)
 
+    async def test_analyze_impact(self, client: AsyncClient) -> None:
+        """Test analyzing impact of modifying a source object."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create chapters as source and target
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Source Chapter",
+            "status": "draft"
+        }
+        source_response = await client.post("/api/v1/chapters", json=chapter_data)
+        source_id = source_response.json()["id"]
+
+        chapter_data["chapter_number"] = 2
+        chapter_data["title"] = "Target Chapter 1"
+        target1_response = await client.post("/api/v1/chapters", json=chapter_data)
+        target1_id = target1_response.json()["id"]
+
+        chapter_data["chapter_number"] = 3
+        chapter_data["title"] = "Target Chapter 2"
+        target2_response = await client.post("/api/v1/chapters", json=chapter_data)
+        target2_id = target2_response.json()["id"]
+
+        # Create dependencies
+        dependency_data = {
+            "project_id": project_id,
+            "source_type": "chapter",
+            "source_id": source_id,
+            "target_type": "chapter",
+            "target_id": target1_id,
+            "dependency_type": "precedes"
+        }
+        await client.post("/api/v1/dependencies", json=dependency_data)
+
+        dependency_data["target_id"] = target2_id
+        await client.post("/api/v1/dependencies", json=dependency_data)
+
+        # Analyze impact
+        analyze_request = {
+            "source_type": "chapter",
+            "source_id": source_id
+        }
+        response = await client.post(
+            f"/api/v1/dependencies/analyze?project_id={project_id}",
+            json=analyze_request
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["source_type"] == "chapter"
+        assert data["source_id"] == str(source_id)
+        assert len(data["impacted_objects"]) == 2
+        assert data["total_count"] == 2
+
+    async def test_analyze_reverse_impact(self, client: AsyncClient) -> None:
+        """Test reverse impact analysis - what depends on a target."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create chapters
+        chapter_data = {
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "Source 1",
+            "status": "draft"
+        }
+        source1_response = await client.post("/api/v1/chapters", json=chapter_data)
+        source1_id = source1_response.json()["id"]
+
+        chapter_data["chapter_number"] = 2
+        chapter_data["title"] = "Source 2"
+        source2_response = await client.post("/api/v1/chapters", json=chapter_data)
+        source2_id = source2_response.json()["id"]
+
+        chapter_data["chapter_number"] = 3
+        chapter_data["title"] = "Target Chapter"
+        target_response = await client.post("/api/v1/chapters", json=chapter_data)
+        target_id = target_response.json()["id"]
+
+        # Create dependencies pointing to the same target
+        dependency_data = {
+            "project_id": project_id,
+            "source_type": "chapter",
+            "source_id": source1_id,
+            "target_type": "chapter",
+            "target_id": target_id,
+            "dependency_type": "precedes"
+        }
+        await client.post("/api/v1/dependencies", json=dependency_data)
+
+        dependency_data["source_id"] = source2_id
+        await client.post("/api/v1/dependencies", json=dependency_data)
+
+        # Analyze reverse impact
+        response = await client.post(
+            f"/api/v1/dependencies/analyze/reverse/chapter/{target_id}?project_id={project_id}"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["source_type"] == "chapter"
+        assert data["source_id"] == str(target_id)
+        assert len(data["impacted_objects"]) == 2
+        assert data["total_count"] == 2
+
 
 class TestSnapshotsAPI:
     """Tests for Snapshots API endpoints."""
@@ -993,6 +1179,61 @@ class TestSnapshotsAPI:
         response = await client.delete(f"/api/v1/snapshots/{snapshot_id}")
 
         assert response.status_code in (200, 204)
+
+    async def test_get_latest_snapshot_by_target(self, client: AsyncClient) -> None:
+        """Test getting the latest snapshot for a specific target."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create a snapshot
+        snapshot_data = {
+            "project_id": project_id,
+            "target_type": "project",
+            "target_id": project_id,
+            "data": {"label": "test snapshot", "version": 1}
+        }
+        create_response = await client.post("/api/v1/snapshots", json=snapshot_data)
+        snapshot_id = create_response.json()["id"]
+
+        # Get latest snapshot for the target
+        response = await client.get(
+            f"/api/v1/snapshots/target/project/{project_id}/latest?project_id={project_id}"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == snapshot_id
+        assert data["target_type"] == "project"
+        assert data["target_id"] == str(project_id)
+        assert data["data"]["label"] == "test snapshot"
+
+    async def test_rollback_to_snapshot(self, client: AsyncClient) -> None:
+        """Test rollback endpoint that prepares snapshot data for restoration."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create a snapshot
+        snapshot_data = {
+            "project_id": project_id,
+            "target_type": "chapter",
+            "target_id": project_id,
+            "data": {"title": "Old Chapter Title", "content": "Old content"}
+        }
+        create_response = await client.post("/api/v1/snapshots", json=snapshot_data)
+        snapshot_id = create_response.json()["id"]
+
+        # Request rollback data
+        rollback_request = {"snapshot_id": snapshot_id}
+        response = await client.post(
+            f"/api/v1/snapshots/rollback?project_id={project_id}",
+            json=rollback_request
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["snapshot_id"] == snapshot_id
+        assert "rolled_back_at" in data
+        assert "message" in data
 
 
 class TestMemoriesAPI:
@@ -1066,6 +1307,71 @@ class TestMemoriesAPI:
         response = await client.delete(f"/api/v1/memories/{memory_id}")
 
         assert response.status_code in (200, 204)
+
+    async def test_search_memories_by_type(self, client: AsyncClient) -> None:
+        """Test listing memories filtered by type."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create memories of different types
+        memory_data = {
+            "project_id": project_id,
+            "content": "Character fact",
+            "memory_type": "character_fact",
+            "auto_embed": False
+        }
+        await client.post("/api/v1/memories", json=memory_data)
+
+        memory_data["content"] = "Plot fact"
+        memory_data["memory_type"] = "plot_fact"
+        await client.post("/api/v1/memories", json=memory_data)
+
+        memory_data["content"] = "World fact"
+        memory_data["memory_type"] = "world_fact"
+        await client.post("/api/v1/memories", json=memory_data)
+
+        # Query memories by type
+        response = await client.get(f"/api/v1/memories/type/character_fact?project_id={project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["memory_type"] == "character_fact"
+
+    async def test_count_memories(self, client: AsyncClient) -> None:
+        """Test counting memories with optional type filter."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        # Create memories
+        memory_data = {
+            "project_id": project_id,
+            "content": "Fact 1",
+            "memory_type": "fact",
+            "auto_embed": False
+        }
+        await client.post("/api/v1/memories", json=memory_data)
+
+        memory_data["content"] = "Fact 2"
+        await client.post("/api/v1/memories", json=memory_data)
+
+        memory_data["content"] = "Plot point"
+        memory_data["memory_type"] = "plot"
+        await client.post("/api/v1/memories", json=memory_data)
+
+        # Count all memories
+        response = await client.get(f"/api/v1/memories/count?project_id={project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 3
+
+        # Count by type
+        response = await client.get(f"/api/v1/memories/count?project_id={project_id}&memory_type=fact")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 2
 
 
 class TestCleanup:
