@@ -86,8 +86,14 @@
 - [x] 章节删除功能 (带确认对话框)
 - [x] 章节详情页场景列表展示
 
+### 场景管理 (Scenes)
+- [x] 场景详情页面 (/projects/[id]/chapters/[chapterId]/scenes/[sceneId])
+- [x] 场景创建页面 (/projects/[id]/chapters/[chapterId]/scenes/new)
+- [x] 场景编辑页面 (/projects/[id]/chapters/[chapterId]/scenes/[sceneId]/edit)
+- [x] 场景删除功能 (带确认对话框)
+- [x] 场景内容编辑（富文本域）
+
 ### 待办
-- [ ] 场景管理页面 (Scenes CRUD)
 - [ ] 人物管理页面 (Characters CRUD)
 - [ ] 世界观管理页面 (WorldSettings CRUD)
 
