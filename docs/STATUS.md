@@ -60,8 +60,16 @@
   - 测试: 23 tests (初始化、生成、嵌入、重试、健康检查)
 
 ## 下一步 (Phase 2)
-- 前端 Next.js 项目初始化
-- 基础 UI 组件和布局
+
+### 前端进度
+- [x] Next.js 15 + TypeScript 项目初始化
+- [x] App Router 结构 (app/layout.tsx, app/page.tsx)
+- [x] Tailwind CSS 配置
+- [x] ESLint 配置 (TypeScript + Core Web Vitals)
+- [ ] 基础 UI 组件
+- [ ] 状态管理 (Zustand)
+- [ ] API 客户端封装
+- [ ] 项目列表页面
 
 ## 项目结构
 ```
