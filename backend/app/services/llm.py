@@ -47,12 +47,13 @@ class LLMService:
             max_tokens: Max tokens for generation (defaults to settings)
             temperature: Sampling temperature (defaults to settings)
         """
-        self.api_key = api_key or settings.openai_api_key
-        self.base_url = base_url or settings.openai_base_url
-        self.model = model or settings.openai_model
-        self.embedding_model = embedding_model or settings.openai_embedding_model
-        self.max_tokens = max_tokens or settings.max_tokens
-        self.temperature = temperature or settings.temperature
+        # Use is not None check to allow falsy values (e.g., temperature=0.0)
+        self.api_key = api_key if api_key is not None else settings.openai_api_key
+        self.base_url = base_url if base_url is not None else settings.openai_base_url
+        self.model = model if model is not None else settings.openai_model
+        self.embedding_model = embedding_model if embedding_model is not None else settings.openai_embedding_model
+        self.max_tokens = max_tokens if max_tokens is not None else settings.max_tokens
+        self.temperature = temperature if temperature is not None else settings.temperature
 
         if not self.api_key:
             logger.warning("OpenAI API key not configured")

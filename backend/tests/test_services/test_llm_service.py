@@ -65,6 +65,33 @@ class TestLLMServiceInit:
         assert service.max_tokens == 2048
         assert service.temperature == 0.5
 
+    def test_init_preserves_temperature_zero(self) -> None:
+        """Test that temperature=0.0 is preserved (deterministic output)."""
+        service = LLMService(temperature=0.0)
+        assert service.temperature == 0.0, "temperature=0.0 should be preserved for deterministic output"
+
+    def test_init_preserves_max_tokens_zero(self) -> None:
+        """Test that max_tokens=0 is preserved (even if API may reject it)."""
+        service = LLMService(max_tokens=0)
+        assert service.max_tokens == 0, "max_tokens=0 should be preserved (API will validate)"
+
+    def test_init_none_uses_defaults(self) -> None:
+        """Test that None values fall back to settings defaults."""
+        service = LLMService(
+            api_key=None,
+            base_url=None,
+            model=None,
+            embedding_model=None,
+            max_tokens=None,
+            temperature=None,
+        )
+        assert service.api_key == ""  # Default from settings
+        assert service.base_url == "https://api.openai.com/v1"
+        assert service.model == "gpt-4o-mini"
+        assert service.embedding_model == "text-embedding-3-small"
+        assert service.max_tokens == 4096  # Default from settings
+        assert service.temperature == 0.7  # Default from settings
+
 
 class TestLLMServiceGenerate:
     """Tests for LLM text generation."""
