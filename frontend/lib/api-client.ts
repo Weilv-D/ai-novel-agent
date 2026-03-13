@@ -57,12 +57,17 @@ async function fetchApi<T>(
     headers,
   });
 
-  const data = await response.json();
+  // Handle empty responses (e.g., 204 No Content)
+  const contentType = response.headers.get("content-type");
+  const hasJsonBody = contentType?.includes("application/json");
+  const data = hasJsonBody ? await response.json() : null;
 
   if (!response.ok) {
     throw new ApiError(
       response.status,
-      data.detail || data.message || "An error occurred",
+      (data as { detail?: string; message?: string })?.detail
+        || (data as { detail?: string; message?: string })?.message
+        || "An error occurred",
       data
     );
   }
