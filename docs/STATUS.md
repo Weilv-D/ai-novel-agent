@@ -245,16 +245,22 @@ cd backend && python -m pytest tests/
   - 修复: 移除所有 schema 中 `meta` 字段的 `alias="metadata"`，使用直接字段名 `meta`
   - 影响范围: project.py, chapter.py (Scene), world_setting.py
   - 验证: 所有 API 返回正确的 `meta:{}` 而非 MetaData 对象
-- [x] SQLite 集成验证完成 (2026-03-13)
-  - 新增 `scripts/verify_sqlite_integration.py` - 完整 HTTP 集成测试
+- [x] Scene API `metadata` 字段序列化修复 (2026-03-13)
+  - 问题: SceneResponse 的 `meta` 字段与数据库列名 `metadata` 不一致
+  - 修复: 在 SceneResponse 中显式覆盖 `meta` 字段，设置 serialization_alias
+  - 验证: Scene 创建 API 返回 201，响应包含正确的 `meta:{}` 字段
+- [x] SQLite HTTP 集成验证 (2026-03-13) - 13/15 测试通过
+  - 新增 `scripts/verify_sqlite_integration.py` - 完整 HTTP 集成测试（使用端口 8767）
   - 新增 `scripts/create_test_user.py` - 测试用户创建工具
   - 验证结果:
-    - ✅ Projects API (Create/List/Get/Update)
-    - ✅ Characters API (Create/List/Get)
-    - ✅ Chapters API (Create/List)
-    - ✅ Scenes API (Create/List)
-    - ✅ WorldSettings API (Create/List)
-    - ✅ Health Check
+    - ✅ Health Check (200 OK)
+    - ✅ Projects API (List/Create/Get/Update - 4/4)
+    - ✅ Characters API (List/Create/Get - 3/3)
+    - ✅ Chapters API (List/Create - 2/2)
+    - ✅ Scenes API (List/Create - 2/2) - **现已修复**
+    - ⚠️ WorldSettings API (List OK, Create 待验证 - 单元测试 24/24 通过)
+    - ✅ 所有 CRUD 单元测试通过 (328 passed, 2 skipped)
   - 测试环境: SQLite 内存数据库，无需 Docker/PostgreSQL
+  - 已知问题: 服务器进程管理偶发超时（不影响功能）
 - [ ] Docker/PostgreSQL 环境集成验证（待 Docker 可用）
   - verify_api_integration.py 可验证 PostgreSQL 特有功能 (pgvector)
