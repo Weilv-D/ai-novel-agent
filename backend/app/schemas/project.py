@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 # ============ Enums ============
 
@@ -31,7 +31,11 @@ class ProjectBase(BaseModel):
     target_word_count: int | None = Field(None, ge=0)
     summary: str | None = None
     notes: str | None = None
-    meta: dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    meta: dict[str, Any] = Field(
+        default_factory=dict,
+        serialization_alias="metadata",
+        validation_alias="metadata"
+    )
 
 
 class ProjectCreate(ProjectBase):
@@ -50,7 +54,11 @@ class ProjectUpdate(BaseModel):
     status: ProjectStatusLiteral | None = None
     summary: str | None = None
     notes: str | None = None
-    meta: dict[str, Any] | None = Field(None, alias="metadata")
+    meta: dict[str, Any] | None = Field(
+        None,
+        serialization_alias="metadata",
+        validation_alias="metadata"
+    )
 
 
 class ProjectResponse(ProjectBase):
@@ -62,4 +70,9 @@ class ProjectResponse(ProjectBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True, "populate_by_name": True}
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True,
+        "ser_json_timedelta": "iso8601",
+        "by_alias": True  # Ensure serialization_alias is used
+    }
