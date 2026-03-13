@@ -118,13 +118,14 @@
 ```bash
 cd backend && python -m pytest tests/test_integration/test_http_integration.py -v
 ```
-**结果**: 26 passed
+**结果**: 33 passed
 
 **覆盖范围** (端到端 HTTP 测试，使用真实 SQLite 数据库):
 - ✓ Health Check (1/1)
 - ✓ Projects API (List/Create/Get/Update - 4/4)
 - ✓ Characters API (List/Create/Get/Update/Delete - 5/5)
-- ✓ Chapters API (List/Create/Get/Update/Delete - 5/5)
+- ✓ Volumes API (List/Create/Get/Update/Delete - 5/5)
+- ✓ Chapters API (List/Create/Get/Update/Delete + volume_id 关联 - 7/7)
 - ✓ Scenes API (List/Create/Get/Update/Delete - 5/5)
 - ✓ WorldSettings API (List/Create/Get/Update/Delete - 5/5)
 - ✓ Cleanup (Cascade delete - 1/1)

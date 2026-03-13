@@ -204,6 +204,96 @@ class TestCharactersAPI:
         assert response.status_code in (200, 204)
 
 
+class TestVolumesAPI:
+    """Tests for Volumes API endpoints."""
+
+    async def test_list_volumes_empty(self, client: AsyncClient) -> None:
+        """Test listing volumes when none exist."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/v1/volumes/project/{project_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_create_volume(self, client: AsyncClient) -> None:
+        """Test creating a new volume."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        volume_data = {
+            "project_id": project_id,
+            "volume_number": 1,
+            "title": "Test Volume"
+        }
+        response = await client.post("/api/v1/volumes", json=volume_data)
+
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert "id" in data
+        assert data["title"] == "Test Volume"
+        assert data["volume_number"] == 1
+
+    async def test_get_volume_by_id(self, client: AsyncClient) -> None:
+        """Test getting a volume by ID."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        volume_data = {
+            "project_id": project_id,
+            "volume_number": 1,
+            "title": "Volume for Get"
+        }
+        create_response = await client.post("/api/v1/volumes", json=volume_data)
+        volume_id = create_response.json()["id"]
+
+        response = await client.get(f"/api/v1/volumes/{volume_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == volume_id
+        assert data["title"] == "Volume for Get"
+
+    async def test_update_volume(self, client: AsyncClient) -> None:
+        """Test updating a volume."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        volume_data = {
+            "project_id": project_id,
+            "volume_number": 1,
+            "title": "Volume to Update"
+        }
+        create_response = await client.post("/api/v1/volumes", json=volume_data)
+        volume_id = create_response.json()["id"]
+
+        update_data = {"title": "Updated Volume"}
+        response = await client.patch(f"/api/v1/volumes/{volume_id}", json=update_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == "Updated Volume"
+
+    async def test_delete_volume(self, client: AsyncClient) -> None:
+        """Test deleting a volume."""
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        volume_data = {
+            "project_id": project_id,
+            "volume_number": 1,
+            "title": "Volume to Delete"
+        }
+        create_response = await client.post("/api/v1/volumes", json=volume_data)
+        volume_id = create_response.json()["id"]
+
+        response = await client.delete(f"/api/v1/volumes/{volume_id}")
+
+        assert response.status_code in (200, 204)
+
+
 class TestChaptersAPI:
     """Tests for Chapters API endpoints."""
 
@@ -299,6 +389,76 @@ class TestChaptersAPI:
         response = await client.delete(f"/api/v1/chapters/{chapter_id}")
 
         assert response.status_code in (200, 204)
+
+    async def test_create_chapter_with_volume(self, client: AsyncClient) -> None:
+        """Test creating a chapter with volume_id association."""
+        # Create project and volume
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        volume_data = {
+            "project_id": project_id,
+            "volume_number": 1,
+            "title": "Test Volume"
+        }
+        volume_response = await client.post("/api/v1/volumes", json=volume_data)
+        volume_id = volume_response.json()["id"]
+
+        # Create chapter with volume_id
+        chapter_data = {
+            "project_id": project_id,
+            "volume_id": volume_id,
+            "chapter_number": 1,
+            "title": "Chapter in Volume",
+            "status": "draft"
+        }
+        response = await client.post("/api/v1/chapters", json=chapter_data)
+
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert data["volume_id"] == volume_id
+        assert data["title"] == "Chapter in Volume"
+
+    async def test_list_chapters_by_volume(self, client: AsyncClient) -> None:
+        """Test listing chapters by volume_id."""
+        # Create project and volume
+        project_response = await client.post("/api/v1/projects", json={"name": "Test", "genre": "fiction"})
+        project_id = project_response.json()["id"]
+
+        volume_data = {
+            "project_id": project_id,
+            "volume_number": 1,
+            "title": "Test Volume"
+        }
+        volume_response = await client.post("/api/v1/volumes", json=volume_data)
+        volume_id = volume_response.json()["id"]
+
+        # Create chapters with and without volume
+        chapter_with_volume = {
+            "project_id": project_id,
+            "volume_id": volume_id,
+            "chapter_number": 1,
+            "title": "Chapter in Volume",
+            "status": "draft"
+        }
+        await client.post("/api/v1/chapters", json=chapter_with_volume)
+
+        chapter_without_volume = {
+            "project_id": project_id,
+            "chapter_number": 2,
+            "title": "Standalone Chapter",
+            "status": "draft"
+        }
+        await client.post("/api/v1/chapters", json=chapter_without_volume)
+
+        # List chapters by volume
+        response = await client.get(f"/api/v1/chapters/volume/{volume_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["volume_id"] == volume_id
+        assert data[0]["title"] == "Chapter in Volume"
 
 
 class TestScenesAPI:

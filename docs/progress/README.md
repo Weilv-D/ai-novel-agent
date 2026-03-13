@@ -21,9 +21,11 @@
 | Snapshot | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 测试现状
-- **总计**: 363 tests collected
+- **总计**: 370 tests collected
 - **覆盖**: API endpoints, Service layer, Schema validation, HTTP Integration
-- **HTTP 集成测试**: 26 tests (tests/test_integration/test_http_integration.py)
+- **HTTP 集成测试**: 33 tests (tests/test_integration/test_http_integration.py)
+  - 包含 Volumes API 完整 CRUD 覆盖
+  - 包含 chapter.volume_id 关联测试
 - **Snapshot**: 47 tests (11 Schemas + 18 Service + 18 API)
 
 ---
