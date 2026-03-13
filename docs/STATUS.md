@@ -114,6 +114,27 @@
 
 ## 验证记录（区分静态 vs 运行）
 
+### 后端 HTTP 集成测试 - pytest (2026-03-14)
+```bash
+cd backend && python -m pytest tests/test_integration/test_http_integration.py -v
+```
+**结果**: 26 passed
+
+**覆盖范围** (端到端 HTTP 测试，使用真实 SQLite 数据库):
+- ✓ Health Check (1/1)
+- ✓ Projects API (List/Create/Get/Update - 4/4)
+- ✓ Characters API (List/Create/Get/Update/Delete - 5/5)
+- ✓ Chapters API (List/Create/Get/Update/Delete - 5/5)
+- ✓ Scenes API (List/Create/Get/Update/Delete - 5/5)
+- ✓ WorldSettings API (List/Create/Get/Update/Delete - 5/5)
+- ✓ Cleanup (Cascade delete - 1/1)
+
+**测试配置**: SQLite in-memory，ASGI Transport，db_session 依赖注入
+
+**说明**: 后端 HTTP 集成测试全部通过，使用 pytest 框架验证所有核心 API 端点。
+测试在隔离的 SQLite 内存数据库上运行，无需 Docker 或 PostgreSQL。
+此测试与 verify_sqlite_integration.py 脚本功能等价，但提供更好的 CI 集成。
+
 ### 后端单元测试 - SQLite (2026-03-13)
 ```bash
 cd backend && python -m pytest tests/
@@ -134,7 +155,8 @@ cd backend && python -m pytest tests/
 **测试配置**: SQLite in-memory (无外部依赖)
 
 **说明**: 后端单元测试全部通过，验证了 service 层和 API 层的逻辑正确性。
-但未进行前后端 HTTP 集成测试，未验证前端页面与后端 API 的实际连通性。
+后端 HTTP 集成测试已完成（见下文 pytest HTTP 集成测试）。
+但未进行前后端联调测试，未验证前端页面与后端 API 的实际连通性。
 
 ### 前端构建验证 (2026-03-13)
 ```bash

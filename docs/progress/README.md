@@ -21,8 +21,9 @@
 | Snapshot | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 测试现状
-- **总计**: 260 tests passed (no failures)
-- **覆盖**: API endpoints, Service layer, Schema validation
+- **总计**: 363 tests collected
+- **覆盖**: API endpoints, Service layer, Schema validation, HTTP Integration
+- **HTTP 集成测试**: 26 tests (tests/test_integration/test_http_integration.py)
 - **Snapshot**: 47 tests (11 Schemas + 18 Service + 18 API)
 
 ---
@@ -32,7 +33,7 @@
 ### 高优先级 (下一批)
 | 模块 | Models | Schemas | API | Service | Tests |
 |------|--------|---------|-----|---------|-------|
-| Memory | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Memory | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 低优先级 (后续)
 | 模块 | Models | Schemas | API | Service | Tests |
@@ -62,9 +63,14 @@
 - [x] 回滚准备端点 (rollback, data retrieval)
 - [x] API + Service + Schemas 测试
 
+### 已完成: Memory (向量检索、叙事事实存储)
+- [x] MemoryService (CRUD + 向量搜索)
+- [x] Memories API (/api/v1/memories)
+- [x] 搜索端点 (search, similarity)
+- [x] API + Service + Schemas 测试
+
 ### 后续批次
-1. Memory (向量检索、叙事事实存储) - Schemas/Service/API 已完成，待测试
-2. User (认证、权限)
+1. User (认证、权限)
 
 ---
 
@@ -77,4 +83,4 @@
 
 ---
 
-*最后更新: 2026-03-13*
+*最后更新: 2026-03-14*
