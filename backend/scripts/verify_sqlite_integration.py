@@ -548,8 +548,74 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"WorldSettings API: {e}")
 
+    # 7. Memories API
+    print_section("7. Memories API")
+    memory_id = None
+
+    try:
+        if project_id:
+            # List memories (uses query parameter, not path parameter)
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/memories?project_id={project_id}")
+            if status == 200:
+                memories = json.loads(body)
+                print_result("List memories", True, f"Found {len(memories)} memories")
+                results["passed"] += 1
+            else:
+                print_result("List memories", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a memory (use correct schema: memory_type, content, project_id)
+            memory_data = {
+                "project_id": str(project_id),
+                "memory_type": "fact",
+                "content": "The hero possesses a magical amulet that glows in darkness."
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/memories", memory_data)
+            if status in (200, 201):
+                memory = json.loads(body)
+                memory_id = memory.get("id")
+                print_result("Create memory", True, f"ID: {memory_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create memory", False, f"Status: {status}, Body: {body[:200]}")
+                results["failed"] += 1
+
+            # Get memory by ID
+            if memory_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/memories/{memory_id}")
+                if status == 200:
+                    print_result("Get memory by ID", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Get memory by ID", False, f"Status: {status}")
+                    results["failed"] += 1
+
+                # Update memory
+                update_data = {"content": "The hero possesses a magical amulet that glows in darkness and pulses when danger is near."}
+                status, _ = curl_request("PATCH", f"{API_BASE_URL}/api/v1/memories/{memory_id}", update_data)
+                if status == 200:
+                    print_result("Update memory", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Update memory", False, f"Status: {status}")
+                    results["failed"] += 1
+
+                # Delete memory
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/memories/{memory_id}")
+                if status in (200, 204):
+                    print_result("Delete memory", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Delete memory", False, f"Status: {status}")
+                    results["failed"] += 1
+
+    except Exception as e:
+        print_result("Memories API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Memories API: {e}")
+
     # Cleanup: Delete test project
-    print_section("7. Cleanup")
+    print_section("8. Cleanup")
     try:
         if project_id:
             status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/projects/{project_id}")
