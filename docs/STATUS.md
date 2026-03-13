@@ -116,9 +116,9 @@
 
 ### 后端 HTTP 集成测试 - pytest (2026-03-14)
 ```bash
-cd backend && python -m pytest tests/test_integration/test_http_integration.py -v
+cd backend && python3 -m pytest tests/test_integration/test_http_integration.py -v
 ```
-**结果**: 49 passed
+**结果**: 57 passed
 
 **覆盖范围** (端到端 HTTP 测试，使用真实 SQLite 数据库):
 - ✓ Health Check (1/1)
@@ -128,10 +128,10 @@ cd backend && python -m pytest tests/test_integration/test_http_integration.py -
 - ✓ Chapters API (List/Create/Get/Update/Delete + volume_id 关联 - 7/7)
 - ✓ Scenes API (List/Create/Get/Update/Delete - 5/5)
 - ✓ WorldSettings API (List/Create/Get/Update/Delete - 5/5)
-- ✓ Suggestions API (List/Create/Actions - 4/4)
-- ✓ Dependencies API (Query/Create/Get/Delete - 4/4)
-- ✓ Snapshots API (List/Create/Get/Delete - 4/4)
-- ✓ Memories API (List/Create/Get/Delete - 4/4)
+- ✓ Suggestions API (List/Create/Actions/FilterByTarget/CountPending - 6/6)
+- ✓ Dependencies API (Query/Create/Get/Delete/ImpactAnalysis/ReverseImpact - 6/6)
+- ✓ Snapshots API (List/Create/Get/Delete/LatestByTarget/Rollback - 6/6)
+- ✓ Memories API (List/Create/Get/Delete/SearchByType/Count - 6/6)
 - ✓ Cleanup (Cascade delete - 1/1)
 
 **测试配置**: SQLite in-memory，ASGI Transport，db_session 依赖注入
@@ -142,7 +142,7 @@ cd backend && python -m pytest tests/test_integration/test_http_integration.py -
 
 ### 后端单元测试 - SQLite (2026-03-13)
 ```bash
-cd backend && python -m pytest tests/
+cd backend && python3 -m pytest tests/
 ```
 **结果**: 328 passed, 2 skipped, 9 warnings (18.42s)
 
@@ -239,10 +239,10 @@ ai-novel-agent/
 ### 验证 SQLite 兼容性
 ```bash
 # 运行 SQLite 迁移测试
-python backend/scripts/test_sqlite_migration.py
+python3 backend/scripts/test_sqlite_migration.py
 
 # 或直接运行测试套件
-cd backend && python -m pytest tests/
+cd backend && python3 -m pytest tests/
 ```
 
 **注意**: 生产环境必须使用 PostgreSQL 16 + pgvector。SQLite 仅用于测试和快速本地开发。

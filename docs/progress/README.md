@@ -23,11 +23,11 @@
 ### 测试现状
 - **总计**: 380+ tests collected
 - **覆盖**: API endpoints, Service layer, Schema validation, HTTP Integration
-- **HTTP 集成测试**: 49 tests (tests/test_integration/test_http_integration.py)
+- **HTTP 集成测试**: 57 tests (tests/test_integration/test_http_integration.py)
   - 包含所有核心 CRUD API：Projects, Characters, Volumes, Chapters, Scenes, WorldSettings
-  - 包含高级 API：Suggestions, Dependencies, Snapshots, Memories
+  - 包含高级 API：Suggestions, Dependencies, Snapshots, Memories (含过滤、计数、影响分析等高级功能)
   - 包含 chapter.volume_id 关联测试
-- **集成测试总数**: 58 tests (包含 migration 测试)
+- **集成测试总数**: 66 tests (包含 migration 测试)
 - **Snapshot**: 47 tests (11 Schemas + 18 Service + 18 API)
 
 ---
