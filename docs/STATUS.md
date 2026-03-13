@@ -290,5 +290,21 @@ cd backend && python3 -m pytest tests/
     - ✅ Cleanup (Delete project - 1/1)
   - 测试环境: SQLite 文件数据库，无需 Docker/PostgreSQL
   - 覆盖范围: 所有核心 API 端点已验证（包括 Volume API）
+- [x] 后端 API 联调验证 (2026-03-14) - ✅ 全部通过
+  - 修复: SQLite 不支持 pool_size/max_overflow 参数，改为条件设置
+  - 验证命令:
+    ```bash
+    cd backend && alembic upgrade head  # 创建 13 个表
+    uvicorn app.main:app --port 8000    # 启动服务
+    curl -X POST http://localhost:8000/api/v1/projects \
+      -d '{"name":"Test Project","description":"Test"}'
+    ```
+  - 验证结果:
+    - ✅ Projects API (Create/Get/List)
+    - ✅ Chapters API (Create/Get/List by project)
+    - ✅ Characters API (Create)
+    - ✅ Scenes API (Create)
+    - ✅ WorldSettings API (Create with correct category)
+  - 测试环境: SQLite 文件数据库 (test_data.db)，无需 Docker
 - [ ] Docker/PostgreSQL 环境集成验证（待 Docker 可用）
   - verify_api_integration.py 可验证 PostgreSQL 特有功能 (pgvector)

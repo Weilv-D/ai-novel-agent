@@ -87,4 +87,10 @@
 
 ---
 
+### 后端 API 联调验证 (2026-03-14)
+- ✅ SQLite 数据库兼容性修复 (pool_size/max_overflow 参数)
+- ✅ 本地后端 API 联调验证 (Projects/Chapters/Characters/Scenes/WorldSettings)
+
+---
+
 *最后更新: 2026-03-14*
