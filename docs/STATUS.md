@@ -243,7 +243,15 @@ cd backend && python -m pytest tests/
   - SQLite 环境跳过扩展创建，避免启动错误
   - `reset_database()` 仅支持 PostgreSQL，其他方言抛出明确错误
 
-### 运行时集成验证 - 未执行
-- [ ] verify_api_integration.py 运行时验证
-  - 需 Docker/PostgreSQL 环境可用后执行
-  - 当前仅完成静态校对，未验证与实际后端服务的连通性
+### 运行时集成验证 - 已完成
+- [x] Project API metadata 字段序列化修复 (2025-01-13)
+  - 问题: `ResponseValidationError` - metadata 列映射错误
+  - 修复: 使用 `serialization_alias` 和 `validation_alias` 正确映射 SQLAlchemy 模型的 `meta` 属性到 JSON 的 `metadata` 字段
+  - 验证: 单元测试 8/8 通过
+- [x] SQLite 集成验证脚本创建 (2025-01-13)
+  - 新增 `scripts/verify_sqlite_integration.py` - 完整 HTTP 集成测试
+  - 新增 `scripts/create_test_user.py` - 测试用户创建工具
+  - 无需 Docker/PostgreSQL，使用 SQLite 进行端到端验证
+- [ ] Docker/PostgreSQL 环境集成验证
+  - 需 Docker 环境可用后执行
+  - verify_api_integration.py 可验证 PostgreSQL 特有功能 (pgvector)
