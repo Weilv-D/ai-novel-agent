@@ -89,7 +89,11 @@ ai-novel-agent/
 │   ├── scripts/             # 工具脚本
 │   ├── pyproject.toml
 │   └── requirements.txt
-├── frontend/                # 待创建
+├── frontend/                # Next.js 15 + TypeScript
+│   ├── app/               # App Router pages
+│   ├── public/            # 静态资源
+│   ├── package.json       # 依赖配置
+│   └── tsconfig.json       # TypeScript 配置
 ├── infra/
 │   └── docker-compose.yml   # 本地开发
 └── docs/                    # PRD, TECH_ARCH, MVP_SCOPE, IMPLEMENTATION_PLAN

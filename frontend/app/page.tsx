@@ -17,7 +17,16 @@ export default function HomePage() {
           </ul>
         </div>
         <p className="text-sm text-gray-500">
-          后端 API 文档: <a href="http://localhost:8000/docs" className="text-blue-600 hover:underline">/docs</a>
+          后端 API 文档:{" "}
+          <a
+            href="http://localhost:8000/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            /docs
+          </a>
+          {" "}(开发环境)
         </p>
       </div>
     </main>
