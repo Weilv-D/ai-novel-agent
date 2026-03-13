@@ -27,7 +27,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-API_BASE_URL = "http://localhost:8765"
+API_BASE_URL = "http://localhost:8767"
 VERBOSE = True
 SERVER_PROCESS = None
 TEST_DB_PATH = Path(__file__).parent.parent / "test_integration.db"
@@ -100,7 +100,7 @@ def start_server() -> subprocess.Popen:
             sys.executable, "-m", "uvicorn",
             "app.main:app",
             "--host", "localhost",
-            "--port", "8765"
+            "--port", "8767"
         ],
         env=env,
         stdout=subprocess.PIPE,
@@ -441,14 +441,19 @@ async def main() -> int:
         # Check server stderr for errors after tests
         if server.stderr:
             import select
-            # Check if there's data to read without blocking
-            if select.select([server.stderr], [], [], 0)[0]:
+            # Read all stderr content
+            try:
+                server.stderr.flush()
+                # Try to get more output by reading non-blocking
+                import fcntl
+                flags = fcntl.fcntl(server.stderr, fcntl.F_GETFL)
+                fcntl.fcntl(server.stderr, fcntl.F_SETFL, flags | os.O_NONBLOCK)
                 stderr_output = server.stderr.read().decode(errors='replace')
-                if stderr_output and 'ERROR' in stderr_output:
-                    print(f"\n  Server errors detected:")
-                    for line in stderr_output.split('\n'):
-                        if 'ERROR' in line or 'Exception' in line or 'Traceback' in line:
-                            print(f"    {line}")
+                if stderr_output:
+                    print(f"\n  Server stderr output:")
+                    print(f"    {stderr_output[:5000]}")  # Print first 5000 chars
+            except Exception as e:
+                print(f"\n  Failed to read stderr: {e}")
 
         # Print summary
         print_section("Summary")

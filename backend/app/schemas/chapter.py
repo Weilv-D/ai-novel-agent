@@ -110,7 +110,7 @@ class SceneBase(BaseModel):
     pov_character_id: UUID | None = None
     location: str | None = Field(None, max_length=255)
     content: str | None = None
-    meta: dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class SceneCreate(SceneBase):
@@ -126,7 +126,7 @@ class SceneUpdate(BaseModel):
     pov_character_id: UUID | None = None
     location: str | None = Field(None, max_length=255)
     content: str | None = None
-    meta: dict[str, Any] | None = Field(None, alias="metadata")
+    meta: dict[str, Any] | None = Field(None)
 
 
 class SceneResponse(SceneBase):

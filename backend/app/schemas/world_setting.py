@@ -45,7 +45,7 @@ class WorldSettingBase(BaseModel):
     category: WorldSettingCategoryLiteral = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=255)
     content: str | None = None
-    meta: dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorldSettingCreate(WorldSettingBase):
@@ -60,7 +60,7 @@ class WorldSettingUpdate(BaseModel):
     category: WorldSettingCategoryLiteral | None = Field(None, min_length=1, max_length=100)
     name: str | None = Field(None, min_length=1, max_length=255)
     content: str | None = None
-    meta: dict[str, Any] | None = Field(None, alias="metadata")
+    meta: dict[str, Any] | None = Field(None)
 
 
 class WorldSettingResponse(WorldSettingBase):

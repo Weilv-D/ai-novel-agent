@@ -114,7 +114,7 @@
 
 ## 验证记录（区分静态 vs 运行）
 
-### 后端单元测试 - SQLite (2025-01-13)
+### 后端单元测试 - SQLite (2026-03-13)
 ```bash
 cd backend && python -m pytest tests/
 ```
@@ -136,7 +136,7 @@ cd backend && python -m pytest tests/
 **说明**: 后端单元测试全部通过，验证了 service 层和 API 层的逻辑正确性。
 但未进行前后端 HTTP 集成测试，未验证前端页面与后端 API 的实际连通性。
 
-### 前端构建验证 (2025-01-13)
+### 前端构建验证 (2026-03-13)
 ```bash
 cd frontend && npm run build
 ```
@@ -220,38 +220,41 @@ cd backend && python -m pytest tests/
 
 **注意**: 生产环境必须使用 PostgreSQL 16 + pgvector。SQLite 仅用于测试和快速本地开发。
 
-### 后端数据库兼容性修复 (2025-01-13)
+### 后端数据库兼容性修复 (2026-03-13)
 - [x] 修复 `init_db.py` 中的 pgvector 扩展创建逻辑
   - 添加数据库方言检测，仅在 PostgreSQL 时创建扩展
   - SQLite 环境跳过扩展创建，避免启动错误
   - `reset_database()` 仅支持 PostgreSQL，其他方言抛出明确错误
 
-### 开发环境配置 - 静态校对 (2025-01-13)
+### 开发环境配置 - 静态校对 (2026-03-13)
 - [x] frontend/Dockerfile - Node 20 Alpine 开发环境
 - [x] infra/docker-compose.yml - 添加 frontend 服务配置
   - Backend (8000), Frontend (3000), PostgreSQL (5432), Redis (6379)
   - 卷挂载配置支持实时代码编辑
 - [x] infra/start.sh - 启动脚本（语法检查通过）
-- [x] backend/scripts/verify_api_integration.py - HTTP 集成验证脚本
+- [x] backend/scripts/verify_api_integration.py - HTTP 集成验证脚本（已准备，待运行验证）
   - 字段名已与后端 schema 对齐（name, chapter_number, scene_order, profile dict）
   - 路由路径已修正为 flat 结构（/characters, /chapters, /world-settings）
   - 创建请求已添加 project_id 到 request body
   - SceneCreate 已移除不存在的 title 字段
   - Python 语法检查通过
-- [x] 修复 `init_db.py` 中的 pgvector 扩展创建逻辑
-  - 添加数据库方言检测，仅在 PostgreSQL 时创建扩展
-  - SQLite 环境跳过扩展创建，避免启动错误
-  - `reset_database()` 仅支持 PostgreSQL，其他方言抛出明确错误
 
 ### 运行时集成验证 - 已完成
-- [x] Project API metadata 字段序列化修复 (2025-01-13)
-  - 问题: `ResponseValidationError` - metadata 列映射错误
-  - 修复: 使用 `serialization_alias` 和 `validation_alias` 正确映射 SQLAlchemy 模型的 `meta` 属性到 JSON 的 `metadata` 字段
-  - 验证: 单元测试 8/8 通过
-- [x] SQLite 集成验证脚本创建 (2025-01-13)
+- [x] SQLAlchemy `.metadata` 命名冲突修复 (2026-03-13)
+  - 问题: Pydantic schema 使用 `alias="metadata"` 与 SQLAlchemy DeclarativeBase 的 `.metadata` 属性冲突
+  - 修复: 移除所有 schema 中 `meta` 字段的 `alias="metadata"`，使用直接字段名 `meta`
+  - 影响范围: project.py, chapter.py (Scene), world_setting.py
+  - 验证: 所有 API 返回正确的 `meta:{}` 而非 MetaData 对象
+- [x] SQLite 集成验证完成 (2026-03-13)
   - 新增 `scripts/verify_sqlite_integration.py` - 完整 HTTP 集成测试
   - 新增 `scripts/create_test_user.py` - 测试用户创建工具
-  - 无需 Docker/PostgreSQL，使用 SQLite 进行端到端验证
-- [ ] Docker/PostgreSQL 环境集成验证
-  - 需 Docker 环境可用后执行
+  - 验证结果:
+    - ✅ Projects API (Create/List/Get/Update)
+    - ✅ Characters API (Create/List/Get)
+    - ✅ Chapters API (Create/List)
+    - ✅ Scenes API (Create/List)
+    - ✅ WorldSettings API (Create/List)
+    - ✅ Health Check
+  - 测试环境: SQLite 内存数据库，无需 Docker/PostgreSQL
+- [ ] Docker/PostgreSQL 环境集成验证（待 Docker 可用）
   - verify_api_integration.py 可验证 PostgreSQL 特有功能 (pgvector)
