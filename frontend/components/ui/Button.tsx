@@ -1,13 +1,31 @@
-import { ButtonHTMLAttributes, forwardRef } from "react";
+"use client";
+
+import { ButtonHTMLAttributes, forwardRef, AnchorHTMLAttributes } from "react";
+import Link from "next/link";
 
 type Variant = "primary" | "secondary" | "outline" | "ghost";
 type Size = "sm" | "md" | "lg";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface BaseButtonProps {
   variant?: Variant;
   size?: Size;
   fullWidth?: boolean;
 }
+
+interface ButtonAsButton extends BaseButtonProps, Omit<ButtonHTMLAttributes<HTMLButtonElement>, "size"> {
+  href?: never;
+  disabled?: boolean;
+}
+
+interface ButtonAsLink extends BaseButtonProps, Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "size"> {
+  href: string;
+  prefetch?: boolean;
+  replace?: boolean;
+  scroll?: boolean;
+  disabled?: never;
+}
+
+type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 const variantStyles: Record<Variant, string> = {
   primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
@@ -22,7 +40,10 @@ const sizeStyles: Record<Size, string> = {
   lg: "px-6 py-3 text-lg",
 };
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+const baseStyles = "inline-flex items-center justify-center font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+
+// Inner button/link renderer
+const ButtonInner = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(
   (
     {
       variant = "primary",
@@ -30,20 +51,37 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       fullWidth = false,
       className = "",
       children,
-      disabled,
       ...props
     },
     ref
   ) => {
-    const baseStyles = "inline-flex items-center justify-center font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
     const widthClass = fullWidth ? "w-full" : "";
+    const combinedClassName = `${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthClass} ${className}`.trim();
 
+    if ("href" in props && props.href) {
+      const { href, prefetch, replace, scroll, ...anchorProps } = props;
+      return (
+        <Link
+          href={href}
+          prefetch={prefetch}
+          replace={replace}
+          scroll={scroll}
+          ref={ref as React.Ref<HTMLAnchorElement>}
+          className={combinedClassName}
+          {...anchorProps}
+        >
+          {children}
+        </Link>
+      );
+    }
+
+    const { disabled, ...buttonProps } = props as ButtonAsButton;
     return (
       <button
-        ref={ref}
-        className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthClass} ${className}`}
+        ref={ref as React.Ref<HTMLButtonElement>}
+        className={combinedClassName}
         disabled={disabled}
-        {...props}
+        {...buttonProps}
       >
         {children}
       </button>
@@ -51,4 +89,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   }
 );
 
-Button.displayName = "Button";
+ButtonInner.displayName = "ButtonInner";
+
+export const Button = ButtonInner;

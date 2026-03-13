@@ -116,10 +116,10 @@ export default function NewProjectPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={loading}
+                  href="/projects"
                   fullWidth
                 >
-                  <Link href="/projects">取消</Link>
+                  取消
                 </Button>
                 <Button type="submit" disabled={loading} fullWidth>
                   {loading ? "创建中..." : "创建项目"}

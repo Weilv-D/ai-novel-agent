@@ -79,9 +79,7 @@ export default function ProjectDetailPage() {
                 <p className="text-gray-600 mb-6">
                   {error || "无法加载项目信息"}
                 </p>
-                <Button>
-                  <Link href="/projects">返回项目列表</Link>
-                </Button>
+                <Button href="/projects">返回项目列表</Button>
               </div>
             </CardContent>
           </Card>
@@ -162,15 +160,9 @@ export default function ProjectDetailPage() {
         <Card className="mb-8">
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-4">
-              <Button>
-                <Link href={`/projects/${project.id}/chapters`}>章节管理</Link>
-              </Button>
-              <Button variant="outline">
-                <Link href={`/projects/${project.id}/characters`}>人物管理</Link>
-              </Button>
-              <Button variant="outline">
-                <Link href={`/projects/${project.id}/worldview`}>世界观</Link>
-              </Button>
+              <Button href={`/projects/${project.id}/chapters`}>章节管理</Button>
+              <Button variant="outline" href={`/projects/${project.id}/characters`}>人物管理</Button>
+              <Button variant="outline" href={`/projects/${project.id}/worldview`}>世界观</Button>
             </div>
           </CardContent>
         </Card>

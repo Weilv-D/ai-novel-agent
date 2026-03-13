@@ -47,9 +47,7 @@ export default function ProjectsPage() {
               管理您的小说创作项目
             </p>
           </div>
-          <Button>
-            <Link href="/projects/new">新建项目</Link>
-          </Button>
+          <Button href="/projects/new">新建项目</Button>
         </div>
 
         {/* Loading State */}
@@ -82,9 +80,7 @@ export default function ProjectsPage() {
                 <p className="text-gray-600 mb-6">
                   创建您的第一个小说项目，开始 AI 辅助创作之旅
                 </p>
-                <Button>
-                  <Link href="/projects/new">创建项目</Link>
-                </Button>
+                <Button href="/projects/new">创建项目</Button>
               </div>
             </CardContent>
           </Card>
