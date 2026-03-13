@@ -131,7 +131,7 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
         project_id: Any,
     ) -> Memory:
         """Create a new memory for a specific project."""
-        obj_dict = obj_in.model_dump(exclude={"project_id"})
+        obj_dict = obj_in.model_dump(exclude={"project_id", "auto_embed"})
         db_obj = Memory(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()

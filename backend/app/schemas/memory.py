@@ -43,6 +43,9 @@ class MemoryCreate(MemoryBase):
     embedding: list[float] | None = Field(
         None, description="Vector embedding (1536 dimensions for OpenAI)"
     )
+    auto_embed: bool = Field(
+        False, description="Automatically generate embedding from content"
+    )
 
 
 class MemoryUpdate(BaseModel):
@@ -52,6 +55,9 @@ class MemoryUpdate(BaseModel):
     memory_type: MemoryTypeLiteral | None = None
     meta: dict[str, Any] | None = None
     embedding: list[float] | None = None
+    auto_embed: bool | None = Field(
+        False, description="Automatically regenerate embedding from content if content changes"
+    )
 
 
 class MemoryResponse(MemoryBase):

@@ -42,6 +42,13 @@ class ConflictException(AppException):
         super().__init__(message, status.HTTP_409_CONFLICT, details)
 
 
+class ServiceUnavailableException(AppException):
+    """Service unavailable exception."""
+
+    def __init__(self, message: str = "Service unavailable", details: dict[str, Any] | None = None) -> None:
+        super().__init__(message, status.HTTP_503_SERVICE_UNAVAILABLE, details)
+
+
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """Handle custom application exceptions."""
     return JSONResponse(

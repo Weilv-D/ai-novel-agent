@@ -16,6 +16,7 @@ from app.schemas.memory import (
     VectorSearchRequest,
     VectorSearchResponse,
 )
+from app.services.llm import llm_service
 from app.services.memory import memory_service
 
 router = APIRouter(prefix="/memories", tags=["memories"])
@@ -27,7 +28,14 @@ async def create_memory(
     db: AsyncSession = Depends(get_db),
     memory_in: MemoryCreate,
 ) -> Memory:
-    """Create a new memory with optional embedding."""
+    """Create a new memory with optional embedding.
+
+    If auto_embed is True, automatically generates the embedding from content.
+    """
+    # Auto-generate embedding if requested and not already provided
+    if memory_in.auto_embed and not memory_in.embedding:
+        memory_in.embedding = await llm_service.embed_single(memory_in.content)
+
     return await memory_service.create_with_project(
         db, obj_in=memory_in, project_id=memory_in.project_id
     )
@@ -116,8 +124,16 @@ async def update_memory(
     memory_id: UUID,
     memory_in: MemoryUpdate,
 ) -> Memory:
-    """Update a memory (content, memory_type, meta, or embedding)."""
+    """Update a memory (content, memory_type, meta, or embedding).
+
+    If auto_embed is True and content is provided, automatically regenerates the embedding.
+    """
     memory = await memory_service.get(db, id=memory_id)
+
+    # Auto-generate embedding if requested and content is being updated
+    if memory_in.auto_embed and memory_in.content:
+        memory_in.embedding = await llm_service.embed_single(memory_in.content)
+
     return await memory_service.update(db, db_obj=memory, obj_in=memory_in)
 
 
