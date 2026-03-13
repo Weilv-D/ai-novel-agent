@@ -112,9 +112,9 @@ class LLMService:
         async def _do_generate() -> Any:
             """Inner function that performs the actual API call."""
             return await self.client.chat.completions.create(
-                model=model or self.model,
+                model=model if model is not None else self.model,
                 messages=messages,
-                max_tokens=max_tokens or self.max_tokens,
+                max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
                 temperature=temperature if temperature is not None else self.temperature,
                 stream=stream,
             )
@@ -126,7 +126,7 @@ class LLMService:
                 # Return streaming response for async handling
                 return {
                     "stream": response,
-                    "model": model or self.model,
+                    "model": model if model is not None else self.model,
                 }
 
             return {
@@ -223,7 +223,7 @@ class LLMService:
         async def _do_embed() -> Any:
             """Inner function that performs the actual API call."""
             return await self.client.embeddings.create(
-                model=model or self.embedding_model,
+                model=model if model is not None else self.embedding_model,
                 input=texts,
             )
 

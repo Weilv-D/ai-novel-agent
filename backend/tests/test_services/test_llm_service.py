@@ -176,6 +176,58 @@ class TestLLMServiceGenerate:
             assert "stream" in result
             assert result["model"] == service.model
 
+    @pytest.mark.asyncio
+    async def test_generate_preserves_temperature_zero_override(self) -> None:
+        """Test that generate() preserves temperature=0.0 override."""
+        service = LLMService(api_key="test-key", temperature=0.7)
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Result"
+        mock_response.model = "gpt-4o-mini"
+        mock_response.usage.prompt_tokens = 5
+        mock_response.usage.completion_tokens = 10
+        mock_response.usage.total_tokens = 15
+
+        mock_client = MockAsyncOpenAI(api_key="test-key", base_url="https://api.openai.com/v1")
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with patch("app.services.llm.AsyncOpenAI", return_value=mock_client):
+            result = await service.generate(
+                [{"role": "user", "content": "test"}], temperature=0.0
+            )
+
+            assert result["content"] == "Result"
+            # Verify the API was called with temperature=0.0
+            call_args = mock_client.chat.completions.create.call_args
+            assert call_args.kwargs["temperature"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_generate_preserves_max_tokens_zero_override(self) -> None:
+        """Test that generate() preserves max_tokens=0 override."""
+        service = LLMService(api_key="test-key", max_tokens=4096)
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Result"
+        mock_response.model = "gpt-4o-mini"
+        mock_response.usage.prompt_tokens = 5
+        mock_response.usage.completion_tokens = 0
+        mock_response.usage.total_tokens = 5
+
+        mock_client = MockAsyncOpenAI(api_key="test-key", base_url="https://api.openai.com/v1")
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with patch("app.services.llm.AsyncOpenAI", return_value=mock_client):
+            result = await service.generate(
+                [{"role": "user", "content": "test"}], max_tokens=0
+            )
+
+            assert result["content"] == "Result"
+            # Verify the API was called with max_tokens=0
+            call_args = mock_client.chat.completions.create.call_args
+            assert call_args.kwargs["max_tokens"] == 0
+
 
 class TestLLMServiceEmbed:
     """Tests for LLM embedding generation."""
