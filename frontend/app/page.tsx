@@ -1,23 +1,73 @@
+import Link from "next/link";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
+
 export default function HomePage() {
   return (
-    <main className="min-h-screen p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-4">AI Novel Agent</h1>
-        <p className="text-gray-600 mb-8">
-          AI-powered long-form novel writing system
-        </p>
-        <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-4">
-          <p className="text-sm text-blue-800">
-            <strong>Phase 2 前端骨架已初始化</strong>
+    <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      <div className="max-w-4xl mx-auto px-4 py-16 sm:px-6 sm:py-24">
+        {/* Hero Section */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-4">
+            AI Novel Agent
+          </h1>
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+            AI 驱动的超长篇小说创作系统
           </p>
-          <ul className="list-disc list-inside text-sm text-blue-700 mt-2 space-y-1">
-            <li>Next.js 15 + TypeScript</li>
-            <li>App Router 结构</li>
-            <li>ESLint 配置</li>
-          </ul>
+          <p className="mt-4 text-sm text-gray-500">
+            对象级 AI 协作 · 修改传播 · 一致性维护
+          </p>
         </div>
-        <p className="text-sm text-gray-500">
-          后端 API 文档:{" "}
+
+        {/* CTA Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+          <Button size="lg">
+            <Link href="/projects">查看项目</Link>
+          </Button>
+          <Button size="lg" variant="outline">
+            <Link href="/projects/new">新建项目</Link>
+          </Button>
+        </div>
+
+        {/* Features Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">项目管理</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>
+                创建和管理您的小说项目，设定题材、受众和目标字数
+              </CardDescription>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">人物与设定</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>
+                构建丰富的人物档案和世界观，AI 帮助维护一致性
+              </CardDescription>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">智能创作</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>
+                基于大纲和设定生成场景，支持局部改写和风格调整
+              </CardDescription>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* API Docs Link */}
+        <div className="mt-12 text-center text-sm text-gray-500">
+          <span>后端 API 文档: </span>
           <a
             href="http://localhost:8000/docs"
             target="_blank"
@@ -26,8 +76,8 @@ export default function HomePage() {
           >
             /docs
           </a>
-          {" "}(开发环境)
-        </p>
+          <span> (开发环境)</span>
+        </div>
       </div>
     </main>
   );
