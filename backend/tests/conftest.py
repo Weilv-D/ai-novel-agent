@@ -77,6 +77,14 @@ async def db_engine() -> AsyncGenerator[Any, None]:
                     # Replace with SQLiteUUID
                     col.type = SQLiteUUID()
 
+    # Save original UUID column types to restore after test
+    from app.models import Base
+    _original_types = {}
+    for table in Base.metadata.sorted_tables:
+        for col in table.columns:
+            if isinstance(col.type, UUID):
+                _original_types[(table.name, col.name)] = col.type
+
     await _replace_uuid_types()
 
     # Create all tables
@@ -90,6 +98,12 @@ async def db_engine() -> AsyncGenerator[Any, None]:
         await conn.run_sync(Base.metadata.drop_all)
 
     await engine.dispose()
+
+    # Restore original UUID column types to prevent global side effects
+    for table in Base.metadata.sorted_tables:
+        for col in table.columns:
+            if (table.name, col.name) in _original_types:
+                col.type = _original_types[(table.name, col.name)]
 
 
 @pytest.fixture(scope="function")
