@@ -258,8 +258,74 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Projects API: {e}")
 
-    # 3. Characters API
-    print_section("3. Characters API")
+    # 3. Volumes API
+    print_section("3. Volumes API")
+    volume_id = None
+
+    try:
+        if project_id:
+            # List volumes
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/volumes/project/{project_id}")
+            if status == 200:
+                volumes = json.loads(body)
+                print_result("List volumes", True, f"Found {len(volumes)} volumes")
+                results["passed"] += 1
+            else:
+                print_result("List volumes", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a volume
+            volume_data = {
+                "project_id": str(project_id),
+                "volume_number": 1,
+                "title": "Test Volume"
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/volumes", volume_data)
+            if status in (200, 201):
+                volume = json.loads(body)
+                volume_id = volume.get("id")
+                print_result("Create volume", True, f"ID: {volume_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create volume", False, f"Status: {status}, Body: {body[:200]}")
+                results["failed"] += 1
+
+            # Get volume by ID
+            if volume_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/volumes/{volume_id}")
+                if status == 200:
+                    print_result("Get volume by ID", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Get volume by ID", False, f"Status: {status}")
+                    results["failed"] += 1
+
+                # Update volume
+                update_data = {"title": "Updated Test Volume"}
+                status, _ = curl_request("PATCH", f"{API_BASE_URL}/api/v1/volumes/{volume_id}", update_data)
+                if status == 200:
+                    print_result("Update volume", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Update volume", False, f"Status: {status}")
+                    results["failed"] += 1
+
+                # Delete volume
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/volumes/{volume_id}")
+                if status in (200, 204):
+                    print_result("Delete volume", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Delete volume", False, f"Status: {status}")
+                    results["failed"] += 1
+
+    except Exception as e:
+        print_result("Volumes API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Volumes API: {e}")
+
+    # 4. Characters API
+    print_section("4. Characters API")
     character_id = None
 
     try:
@@ -328,8 +394,8 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Characters API: {e}")
 
-    # 4. Chapters API
-    print_section("4. Chapters API")
+    # 5. Chapters API
+    print_section("5. Chapters API")
     crud_chapter_id = None  # For CRUD tests (will be deleted)
     scene_chapter_id = None  # For scene tests (will be kept)
 
@@ -414,8 +480,8 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Chapters API: {e}")
 
-    # 5. Scenes API
-    print_section("5. Scenes API")
+    # 6. Scenes API
+    print_section("6. Scenes API")
     scene_id = None
 
     try:
@@ -481,8 +547,8 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Scenes API: {e}")
 
-    # 6. WorldSettings API
-    print_section("6. WorldSettings API")
+    # 7. WorldSettings API
+    print_section("7. WorldSettings API")
     setting_id = None
 
     try:
@@ -548,8 +614,8 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"WorldSettings API: {e}")
 
-    # 7. Memories API
-    print_section("7. Memories API")
+    # 8. Memories API
+    print_section("8. Memories API")
     memory_id = None
 
     try:
@@ -614,8 +680,8 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Memories API: {e}")
 
-    # 8. Snapshots API
-    print_section("8. Snapshots API")
+    # 9. Snapshots API
+    print_section("9. Snapshots API")
     snapshot_id = None
 
     try:
@@ -671,8 +737,8 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Snapshots API: {e}")
 
-    # 9. Suggestions API
-    print_section("9. Suggestions API")
+    # 10. Suggestions API
+    print_section("10. Suggestions API")
     suggestion_id = None
 
     try:
@@ -730,8 +796,8 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Suggestions API: {e}")
 
-    # 10. Dependencies API
-    print_section("10. Dependencies API")
+    # 11. Dependencies API
+    print_section("11. Dependencies API")
     dependency_id = None
 
     try:
@@ -790,7 +856,7 @@ def verify_api() -> dict[str, Any]:
         results["errors"].append(f"Dependencies API: {e}")
 
     # Cleanup: Delete test project
-    print_section("11. Cleanup")
+    print_section("12. Cleanup")
     try:
         if project_id:
             status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/projects/{project_id}")
