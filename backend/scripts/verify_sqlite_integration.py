@@ -3,17 +3,18 @@
 SQLite Integration Verification Script
 
 Tests all API endpoints using SQLite database (no PostgreSQL required).
-This script starts a temporary FastAPI server and runs HTTP requests against it.
+This script starts a temporary FastAPI server and runs HTTP requests against it using curl.
 
 REQUIREMENTS:
 - Python 3.11+ with SQLite support
+- curl command-line tool
 - All backend dependencies installed
 
 USAGE:
     python scripts/verify_sqlite_integration.py
 """
 
-import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -21,15 +22,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-API_BASE_URL = "http://localhost:8767"
+API_BASE_URL = "http://localhost:8765"
 VERBOSE = True
-SERVER_PROCESS = None
 TEST_DB_PATH = Path(__file__).parent.parent / "test_integration.db"
 
 
@@ -46,6 +44,33 @@ def print_result(test_name: str, passed: bool, details: str = "") -> None:
     print(f"  {status}: {test_name}")
     if details and VERBOSE:
         print(f"    {details}")
+
+
+def curl_request(method: str, url: str, data: dict[str, Any] | None = None) -> tuple[int, str]:
+    """Make HTTP request using curl to avoid connection pool timeouts."""
+    cmd = ["curl", "-s", "-w", "\n%{http_code}", url]
+    if method == "POST":
+        cmd.extend(["-X", "POST"])
+        if data:
+            cmd.extend(["-H", "Content-Type: application/json", "-d", json.dumps(data)])
+    elif method == "PATCH":
+        cmd.extend(["-X", "PATCH"])
+        if data:
+            cmd.extend(["-H", "Content-Type: application/json", "-d", json.dumps(data)])
+    elif method == "DELETE":
+        cmd.extend(["-X", "DELETE"])
+    elif method == "GET":
+        cmd.extend(["-X", "GET"])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    output = result.stdout.strip()
+    # Last line is status code, rest is body
+    lines = output.split('\n')
+    if len(lines) >= 2:
+        status_code = int(lines[-1])
+        body = '\n'.join(lines[:-1])
+        return status_code, body
+    return -1, output
 
 
 def start_server() -> subprocess.Popen:
@@ -100,27 +125,37 @@ def start_server() -> subprocess.Popen:
             sys.executable, "-m", "uvicorn",
             "app.main:app",
             "--host", "localhost",
-            "--port", "8767"
+            "--port", "8765"
         ],
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         cwd=Path(__file__).parent.parent
     )
 
     # Wait for server to start
-    for _ in range(30):
+    for attempt in range(30):
         try:
-            response = httpx.get(f"{API_BASE_URL}/api/v1/health", timeout=1.0)
-            if response.status_code == 200:
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/health")
+            if status == 200:
                 print("  ✓ Server is ready")
                 return server
-        except Exception:
-            time.sleep(0.5)
-        except KeyboardInterrupt:
-            break
+            else:
+                print(f"  ! Attempt {attempt+1}: Health check returned {status}")
+        except Exception as e:
+            if attempt < 5:  # Only print first few attempts
+                print(f"  ! Attempt {attempt+1}: {e}")
+        time.sleep(0.5)
 
-    print("  ✗ Server failed to start")
+    print("  ✗ Server failed to start after 15 seconds")
+    # Try to get stderr output
+    try:
+        server.stderr.flush()
+        stderr_output = server.stderr.read().decode(errors='replace')
+        if stderr_output:
+            print(f"  Server stderr: {stderr_output[:500]}")
+    except Exception:
+        pass
     server.terminate()
     return None
 
@@ -130,7 +165,12 @@ def stop_server(server: subprocess.Popen) -> None:
     print_section("Cleanup")
     print("  Stopping server...")
     server.terminate()
-    server.wait(timeout=5)
+    try:
+        server.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        server.kill()
+        server.wait()
+    print("  ✓ Server stopped")
 
     # Remove test database
     if TEST_DB_PATH.exists():
@@ -138,290 +178,395 @@ def stop_server(server: subprocess.Popen) -> None:
         print("  ✓ Test database removed")
 
 
-async def verify_api() -> dict[str, Any]:
-    """Verify all API endpoints."""
+def verify_api() -> dict[str, Any]:
+    """Verify all API endpoints using curl."""
     results = {
         "passed": 0,
         "failed": 0,
         "errors": [],
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # 1. Health Check
-        print_section("1. Health Check")
-        try:
-            response = await client.get(f"{API_BASE_URL}/api/v1/health")
-            if response.status_code == 200:
-                data = response.json()
-                print_result("Health endpoint", True, f"Status: {data.get('status')}, Version: {data.get('version')}")
-                results["passed"] += 1
-            else:
-                print_result("Health endpoint", False, f"Status: {response.status_code}")
-                results["failed"] += 1
-        except Exception as e:
-            print_result("Health endpoint", False, str(e))
+    # 1. Health Check
+    print_section("1. Health Check")
+    try:
+        status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/health")
+        if status == 200:
+            data = json.loads(body)
+            print_result("Health endpoint", True, f"Status: {data.get('status')}, Version: {data.get('version')}")
+            results["passed"] += 1
+        else:
+            print_result("Health endpoint", False, f"Status: {status}")
             results["failed"] += 1
-            results["errors"].append(f"Health check: {e}")
+    except Exception as e:
+        print_result("Health endpoint", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Health check: {e}")
 
-        # 2. Projects API
-        print_section("2. Projects API")
-        project_id = None
+    # 2. Projects API
+    print_section("2. Projects API")
+    project_id = None
 
-        try:
-            # List projects
-            response = await client.get(f"{API_BASE_URL}/api/v1/projects")
-            if response.status_code == 200:
-                data = response.json()
-                total = data.get('total', len(data)) if isinstance(data, dict) else len(data)
-                print_result("List projects", True, f"Found {total} projects")
+    try:
+        # List projects
+        status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/projects")
+        if status == 200:
+            data = json.loads(body)
+            total = data.get('total', len(data)) if isinstance(data, dict) else len(data)
+            print_result("List projects", True, f"Found {total} projects")
+            results["passed"] += 1
+        else:
+            print_result("List projects", False, f"Status: {status}")
+            results["failed"] += 1
+
+        # Create a project
+        project_data = {
+            "name": "Integration Test Project",
+            "genre": "fiction"
+        }
+        status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/projects", project_data)
+        if status in (200, 201):
+            project = json.loads(body)
+            project_id = project.get("id")
+            print_result("Create project", True, f"ID: {project_id}")
+            results["passed"] += 1
+        else:
+            print_result("Create project", False, f"Status: {status}")
+            results["failed"] += 1
+
+        # Get project by ID
+        if project_id:
+            status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/projects/{project_id}")
+            if status == 200:
+                print_result("Get project by ID", True)
                 results["passed"] += 1
             else:
-                print_result("List projects", False, f"Status: {response.status_code}")
+                print_result("Get project by ID", False, f"Status: {status}")
                 results["failed"] += 1
 
-            # Create a project
-            project_data = {
-                "name": "Integration Test Project",
-                "genre": "fiction"
+            # Update project
+            update_data = {"genre": "fantasy"}
+            status, _ = curl_request("PATCH", f"{API_BASE_URL}/api/v1/projects/{project_id}", update_data)
+            if status == 200:
+                print_result("Update project", True)
+                results["passed"] += 1
+            else:
+                print_result("Update project", False, f"Status: {status}")
+                results["failed"] += 1
+
+    except Exception as e:
+        print_result("Projects API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Projects API: {e}")
+
+    # 3. Characters API
+    print_section("3. Characters API")
+    character_id = None
+
+    try:
+        if project_id:
+            # List characters
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/characters/project/{project_id}")
+            if status == 200:
+                characters = json.loads(body)
+                print_result("List characters", True, f"Found {len(characters)} characters")
+                results["passed"] += 1
+            else:
+                print_result("List characters", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a character
+            character_data = {
+                "project_id": str(project_id),
+                "name": "Test Character",
+                "role": "protagonist",
+                "profile": {
+                    "personality": "Brave and curious",
+                    "appearance": "Tall with dark hair"
+                }
             }
-            response = await client.post(
-                f"{API_BASE_URL}/api/v1/projects",
-                json=project_data
-            )
-            if response.status_code in (200, 201):
-                project = response.json()
-                project_id = project.get("id")
-                print_result("Create project", True, f"ID: {project_id}")
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/characters", character_data)
+            if status in (200, 201):
+                character = json.loads(body)
+                character_id = character.get("id")
+                print_result("Create character", True, f"ID: {character_id}")
                 results["passed"] += 1
             else:
-                print_result("Create project", False, f"Status: {response.status_code}, {response.text}")
+                print_result("Create character", False, f"Status: {status}")
                 results["failed"] += 1
 
-            # Get project by ID
-            if project_id:
-                response = await client.get(f"{API_BASE_URL}/api/v1/projects/{project_id}")
-                if response.status_code == 200:
-                    print_result("Get project by ID", True)
+            # Get character by ID
+            if character_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/characters/{character_id}")
+                if status == 200:
+                    print_result("Get character by ID", True)
                     results["passed"] += 1
                 else:
-                    print_result("Get project by ID", False, f"Status: {response.status_code}")
+                    print_result("Get character by ID", False, f"Status: {status}")
                     results["failed"] += 1
 
-                # Update project
-                update_data = {"genre": "fantasy"}
-                response = await client.patch(
-                    f"{API_BASE_URL}/api/v1/projects/{project_id}",
-                    json=update_data
-                )
-                if response.status_code == 200:
-                    print_result("Update project", True)
+                # Update character
+                update_data = {"role": "antagonist"}
+                status, _ = curl_request("PATCH", f"{API_BASE_URL}/api/v1/characters/{character_id}", update_data)
+                if status == 200:
+                    print_result("Update character", True)
                     results["passed"] += 1
                 else:
-                    print_result("Update project", False, f"Status: {response.status_code}")
+                    print_result("Update character", False, f"Status: {status}")
                     results["failed"] += 1
 
-        except Exception as e:
-            print_result("Projects API", False, str(e))
-            results["failed"] += 1
-            results["errors"].append(f"Projects API: {e}")
-
-        # 3. Characters API
-        print_section("3. Characters API")
-        character_id = None
-
-        try:
-            if project_id:
-                # List characters
-                response = await client.get(f"{API_BASE_URL}/api/v1/characters/project/{project_id}")
-                if response.status_code == 200:
-                    characters = response.json()
-                    print_result("List characters", True, f"Found {len(characters)} characters")
+                # Delete character
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/characters/{character_id}")
+                if status in (200, 204):
+                    print_result("Delete character", True)
                     results["passed"] += 1
                 else:
-                    print_result("List characters", False, f"Status: {response.status_code}")
+                    print_result("Delete character", False, f"Status: {status}")
                     results["failed"] += 1
 
-                # Create a character
-                character_data = {
-                    "project_id": str(project_id),
-                    "name": "Test Character",
-                    "role": "protagonist",
-                    "profile": {
-                        "personality": "Brave and curious",
-                        "appearance": "Tall with dark hair"
-                    }
-                }
-                response = await client.post(
-                    f"{API_BASE_URL}/api/v1/characters",
-                    json=character_data
-                )
-                if response.status_code in (200, 201):
-                    character = response.json()
-                    character_id = character.get("id")
-                    print_result("Create character", True, f"ID: {character_id}")
+    except Exception as e:
+        print_result("Characters API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Characters API: {e}")
+
+    # 4. Chapters API
+    print_section("4. Chapters API")
+    crud_chapter_id = None  # For CRUD tests (will be deleted)
+    scene_chapter_id = None  # For scene tests (will be kept)
+
+    try:
+        if project_id:
+            # List chapters
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/chapters/project/{project_id}")
+            if status == 200:
+                data = json.loads(body)
+                chapters = data.get("items", data) if isinstance(data, dict) else data
+                print_result("List chapters", True, f"Found {len(chapters)} chapters")
+                results["passed"] += 1
+            else:
+                print_result("List chapters", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a chapter for scene tests (kept for later use)
+            chapter_data = {
+                "project_id": str(project_id),
+                "chapter_number": 1,
+                "title": "Test Chapter for Scenes",
+                "status": "draft"
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/chapters", chapter_data)
+            if status in (200, 201):
+                chapter = json.loads(body)
+                scene_chapter_id = chapter.get("id")
+                print_result("Create chapter (for scenes)", True, f"ID: {scene_chapter_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create chapter (for scenes)", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a chapter for CRUD tests (will be deleted)
+            chapter_data = {
+                "project_id": str(project_id),
+                "chapter_number": 2,
+                "title": "Test Chapter for CRUD",
+                "status": "draft"
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/chapters", chapter_data)
+            if status in (200, 201):
+                chapter = json.loads(body)
+                crud_chapter_id = chapter.get("id")
+                print_result("Create chapter (for CRUD)", True, f"ID: {crud_chapter_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create chapter (for CRUD)", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Get chapter by ID
+            if crud_chapter_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/chapters/{crud_chapter_id}")
+                if status == 200:
+                    print_result("Get chapter by ID", True)
                     results["passed"] += 1
                 else:
-                    print_result("Create character", False, f"Status: {response.status_code}, {response.text}")
+                    print_result("Get chapter by ID", False, f"Status: {status}")
                     results["failed"] += 1
 
-                # Get character by ID
-                if character_id:
-                    response = await client.get(f"{API_BASE_URL}/api/v1/characters/{character_id}")
-                    if response.status_code == 200:
-                        print_result("Get character by ID", True)
-                        results["passed"] += 1
-                    else:
-                        print_result("Get character by ID", False, f"Status: {response.status_code}")
-                        results["failed"] += 1
-
-        except Exception as e:
-            print_result("Characters API", False, str(e))
-            results["failed"] += 1
-            results["errors"].append(f"Characters API: {e}")
-
-        # 4. Chapters API
-        print_section("4. Chapters API")
-        chapter_id = None
-
-        try:
-            if project_id:
-                # List chapters
-                response = await client.get(f"{API_BASE_URL}/api/v1/chapters/project/{project_id}")
-                if response.status_code == 200:
-                    data = response.json()
-                    chapters = data.get("items", data) if isinstance(data, dict) else data
-                    print_result("List chapters", True, f"Found {len(chapters)} chapters")
+                # Update chapter
+                update_data = {"title": "Updated Test Chapter"}
+                status, _ = curl_request("PATCH", f"{API_BASE_URL}/api/v1/chapters/{crud_chapter_id}", update_data)
+                if status == 200:
+                    print_result("Update chapter", True)
                     results["passed"] += 1
                 else:
-                    print_result("List chapters", False, f"Status: {response.status_code}")
+                    print_result("Update chapter", False, f"Status: {status}")
                     results["failed"] += 1
 
-                # Create a chapter
-                chapter_data = {
-                    "project_id": str(project_id),
-                    "chapter_number": 1,
-                    "title": "Test Chapter",
-                    "status": "draft"
-                }
-                response = await client.post(
-                    f"{API_BASE_URL}/api/v1/chapters",
-                    json=chapter_data
-                )
-                if response.status_code in (200, 201):
-                    chapter = response.json()
-                    chapter_id = chapter.get("id")
-                    print_result("Create chapter", True, f"ID: {chapter_id}")
+                # Delete chapter
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/chapters/{crud_chapter_id}")
+                if status in (200, 204):
+                    print_result("Delete chapter", True)
                     results["passed"] += 1
                 else:
-                    print_result("Create chapter", False, f"Status: {response.status_code}, {response.text}")
+                    print_result("Delete chapter", False, f"Status: {status}")
                     results["failed"] += 1
 
-        except Exception as e:
-            print_result("Chapters API", False, str(e))
-            results["failed"] += 1
-            results["errors"].append(f"Chapters API: {e}")
+    except Exception as e:
+        print_result("Chapters API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Chapters API: {e}")
 
-        # 5. Scenes API
-        print_section("5. Scenes API")
-        scene_id = None
+    # 5. Scenes API
+    print_section("5. Scenes API")
+    scene_id = None
 
-        try:
-            if chapter_id:
-                # List scenes
-                response = await client.get(f"{API_BASE_URL}/api/v1/scenes/chapter/{chapter_id}")
-                if response.status_code == 200:
-                    scenes = response.json()
-                    print_result("List scenes", True, f"Found {len(scenes)} scenes")
+    try:
+        if scene_chapter_id:
+            # List scenes
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/scenes/chapter/{scene_chapter_id}")
+            if status == 200:
+                scenes = json.loads(body)
+                print_result("List scenes", True, f"Found {len(scenes)} scenes")
+                results["passed"] += 1
+            else:
+                print_result("List scenes", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a scene
+            scene_data = {
+                "chapter_id": str(scene_chapter_id),
+                "scene_order": 1,
+                "location": "Test Location",
+                "content": "Test scene content for API integration testing."
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/scenes", scene_data)
+            if status in (200, 201):
+                scene = json.loads(body)
+                scene_id = scene.get("id")
+                print_result("Create scene", True, f"ID: {scene_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create scene", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Get scene by ID
+            if scene_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/scenes/{scene_id}")
+                if status == 200:
+                    print_result("Get scene by ID", True)
                     results["passed"] += 1
                 else:
-                    print_result("List scenes", False, f"Status: {response.status_code}")
+                    print_result("Get scene by ID", False, f"Status: {status}")
                     results["failed"] += 1
 
-                # Create a scene
-                scene_data = {
-                    "chapter_id": str(chapter_id),
-                    "scene_order": 1,
-                    "location": "Test Location",
-                    "content": "Test scene content for API integration testing."
-                }
-                response = await client.post(
-                    f"{API_BASE_URL}/api/v1/scenes",
-                    json=scene_data
-                )
-                if response.status_code in (200, 201):
-                    scene = response.json()
-                    scene_id = scene.get("id")
-                    print_result("Create scene", True, f"ID: {scene_id}")
+                # Update scene
+                update_data = {"location": "Updated Location"}
+                status, _ = curl_request("PATCH", f"{API_BASE_URL}/api/v1/scenes/{scene_id}", update_data)
+                if status == 200:
+                    print_result("Update scene", True)
                     results["passed"] += 1
                 else:
-                    print_result("Create scene", False, f"Status: {response.status_code}, {response.text}")
+                    print_result("Update scene", False, f"Status: {status}")
                     results["failed"] += 1
 
-        except Exception as e:
-            print_result("Scenes API", False, str(e))
-            results["failed"] += 1
-            results["errors"].append(f"Scenes API: {e}")
-
-        # 6. WorldSettings API
-        print_section("6. WorldSettings API")
-        setting_id = None
-
-        try:
-            if project_id:
-                # List world settings
-                response = await client.get(f"{API_BASE_URL}/api/v1/world-settings/project/{project_id}")
-                if response.status_code == 200:
-                    settings = response.json()
-                    print_result("List world settings", True, f"Found {len(settings)} settings")
+                # Delete scene
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/scenes/{scene_id}")
+                if status in (200, 204):
+                    print_result("Delete scene", True)
                     results["passed"] += 1
                 else:
-                    print_result("List world settings", False, f"Status: {response.status_code}")
+                    print_result("Delete scene", False, f"Status: {status}")
                     results["failed"] += 1
 
-                # Create a world setting
-                setting_data = {
-                    "project_id": str(project_id),
-                    "name": "Test Location",
-                    "category": "geography",
-                    "content": "A test world setting for API integration testing."
-                }
-                response = await client.post(
-                    f"{API_BASE_URL}/api/v1/world-settings",
-                    json=setting_data
-                )
-                if response.status_code in (200, 201):
-                    setting = response.json()
-                    setting_id = setting.get("id")
-                    print_result("Create world setting", True, f"ID: {setting_id}")
+    except Exception as e:
+        print_result("Scenes API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Scenes API: {e}")
+
+    # 6. WorldSettings API
+    print_section("6. WorldSettings API")
+    setting_id = None
+
+    try:
+        if project_id:
+            # List world settings
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/world-settings/project/{project_id}")
+            if status == 200:
+                settings = json.loads(body)
+                print_result("List world settings", True, f"Found {len(settings)} settings")
+                results["passed"] += 1
+            else:
+                print_result("List world settings", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a world setting
+            setting_data = {
+                "project_id": str(project_id),
+                "name": "Test Location",
+                "category": "geography",
+                "content": "A test world setting for API integration testing."
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/world-settings", setting_data)
+            if status in (200, 201):
+                setting = json.loads(body)
+                setting_id = setting.get("id")
+                print_result("Create world setting", True, f"ID: {setting_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create world setting", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Get world setting by ID
+            if setting_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/world-settings/{setting_id}")
+                if status == 200:
+                    print_result("Get world setting by ID", True)
                     results["passed"] += 1
                 else:
-                    print_result("Create world setting", False, f"Status: {response.status_code}, {response.text}")
+                    print_result("Get world setting by ID", False, f"Status: {status}")
                     results["failed"] += 1
 
-        except Exception as e:
-            print_result("WorldSettings API", False, str(e))
-            results["failed"] += 1
-            results["errors"].append(f"WorldSettings API: {e}")
-
-        # Cleanup: Delete test project
-        print_section("7. Cleanup")
-        try:
-            if project_id:
-                response = await client.delete(f"{API_BASE_URL}/api/v1/projects/{project_id}")
-                if response.status_code in (200, 204):
-                    print_result("Delete test project", True)
+                # Update world setting
+                update_data = {"name": "Updated Test Location"}
+                status, _ = curl_request("PATCH", f"{API_BASE_URL}/api/v1/world-settings/{setting_id}", update_data)
+                if status == 200:
+                    print_result("Update world setting", True)
                     results["passed"] += 1
                 else:
-                    print_result("Delete test project", False, f"Status: {response.status_code}")
+                    print_result("Update world setting", False, f"Status: {status}")
                     results["failed"] += 1
-        except Exception as e:
-            print_result("Cleanup", False, str(e))
-            results["failed"] += 1
+
+                # Delete world setting
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/world-settings/{setting_id}")
+                if status in (200, 204):
+                    print_result("Delete world setting", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Delete world setting", False, f"Status: {status}")
+                    results["failed"] += 1
+
+    except Exception as e:
+        print_result("WorldSettings API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"WorldSettings API: {e}")
+
+    # Cleanup: Delete test project
+    print_section("7. Cleanup")
+    try:
+        if project_id:
+            status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/projects/{project_id}")
+            if status in (200, 204):
+                print_result("Delete test project", True)
+                results["passed"] += 1
+            else:
+                print_result("Delete test project", False, f"Status: {status}")
+                results["failed"] += 1
+    except Exception as e:
+        print_result("Cleanup", False, str(e))
+        results["failed"] += 1
 
     return results
 
 
-async def main() -> int:
+def main() -> int:
     """Main entry point."""
     print_section("AI Novel Agent - SQLite Integration Verification")
     print(f"API Base URL: {API_BASE_URL}")
@@ -436,24 +581,9 @@ async def main() -> int:
 
     try:
         # Run tests
-        results = await verify_api()
+        results = verify_api()
 
-        # Check server stderr for errors after tests
-        if server.stderr:
-            import select
-            # Read all stderr content
-            try:
-                server.stderr.flush()
-                # Try to get more output by reading non-blocking
-                import fcntl
-                flags = fcntl.fcntl(server.stderr, fcntl.F_GETFL)
-                fcntl.fcntl(server.stderr, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-                stderr_output = server.stderr.read().decode(errors='replace')
-                if stderr_output:
-                    print(f"\n  Server stderr output:")
-                    print(f"    {stderr_output[:5000]}")  # Print first 5000 chars
-            except Exception as e:
-                print(f"\n  Failed to read stderr: {e}")
+        # Note: Server stderr/output is available but not displayed to keep test output clean
 
         # Print summary
         print_section("Summary")
@@ -480,7 +610,7 @@ async def main() -> int:
 
 if __name__ == "__main__":
     try:
-        sys.exit(asyncio.run(main()))
+        sys.exit(main())
     except KeyboardInterrupt:
         print("\n\n  Interrupted by user")
         sys.exit(130)

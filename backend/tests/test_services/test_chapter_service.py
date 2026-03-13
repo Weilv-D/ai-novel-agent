@@ -319,6 +319,45 @@ class TestChapterServiceCreateWithProject:
         assert result.outline == "Our hero begins their journey"
         assert result.project_id == project.id
 
+    @pytest.mark.asyncio
+    async def test_create_with_project_preserves_volume_id(self, db_session: AsyncSession):
+        """Test creating a chapter with volume_id preserves the relationship (regression test for data loss bug)."""
+        user_id = uuid4()
+        project = await project_service.create_with_user(
+            db_session,
+            obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
+            user_id=user_id,
+        )
+        volume = await volume_service.create_with_project(
+            db_session,
+            obj_in=VolumeCreate(title="Volume 1", volume_number=1, project_id=project.id),
+            project_id=project.id,
+        )
+
+        # Create chapter WITH volume_id - this used to be lost (data loss bug)
+        chapter_in = ChapterCreate(
+            title="Chapter 1: The Journey Begins",
+            chapter_number=1,
+            project_id=project.id,
+            volume_id=volume.id,  # This must be preserved!
+        )
+
+        result = await chapter_service.create_with_project(
+            db_session,
+            obj_in=chapter_in,
+            project_id=project.id,
+        )
+
+        # Critical assertion: volume_id must NOT be None
+        assert result.id is not None
+        assert result.volume_id == volume.id, "volume_id must be preserved when creating chapter"
+        assert result.project_id == project.id
+
+        # Verify by querying through the volume
+        volume_chapters = await chapter_service.get_by_volume(db_session, volume_id=volume.id)
+        assert len(volume_chapters) == 1, "Chapter should be queryable through volume relationship"
+        assert volume_chapters[0].id == result.id
+
 
 class TestSceneServiceCreateWithChapter:
     """Tests for scene_service.create_with_chapter with real database."""

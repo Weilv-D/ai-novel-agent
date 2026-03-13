@@ -101,7 +101,7 @@ class CRUDChapter(CRUDBase[Chapter, ChapterCreate, ChapterUpdate]):
         project_id: Any,
     ) -> Chapter:
         """Create a new chapter for a specific project."""
-        obj_dict = obj_in.model_dump(exclude={"project_id", "volume_id"})
+        obj_dict = obj_in.model_dump(exclude={"project_id"})
         db_obj = Chapter(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()
