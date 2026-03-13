@@ -14,6 +14,8 @@ from app.core.exceptions import (
     http_exception_handler,
 )
 from app.core.logging import get_logger, setup_logging
+from app.db import close_db, init_db
+from app.db.init_db import init_database
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -28,16 +30,15 @@ async def lifespan(app: FastAPI):
     # Initialize logging
     setup_logging(settings)
 
-    # TODO: Initialize database connection
-    # await init_db()
+    # Initialize database connection and extensions
+    await init_db()
+    await init_database()
 
     yield
 
     # Shutdown
     logger.info("Shutting down AI Novel Agent API")
-
-    # TODO: Close database connection
-    # await close_db()
+    await close_db()
 
 
 # Create FastAPI application
