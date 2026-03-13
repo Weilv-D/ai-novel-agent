@@ -245,18 +245,22 @@ cd backend && python -m pytest tests/
   - 修复: 移除所有 schema 中 `meta` 字段的 `alias="metadata"`，使用直接字段名 `meta`
   - 影响范围: project.py, chapter.py (Scene), world_setting.py
   - 验证: 所有 API 返回正确的 `meta:{}` 而非 MetaData 对象
-- [x] SQLite HTTP 集成验证 (2026-03-14) - 32/32 测试通过
+- [x] SQLite HTTP 集成验证 (2026-03-14) - 44/44 测试通过
   - 新增 `scripts/verify_sqlite_integration.py` - 完整 HTTP 集成测试（使用端口 8765）
   - 新增 `scripts/create_test_user.py` - 测试用户创建工具
-  - 验证结果 (32 tests):
-    - ✅ Health Check (200 OK)
+  - 验证结果 (44 tests):
+    - ✅ Health Check (200 OK - 1/1)
     - ✅ Projects API (Create/List/Get/Update - 4/4)
     - ✅ Characters API (Create/List/Get/Update/Delete - 5/5)
     - ✅ Chapters API (Create/List/Get/Update/Delete - 6/6)
     - ✅ Scenes API (Create/List/Get/Update/Delete - 5/5)
     - ✅ WorldSettings API (Create/List/Get/Update/Delete - 5/5)
-    - ✅ Memories API (Create/List/Get/Update/Delete - 5/5) - **新增**
+    - ✅ Memories API (Create/List/Get/Update/Delete - 5/5)
+    - ✅ Snapshots API (Create/List/Get/Delete - 4/4)
+    - ✅ Suggestions API (Create/List/Get/Discard - 4/4)
+    - ✅ Dependencies API (Create/List/Get/Delete - 4/4)
     - ✅ Cleanup (Delete project - 1/1)
   - 测试环境: SQLite 文件数据库，无需 Docker/PostgreSQL
+  - 覆盖范围: 所有核心 API 端点已验证
 - [ ] Docker/PostgreSQL 环境集成验证（待 Docker 可用）
   - verify_api_integration.py 可验证 PostgreSQL 特有功能 (pgvector)

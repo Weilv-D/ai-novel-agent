@@ -614,8 +614,183 @@ def verify_api() -> dict[str, Any]:
         results["failed"] += 1
         results["errors"].append(f"Memories API: {e}")
 
+    # 8. Snapshots API
+    print_section("8. Snapshots API")
+    snapshot_id = None
+
+    try:
+        if project_id:
+            # List snapshots
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/snapshots?project_id={project_id}")
+            if status == 200:
+                snapshots = json.loads(body)
+                print_result("List snapshots", True, f"Found {len(snapshots)} snapshots")
+                results["passed"] += 1
+            else:
+                print_result("List snapshots", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a snapshot
+            snapshot_data = {
+                "project_id": str(project_id),
+                "target_type": "project",
+                "target_id": str(project_id),
+                "data": {"name": "Test Project Snapshot", "genre": "Fantasy"}
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/snapshots", snapshot_data)
+            if status in (200, 201):
+                snapshot = json.loads(body)
+                snapshot_id = snapshot.get("id")
+                print_result("Create snapshot", True, f"ID: {snapshot_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create snapshot", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Get snapshot by ID
+            if snapshot_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/snapshots/{snapshot_id}")
+                if status == 200:
+                    print_result("Get snapshot by ID", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Get snapshot by ID", False, f"Status: {status}")
+                    results["failed"] += 1
+
+                # Delete snapshot
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/snapshots/{snapshot_id}")
+                if status in (200, 204):
+                    print_result("Delete snapshot", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Delete snapshot", False, f"Status: {status}")
+                    results["failed"] += 1
+
+    except Exception as e:
+        print_result("Snapshots API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Snapshots API: {e}")
+
+    # 9. Suggestions API
+    print_section("9. Suggestions API")
+    suggestion_id = None
+
+    try:
+        if project_id:
+            # List suggestions
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/suggestions?project_id={project_id}")
+            if status == 200:
+                suggestions = json.loads(body)
+                print_result("List suggestions", True, f"Found {len(suggestions)} suggestions")
+                results["passed"] += 1
+            else:
+                print_result("List suggestions", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a suggestion (use correct schema - target_type must be character/world_setting/chapter/scene)
+            suggestion_data = {
+                "project_id": str(project_id),
+                "target_type": "chapter",
+                "target_id": str(scene_chapter_id),
+                "type": "content_gen",
+                "content": {"suggested": "Suggested new chapter content"}
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/suggestions", suggestion_data)
+            if status in (200, 201):
+                suggestion = json.loads(body)
+                suggestion_id = suggestion.get("id")
+                print_result("Create suggestion", True, f"ID: {suggestion_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create suggestion", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Get suggestion by ID
+            if suggestion_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/suggestions/{suggestion_id}")
+                if status == 200:
+                    print_result("Get suggestion by ID", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Get suggestion by ID", False, f"Status: {status}")
+                    results["failed"] += 1
+
+                # Discard suggestion (action endpoint)
+                action_data = {"action": "discard"}
+                status, _ = curl_request("POST", f"{API_BASE_URL}/api/v1/suggestions/{suggestion_id}/action", action_data)
+                if status == 200:
+                    print_result("Discard suggestion", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Discard suggestion", False, f"Status: {status}")
+                    results["failed"] += 1
+
+    except Exception as e:
+        print_result("Suggestions API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Suggestions API: {e}")
+
+    # 10. Dependencies API
+    print_section("10. Dependencies API")
+    dependency_id = None
+
+    try:
+        if project_id and character_id:
+            # Query dependencies
+            status, body = curl_request("GET", f"{API_BASE_URL}/api/v1/dependencies?project_id={project_id}")
+            if status == 200:
+                dependencies = json.loads(body)
+                print_result("Query dependencies", True, f"Found {len(dependencies)} dependencies")
+                results["passed"] += 1
+            else:
+                print_result("Query dependencies", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Create a dependency (chapter references character)
+            dependency_data = {
+                "project_id": str(project_id),
+                "source_type": "chapter",
+                "source_id": str(scene_chapter_id),
+                "target_type": "character",
+                "target_id": str(character_id),
+                "dependency_type": "references"
+            }
+            status, body = curl_request("POST", f"{API_BASE_URL}/api/v1/dependencies", dependency_data)
+            if status in (200, 201):
+                dependency = json.loads(body)
+                dependency_id = dependency.get("id")
+                print_result("Create dependency", True, f"ID: {dependency_id}")
+                results["passed"] += 1
+            else:
+                print_result("Create dependency", False, f"Status: {status}")
+                results["failed"] += 1
+
+            # Get dependency by ID
+            if dependency_id:
+                status, _ = curl_request("GET", f"{API_BASE_URL}/api/v1/dependencies/{dependency_id}")
+                if status == 200:
+                    print_result("Get dependency by ID", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Get dependency by ID", False, f"Status: {status}")
+                    results["failed"] += 1
+
+                # Delete dependency
+                status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/dependencies/{dependency_id}")
+                if status in (200, 204):
+                    print_result("Delete dependency", True)
+                    results["passed"] += 1
+                else:
+                    print_result("Delete dependency", False, f"Status: {status}")
+                    results["failed"] += 1
+
+    except Exception as e:
+        print_result("Dependencies API", False, str(e))
+        results["failed"] += 1
+        results["errors"].append(f"Dependencies API: {e}")
+
     # Cleanup: Delete test project
-    print_section("8. Cleanup")
+    print_section("11. Cleanup")
     try:
         if project_id:
             status, _ = curl_request("DELETE", f"{API_BASE_URL}/api/v1/projects/{project_id}")
