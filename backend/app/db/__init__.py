@@ -13,14 +13,20 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+# Create engine args based on database type
+# SQLite doesn't support pool_size and max_overflow
+if settings.database_url.startswith("sqlite"):
+    engine_args = {"echo": settings.debug}
+else:
+    engine_args = {
+        "echo": settings.debug,
+        "pool_pre_ping": True,
+        "pool_size": 10,
+        "max_overflow": 20,
+    }
+
 # Create async engine
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-)
+engine = create_async_engine(settings.database_url, **engine_args)
 
 # Create async session factory
 async_session_maker = async_sessionmaker(
