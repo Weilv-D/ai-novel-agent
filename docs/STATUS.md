@@ -26,9 +26,9 @@
 
 ### 待办 (Phase 1 剩余)
 - [x] Docker Compose 本地开发配置 (已存在于 infra/docker-compose.yml)
+- [x] LLM Service 基础封装 (带重试、auto-embed、falsy 值正确处理)
 - [ ] 环境依赖安装验证 (需 Python 3.11+ + pip/venv 或 Docker)
 - [ ] 启动并验证所有服务 (需 Docker 或本地 PostgreSQL)
-- [ ] LLM Service 基础封装
 
 ### Phase 1 新增 API 功能
 - [x] Memory API - 叙事事实存储与向量相似度搜索
@@ -51,6 +51,13 @@
   - 服务: 创建依赖、获取依赖图、影响分析
   - API: POST /dependencies, GET /dependencies, GET /dependencies/analysis
   - 测试: schemas (✓), services (✓), API (✓)
+
+- [x] LLM Service - OpenAI API 封装
+  - 服务: generate, embed, embed_single, health_check
+  - 重试逻辑: RateLimitError/APIError 自动重试 3 次
+  - 参数处理: is not None 检查保留 falsy 值 (temperature=0.0, max_tokens=0)
+  - API Key 验证: BadRequestException (400) 当未配置
+  - 测试: 23 tests (初始化、生成、嵌入、重试、健康检查)
 
 ## 下一步 (Phase 2)
 - 前端 Next.js 项目初始化
