@@ -42,6 +42,8 @@ export interface ProjectCreate {
 
 export interface ProjectUpdate {
   title?: string;
+  summary?: string;
+  notes?: string;
   genre?: string;
   target_audience?: string;
   target_word_count?: number;

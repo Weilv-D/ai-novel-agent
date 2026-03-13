@@ -107,7 +107,7 @@ export const projectApi = {
 
   update: (id: string, data: unknown) =>
     fetchApi<unknown>(`/api/v1/projects/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 
@@ -138,7 +138,7 @@ export const characterApi = {
 
   update: (projectId: string, id: string, data: unknown) =>
     fetchApi<unknown>(`/api/v1/projects/${projectId}/characters/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 
@@ -169,7 +169,7 @@ export const worldSettingApi = {
 
   update: (projectId: string, id: string, data: unknown) =>
     fetchApi<unknown>(`/api/v1/projects/${projectId}/world-settings/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 
@@ -200,7 +200,7 @@ export const chapterApi = {
 
   update: (projectId: string, id: string, data: unknown) =>
     fetchApi<unknown>(`/api/v1/projects/${projectId}/chapters/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 
@@ -231,7 +231,7 @@ export const sceneApi = {
 
   update: (chapterId: string, id: string, data: unknown) =>
     fetchApi<unknown>(`/api/v1/chapters/${chapterId}/scenes/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 

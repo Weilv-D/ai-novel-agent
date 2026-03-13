@@ -3,7 +3,7 @@
 import { ButtonHTMLAttributes, forwardRef, AnchorHTMLAttributes } from "react";
 import Link from "next/link";
 
-type Variant = "primary" | "secondary" | "outline" | "ghost";
+type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 interface BaseButtonProps {
@@ -32,6 +32,7 @@ const variantStyles: Record<Variant, string> = {
   secondary: "bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500",
   outline: "border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-300",
   ghost: "text-gray-700 hover:bg-gray-100 focus:ring-gray-200",
+  danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
 };
 
 const sizeStyles: Record<Size, string> = {

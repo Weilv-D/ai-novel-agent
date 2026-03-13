@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/Loading";
+import { Modal } from "@/components/ui/Modal";
 import { useProjectStore } from "@/lib/stores/projectStore";
+import { ApiError } from "@/lib/api-client";
 
 export default function ProjectDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
 
   const {
@@ -18,7 +21,11 @@ export default function ProjectDetailPage() {
     currentProjectError: error,
     fetchProject,
     clearCurrentProject,
+    deleteProject,
   } = useProjectStore();
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -29,6 +36,23 @@ export default function ProjectDetailPage() {
       clearCurrentProject();
     };
   }, [id, fetchProject, clearCurrentProject]);
+
+  async function handleDelete() {
+    try {
+      setDeleting(true);
+      await deleteProject(id);
+      // Redirect to projects list
+      router.push("/projects");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        alert(err.detail);
+      } else {
+        alert("删除项目失败");
+      }
+      setDeleting(false);
+      setDeleteModalOpen(false);
+    }
+  }
 
   function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
@@ -104,9 +128,25 @@ export default function ProjectDetailPage() {
               <h1 className="text-3xl font-bold text-gray-900">{project.title}</h1>
               <p className="mt-1 text-sm text-gray-600">{project.summary || "暂无描述"}</p>
             </div>
-            <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(project.status)}`}>
-              {getStatusLabel(project.status)}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(project.status)}`}>
+                {getStatusLabel(project.status)}
+              </span>
+              <Button
+                variant="outline"
+                href={`/projects/${project.id}/edit`}
+                size="sm"
+              >
+                编辑
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => setDeleteModalOpen(true)}
+                size="sm"
+              >
+                删除
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -166,6 +206,19 @@ export default function ProjectDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Delete Confirmation Modal */}
+        <Modal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onConfirm={handleDelete}
+          title="删除项目"
+          message={`确定要删除项目"${project.title}"吗？此操作无法撤销，所有相关数据将被永久删除。`}
+          confirmText="删除"
+          cancelText="取消"
+          variant="danger"
+          loading={deleting}
+        />
       </div>
     </main>
   );
