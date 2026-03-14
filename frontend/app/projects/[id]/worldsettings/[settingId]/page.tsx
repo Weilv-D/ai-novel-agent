@@ -27,7 +27,7 @@ export default function WorldSettingDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await worldSettingApi.get(projectId, settingId) as WorldSetting;
+      const data = await worldSettingApi.get(settingId) as WorldSetting;
       setSetting(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -42,7 +42,7 @@ export default function WorldSettingDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, settingId]);
+  }, [settingId]);
 
   useEffect(() => {
     loadSetting();
@@ -51,7 +51,7 @@ export default function WorldSettingDetailPage() {
   async function handleDelete() {
     try {
       setDeleting(true);
-      await worldSettingApi.delete(projectId, settingId);
+      await worldSettingApi.delete(settingId);
       router.push(`/projects/${projectId}/worldsettings`);
     } catch (err) {
       if (err instanceof ApiError) {

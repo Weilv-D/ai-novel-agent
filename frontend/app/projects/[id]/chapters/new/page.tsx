@@ -36,7 +36,7 @@ export default function NewChapterPage() {
     try {
       setLoading(true);
       setError(null);
-      const result = await chapterApi.create(projectId, { ...formData, project_id: projectId }) as { id: string };
+      const result = await chapterApi.create({ ...formData, project_id: projectId }) as { id: string };
       router.push(`/projects/${projectId}/chapters/${result.id}`);
     } catch (err) {
       if (err instanceof ApiError) {

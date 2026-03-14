@@ -28,7 +28,7 @@ export default function EditScenePage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await sceneApi.get(chapterId, sceneId) as Scene;
+      const data = await sceneApi.get(sceneId) as Scene;
       setScene(data);
       setFormData({
         scene_order: data.scene_order,
@@ -46,7 +46,7 @@ export default function EditScenePage() {
     } finally {
       setLoading(false);
     }
-  }, [chapterId, sceneId]);
+  }, [sceneId]);
 
   useEffect(() => {
     loadScene();
@@ -58,7 +58,7 @@ export default function EditScenePage() {
     try {
       setSaving(true);
       setError(null);
-      await sceneApi.update(chapterId, sceneId, formData);
+      await sceneApi.update(sceneId, formData);
       router.push(`/projects/${projectId}/chapters/${chapterId}/scenes/${sceneId}`);
     } catch (err) {
       if (err instanceof ApiError) {

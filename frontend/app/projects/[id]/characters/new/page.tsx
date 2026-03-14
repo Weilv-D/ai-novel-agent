@@ -68,7 +68,7 @@ export default function NewCharacterPage() {
         notes: formData.notes || undefined,
       };
 
-      const result = await characterApi.create(projectId, createData) as { id: string };
+      const result = await characterApi.create(createData) as { id: string };
       router.push(`/projects/${projectId}/characters/${result.id}`);
     } catch (err) {
       if (err instanceof ApiError) {

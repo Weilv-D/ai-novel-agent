@@ -39,7 +39,7 @@ export default function EditWorldSettingPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await worldSettingApi.get(projectId, settingId) as WorldSetting;
+      const data = await worldSettingApi.get(settingId) as WorldSetting;
       setSetting(data);
       setFormData({
         category: data.category,
@@ -55,7 +55,7 @@ export default function EditWorldSettingPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, settingId]);
+  }, [settingId]);
 
   useEffect(() => {
     loadSetting();
@@ -71,7 +71,7 @@ export default function EditWorldSettingPage() {
     try {
       setSaving(true);
       setError(null);
-      await worldSettingApi.update(projectId, settingId, formData);
+      await worldSettingApi.update(settingId, formData);
       router.push(`/projects/${projectId}/worldsettings/${settingId}`);
     } catch (err) {
       if (err instanceof ApiError) {

@@ -27,7 +27,7 @@ export default function ChapterDetailPage() {
   const loadChapter = useCallback(async () => {
     try {
       setError(null);
-      const data = await chapterApi.get(projectId, chapterId) as Chapter;
+      const data = await chapterApi.get(chapterId) as Chapter;
       setChapter(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -42,7 +42,7 @@ export default function ChapterDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, chapterId]);
+  }, [chapterId]);
 
   const loadScenes = useCallback(async () => {
     try {
@@ -62,7 +62,7 @@ export default function ChapterDetailPage() {
   async function handleDelete() {
     try {
       setDeleting(true);
-      await chapterApi.delete(projectId, chapterId);
+      await chapterApi.delete(chapterId);
       router.push(`/projects/${projectId}/chapters`);
     } catch (err) {
       if (err instanceof ApiError) {

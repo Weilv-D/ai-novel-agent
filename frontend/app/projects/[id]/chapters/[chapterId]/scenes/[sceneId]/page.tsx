@@ -28,7 +28,7 @@ export default function SceneDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await sceneApi.get(chapterId, sceneId) as Scene;
+      const data = await sceneApi.get(sceneId) as Scene;
       setScene(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -43,7 +43,7 @@ export default function SceneDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [chapterId, sceneId]);
+  }, [sceneId]);
 
   useEffect(() => {
     loadScene();
@@ -52,7 +52,7 @@ export default function SceneDetailPage() {
   async function handleDelete() {
     try {
       setDeleting(true);
-      await sceneApi.delete(chapterId, sceneId);
+      await sceneApi.delete(sceneId);
       router.push(`/projects/${projectId}/chapters/${chapterId}`);
     } catch (err) {
       if (err instanceof ApiError) {

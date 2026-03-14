@@ -27,7 +27,7 @@ export default function EditChapterPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await chapterApi.get(projectId, chapterId) as Chapter;
+      const data = await chapterApi.get(chapterId) as Chapter;
       setChapter(data);
       setFormData({
         chapter_number: data.chapter_number,
@@ -46,7 +46,7 @@ export default function EditChapterPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, chapterId]);
+  }, [chapterId]);
 
   useEffect(() => {
     loadChapter();
@@ -62,7 +62,7 @@ export default function EditChapterPage() {
     try {
       setSaving(true);
       setError(null);
-      await chapterApi.update(projectId, chapterId, formData);
+      await chapterApi.update(chapterId, formData);
       router.push(`/projects/${projectId}/chapters/${chapterId}`);
     } catch (err) {
       if (err instanceof ApiError) {

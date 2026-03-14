@@ -27,7 +27,7 @@ export default function CharacterDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await characterApi.get(projectId, characterId) as Character;
+      const data = await characterApi.get(characterId) as Character;
       setCharacter(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -42,7 +42,7 @@ export default function CharacterDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, characterId]);
+  }, [characterId]);
 
   useEffect(() => {
     loadCharacter();
@@ -51,7 +51,7 @@ export default function CharacterDetailPage() {
   async function handleDelete() {
     try {
       setDeleting(true);
-      await characterApi.delete(projectId, characterId);
+      await characterApi.delete(characterId);
       router.push(`/projects/${projectId}/characters`);
     } catch (err) {
       if (err instanceof ApiError) {

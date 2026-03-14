@@ -45,7 +45,7 @@ export default function NewWorldSettingPage() {
     try {
       setLoading(true);
       setError(null);
-      const result = await worldSettingApi.create(projectId, { ...formData, project_id: projectId }) as { id: string };
+      const result = await worldSettingApi.create({ ...formData, project_id: projectId }) as { id: string };
       router.push(`/projects/${projectId}/worldsettings/${result.id}`);
     } catch (err) {
       if (err instanceof ApiError) {

@@ -51,15 +51,10 @@ export const useProjectStore = create<ProjectState>((set) => ({
   fetchProjects: async (params = { skip: 0, limit: 100 }) => {
     set({ projectsLoading: true, projectsError: null, loading: true, error: null });
     try {
-      const response = await projectApi.list(params) as {
-        items: Project[];
-        total: number;
-        skip: number;
-        limit: number;
-      };
+      const response = await projectApi.list(params) as Project[];
       set({
-        projects: response.items || [],
-        projectsTotal: response.total,
+        projects: response || [],
+        projectsTotal: response.length,
         projectsLoading: false,
         loading: false,
       });

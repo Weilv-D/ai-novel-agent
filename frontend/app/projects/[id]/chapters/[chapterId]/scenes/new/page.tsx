@@ -32,7 +32,7 @@ export default function NewScenePage() {
     try {
       setLoading(true);
       setError(null);
-      const result = await sceneApi.create(chapterId, { ...formData, chapter_id: chapterId }) as { id: string };
+      const result = await sceneApi.create({ ...formData, chapter_id: chapterId }) as { id: string };
       router.push(`/projects/${projectId}/chapters/${chapterId}/scenes/${result.id}`);
     } catch (err) {
       if (err instanceof ApiError) {

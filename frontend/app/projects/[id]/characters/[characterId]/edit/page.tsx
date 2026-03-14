@@ -27,7 +27,7 @@ export default function EditCharacterPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await characterApi.get(projectId, characterId) as Character;
+      const data = await characterApi.get(characterId) as Character;
       setCharacter(data);
       setFormData({
         name: data.name,
@@ -43,7 +43,7 @@ export default function EditCharacterPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, characterId]);
+  }, [characterId]);
 
   useEffect(() => {
     loadCharacter();
@@ -59,7 +59,7 @@ export default function EditCharacterPage() {
     try {
       setSaving(true);
       setError(null);
-      await characterApi.update(projectId, characterId, formData);
+      await characterApi.update(characterId, formData);
       router.push(`/projects/${projectId}/characters/${characterId}`);
     } catch (err) {
       if (err instanceof ApiError) {

@@ -94,7 +94,7 @@ export const healthApi = {
 
 export const projectApi = {
   list: (params?: { skip?: number; limit?: number }) =>
-    fetchApi<{ items: unknown[]; total: number; skip: number; limit: number }>(
+    fetchApi<unknown[]>(
       `/api/v1/projects${buildQueryString(params || {})}`
     ),
 
@@ -129,26 +129,26 @@ export const projectApi = {
 export const characterApi = {
   list: (projectId: string, params?: { skip?: number; limit?: number }) =>
     fetchApi<unknown[]>(
-      `/api/v1/projects/${projectId}/characters${buildQueryString(params || {})}`
+      `/api/v1/characters/project/${projectId}${buildQueryString(params || {})}`
     ),
 
-  get: (projectId: string, id: string) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/characters/${id}`),
+  get: (id: string) =>
+    fetchApi<unknown>(`/api/v1/characters/${id}`),
 
-  create: (projectId: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/characters`, {
+  create: (data: unknown) =>
+    fetchApi<unknown>("/api/v1/characters", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
-  update: (projectId: string, id: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/characters/${id}`, {
+  update: (id: string, data: unknown) =>
+    fetchApi<unknown>(`/api/v1/characters/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
-  delete: (projectId: string, id: string) =>
-    fetchApi<void>(`/api/v1/projects/${projectId}/characters/${id}`, {
+  delete: (id: string) =>
+    fetchApi<void>(`/api/v1/characters/${id}`, {
       method: "DELETE",
     }),
 };
@@ -158,28 +158,33 @@ export const characterApi = {
 // ============================================================================
 
 export const worldSettingApi = {
-  list: (projectId: string, params?: { skip?: number; limit?: number; category?: string }) =>
+  list: (projectId: string, params?: { skip?: number; limit?: number }) =>
     fetchApi<unknown[]>(
-      `/api/v1/projects/${projectId}/world-settings${buildQueryString(params || {})}`
+      `/api/v1/world-settings/project/${projectId}${buildQueryString(params || {})}`
     ),
 
-  get: (projectId: string, id: string) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/world-settings/${id}`),
+  getByCategory: (projectId: string, category: string, params?: { skip?: number; limit?: number }) =>
+    fetchApi<unknown[]>(
+      `/api/v1/world-settings/project/${projectId}/category/${category}${buildQueryString(params || {})}`
+    ),
 
-  create: (projectId: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/world-settings`, {
+  get: (id: string) =>
+    fetchApi<unknown>(`/api/v1/world-settings/${id}`),
+
+  create: (data: unknown) =>
+    fetchApi<unknown>("/api/v1/world-settings", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
-  update: (projectId: string, id: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/world-settings/${id}`, {
+  update: (id: string, data: unknown) =>
+    fetchApi<unknown>(`/api/v1/world-settings/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
-  delete: (projectId: string, id: string) =>
-    fetchApi<void>(`/api/v1/projects/${projectId}/world-settings/${id}`, {
+  delete: (id: string) =>
+    fetchApi<void>(`/api/v1/world-settings/${id}`, {
       method: "DELETE",
     }),
 };
@@ -191,26 +196,26 @@ export const worldSettingApi = {
 export const chapterApi = {
   list: (projectId: string, params?: { skip?: number; limit?: number }) =>
     fetchApi<unknown[]>(
-      `/api/v1/projects/${projectId}/chapters${buildQueryString(params || {})}`
+      `/api/v1/chapters/project/${projectId}${buildQueryString(params || {})}`
     ),
 
-  get: (projectId: string, id: string) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/chapters/${id}`),
+  get: (id: string) =>
+    fetchApi<unknown>(`/api/v1/chapters/${id}`),
 
-  create: (projectId: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/chapters`, {
+  create: (data: unknown) =>
+    fetchApi<unknown>("/api/v1/chapters", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
-  update: (projectId: string, id: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/projects/${projectId}/chapters/${id}`, {
+  update: (id: string, data: unknown) =>
+    fetchApi<unknown>(`/api/v1/chapters/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
-  delete: (projectId: string, id: string) =>
-    fetchApi<void>(`/api/v1/projects/${projectId}/chapters/${id}`, {
+  delete: (id: string) =>
+    fetchApi<void>(`/api/v1/chapters/${id}`, {
       method: "DELETE",
     }),
 };
@@ -222,26 +227,26 @@ export const chapterApi = {
 export const sceneApi = {
   list: (chapterId: string, params?: { skip?: number; limit?: number }) =>
     fetchApi<unknown[]>(
-      `/api/v1/chapters/${chapterId}/scenes${buildQueryString(params || {})}`
+      `/api/v1/scenes/chapter/${chapterId}${buildQueryString(params || {})}`
     ),
 
-  get: (chapterId: string, id: string) =>
-    fetchApi<unknown>(`/api/v1/chapters/${chapterId}/scenes/${id}`),
+  get: (id: string) =>
+    fetchApi<unknown>(`/api/v1/scenes/${id}`),
 
-  create: (chapterId: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/chapters/${chapterId}/scenes`, {
+  create: (data: unknown) =>
+    fetchApi<unknown>("/api/v1/scenes", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
-  update: (chapterId: string, id: string, data: unknown) =>
-    fetchApi<unknown>(`/api/v1/chapters/${chapterId}/scenes/${id}`, {
+  update: (id: string, data: unknown) =>
+    fetchApi<unknown>(`/api/v1/scenes/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
-  delete: (chapterId: string, id: string) =>
-    fetchApi<void>(`/api/v1/chapters/${chapterId}/scenes/${id}`, {
+  delete: (id: string) =>
+    fetchApi<void>(`/api/v1/scenes/${id}`, {
       method: "DELETE",
     }),
 };
