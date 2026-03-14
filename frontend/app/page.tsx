@@ -5,94 +5,111 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const featureCards = [
   {
     title: "角色与世界观",
-    description: "把人物、设定、章节放在同一创作坐标里，减少上下文切换。",
+    description: "人物、设定、章节同处于一纸之上，挥毫泼墨不被打断。",
   },
   {
-    title: "AI 修订建议",
-    description: "建议生成、确认、应用链路完整，避免粗暴覆盖正文。",
+    title: "AI 伴写建议",
+    description: "生成、确认、应用链路完整，若有神助而不喧宾夺主。",
   },
   {
-    title: "个人工作流",
-    description: "面向单人长期写作，重点是稳定和持续推进，不是多人协作外壳。",
+    title: "匠心工作流",
+    description: "专为长期写作者打磨印刻，重点在沉淀，而非喧闹。",
   },
 ];
 
 export default function HomePage() {
   return (
-    <main className="ink-page">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <div className="grid items-start gap-12 lg:grid-cols-[1.15fr_0.85fr]">
-          <section className="animate-wash-rise space-y-8">
-            <span className="ink-kicker">Ink-Wash Writing Studio</span>
-            <div className="space-y-5">
-              <h1 className="ink-display max-w-4xl text-5xl font-semibold leading-[0.95] text-[rgb(var(--ink-950))] sm:text-6xl lg:text-7xl">
-                把长篇小说创作
-                <span className="block text-[rgb(var(--accent))]">变成有节奏的协作流程</span>
+    <main className="ink-page bg-paper-grain min-h-screen text-ink-950 font-serif overflow-hidden">
+      <div className="mx-auto max-w-6xl px-6 py-16 sm:px-8 sm:py-24 relative z-10">
+        <div className="grid items-start gap-16 lg:grid-cols-[1.1fr_0.9fr]">
+          <section className="animate-wash-rise space-y-10 relative">
+            
+            {/* The beautiful modern decorative element */}
+            <div className="absolute -left-12 top-4 hidden md:block">
+              <span className="ink-kicker-text text-seal/80 text-xl font-medium tracking-[0.4em] mix-blend-multiply">
+                水墨行间 • 沉浸书写
+              </span>
+            </div>
+
+            <span className="ink-kicker">Ink-Wash Studio</span>
+            <div className="space-y-6">
+              <h1 className="ink-display max-w-4xl text-5xl font-medium leading-tight text-ink-950 sm:text-6xl lg:text-7xl">
+                把长篇创作<br/>
+                <span className="block text-seal/90 italic drop-shadow-sm mt-3">融于宣纸间的呼吸</span>
               </h1>
-              <p className="max-w-2xl text-lg leading-8 text-[rgb(var(--ink-700))]">
-                用更克制、更清晰的界面组织项目、角色、设定与章节。AI 不是喧宾夺主的按钮集合，
-                而是嵌进创作流程里的辅助笔。
+              <p className="max-w-2xl text-lg leading-relaxed text-ink-800 tracking-wide font-light">
+                用克制、精致的界面组织项目与章节。<br/>
+                AI 不是冷冰冰的按钮，而是藏在砚台下、嵌进创作流里的那支生花妙笔。
               </p>
-              <p className="ink-note">
-                对象级 AI 协作 · 修改传播 · 一致性维护 · 单用户本地写作工作台
-              </p>
+              <div className="inline-flex items-center gap-4 bg-paper-deep/40 px-4 py-2 rounded-md border border-line/30">
+                 <span className="w-2 h-2 rounded-full bg-jade/60 animate-pulse"></span>
+                 <p className="ink-note tracking-wider">单用户本地协作台 · 实时对象同步 · 语境连贯</p>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-4 sm:flex-row">
-              <Button size="lg" href="/projects">
-                进入项目台
+            <div className="flex flex-col gap-5 sm:flex-row pt-4">
+              <Button size="lg" href="/projects" className="font-display text-lg tracking-widest px-10">
+                启卷
               </Button>
-              <Button size="lg" variant="outline" href="/projects/new">
-                新建小说项目
+              <Button size="lg" variant="outline" href="/projects/new" className="font-display text-lg tracking-widest px-10">
+                新篇
               </Button>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-6 sm:grid-cols-3 pt-6 border-t border-line/20">
               {featureCards.map((feature, index) => (
                 <Card
                   key={feature.title}
-                  className={`ink-grid-card animate-wash-rise ${index === 1 ? "stagger-1" : index === 2 ? "stagger-2" : ""}`}
+                  className={`ink-grid-card animate-wash-rise shadow-sm bg-white/30 backdrop-blur-md ${index === 1 ? "stagger-1" : index === 2 ? "stagger-2" : ""}`}
                 >
-                  <CardHeader className="mb-3">
-                    <CardTitle className="text-lg">{feature.title}</CardTitle>
+                  <CardHeader className="mb-2">
+                    <CardTitle className="text-lg font-medium text-ink-900 border-l-2 border-seal/60 pl-2">{feature.title}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <CardDescription className="leading-7">{feature.description}</CardDescription>
+                    <CardDescription className="leading-relaxed text-ink-700 tracking-wide">{feature.description}</CardDescription>
                   </CardContent>
                 </Card>
               ))}
             </div>
           </section>
 
-          <section className="animate-wash-rise stagger-1 space-y-6">
-            <Card className="animate-paper-float overflow-hidden rounded-[2rem] p-0">
-              <div className="border-b border-[rgba(var(--line),0.12)] px-7 py-6">
-                <p className="ink-kicker">Workspace Preview</p>
-                <h2 className="ink-display mt-3 text-3xl font-semibold text-[rgb(var(--ink-950))]">
-                  一张纸面，承载完整创作上下文
+          <section className="animate-wash-rise stagger-1 space-y-8 relative">
+             <div className="absolute -inset-4 bg-gradient-to-br from-paper-soft/40 to-transparent -z-10 rounded-2xl blur-xl"></div>
+            
+            <Card className="animate-paper-float overflow-hidden rounded-2xl p-0 border border-line/40 bg-white/40 backdrop-blur-xl shadow-2xl shadow-ink-900/5">
+              <div className="border-b border-line/30 bg-paper-soft/60 px-8 py-5">
+                <p className="ink-kicker !text-jade/80">Workspace</p>
+                <h2 className="ink-display mt-2 text-2xl font-medium text-ink-900">
+                  一纸清白，承载万象
                 </h2>
               </div>
-              <div className="grid gap-6 px-7 py-7">
-                <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.52)] p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="ink-badge ink-badge-rust">写作中</span>
-                    <span className="text-sm text-[rgb(var(--ink-600))]">Project / 山海夜航</span>
+              <div className="grid gap-6 px-8 py-8 bg-gradient-to-b from-transparent to-paper-deep/20">
+                <div className="rounded-xl border border-line/30 bg-white/60 p-6 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between border-b border-dashed border-line/40 pb-3 mb-3">
+                    <span className="ink-badge ink-badge-rust">挥毫中</span>
+                    <span className="text-sm text-ink-600 font-serif tracking-widest">山海夜航</span>
                   </div>
-                  <p className="mt-4 text-base leading-7 text-[rgb(var(--ink-700))]">
-                    以“项目 → 章节 → 场景”和“项目 → 人物 / 世界观”双线组织内容，减少信息散落。
+                  <p className="mt-2 text-md leading-relaxed text-ink-800">
+                    以“卷 → 章 → 节”和“谱系 → 风象”双线织网，灵感不散落。
                   </p>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[1.25rem] bg-[rgba(var(--ink-950),0.06)] p-4">
-                    <div className="text-sm font-semibold tracking-[0.08em] text-[rgb(var(--ink-700))]">智能建议</div>
-                    <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
-                      对连续性修复、设定冲突、场景改写提供可确认建议，而不是直接覆盖正文。
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="rounded-xl bg-ink-950/5 border border-line/10 p-5 hover:-translate-y-1 transition-transform">
+                    <div className="text-sm font-medium tracking-widest text-ink-900 mb-2 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-jade/60 rounded-full"></span>
+                        灵犀建议
+                    </div>
+                    <p className="text-sm leading-relaxed text-ink-700">
+                      针对文脉、设定冲突、行文润色提供“可确认”批注，保留作者绝对控制权。
                     </p>
                   </div>
-                  <div className="rounded-[1.25rem] bg-[rgba(var(--accent),0.08)] p-4">
-                    <div className="text-sm font-semibold tracking-[0.08em] text-[rgb(var(--accent))]">个人模式</div>
-                    <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
-                      后端已按单用户使用方式收口，本地使用时流程更直接。
+                  <div className="rounded-xl bg-seal/5 border border-seal/10 p-5 hover:-translate-y-1 transition-transform">
+                    <div className="text-sm font-medium tracking-widest text-seal/90 mb-2 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-seal/60 rounded-full"></span>
+                        沉浸模式
+                    </div>
+                    <p className="text-sm leading-relaxed text-ink-700">
+                      专注的本地工作流，去掉浮华的协作用语，将笔与纸交还自己手中。
                     </p>
                   </div>
                 </div>
@@ -103,17 +120,19 @@ export default function HomePage() {
           </section>
         </div>
 
-        <div className="mt-14 text-center text-sm text-[rgb(var(--ink-600))]">
-          <span>后端 API 文档：</span>
-          <a
-            href="http://localhost:8000/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[rgb(var(--accent))] underline-offset-4 hover:underline"
-          >
-            /docs
-          </a>
-          <span>（开发环境）</span>
+        <div className="mt-20 flex flex-col items-center gap-3 text-center">
+          <div className="w-12 h-px bg-line/60"></div>
+          <div className="text-sm text-ink-600 tracking-widest font-serif">
+            <span>后端 API 卷轴：</span>
+            <a
+              href="http://localhost:8000/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-seal/80 underline-offset-4 hover:text-seal transition-colors"
+            >
+              /docs
+            </a>
+          </div>
         </div>
       </div>
     </main>

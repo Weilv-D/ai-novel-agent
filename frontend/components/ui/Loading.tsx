@@ -13,7 +13,7 @@ export function Loading({ size = "md", className = "" }: LoadingProps) {
   return (
     <div className="flex items-center justify-center" role="status" aria-label="Loading">
       <svg
-        className={`animate-spin rounded-full border-[rgba(var(--line),0.18)] border-t-[rgb(var(--accent))] ${sizeStyles[size]} ${className}`}
+        className={`animate-spin rounded-full border-line/30 border-t-seal text-seal ${sizeStyles[size]} ${className}`}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -33,7 +33,7 @@ export function Loading({ size = "md", className = "" }: LoadingProps) {
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
         />
       </svg>
-      <span className="sr-only">Loading...</span>
+      <span className="sr-only">研墨中...</span>
     </div>
   );
 }
@@ -46,7 +46,7 @@ export function LoadingSpinner({ size = "md", text, className = "" }: LoadingSpi
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>
       <Loading size={size} />
-      {text && <p className="text-sm text-[rgb(var(--ink-700))]">{text}</p>}
+      {text && <p className="text-sm tracking-widest text-ink-700 animate-pulse font-serif">{text}</p>}
     </div>
   );
 }

@@ -21,8 +21,8 @@ export function Modal({
   onConfirm,
   title,
   message,
-  confirmText = "确认",
-  cancelText = "取消",
+  confirmText = "落定",
+  cancelText = "暂留",
   variant = "primary",
   loading = false,
 }: ModalProps) {
@@ -67,22 +67,23 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
-        className="fixed inset-0 bg-[rgba(17,13,10,0.48)] backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-ink-950/40 backdrop-blur-md transition-opacity"
         onClick={handleClose}
         aria-hidden="true"
       />
 
-      <div className="ink-panel relative mx-4 w-full max-w-md rounded-[1.75rem] p-6">
-        <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">{title}</h3>
-        <p className="mb-6 text-sm leading-7 text-[rgb(var(--ink-700))]">{message}</p>
+      <div className="ink-panel relative mx-4 w-full max-w-md rounded-2xl p-8 bg-paper-soft shadow-2xl">
+        <h3 className="ink-display mb-3 text-2xl font-medium tracking-wide text-ink-950 border-b border-line/30 pb-3">{title}</h3>
+        <p className="mb-8 text-md leading-relaxed text-ink-700 font-serif">{message}</p>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
             onClick={handleClose}
             disabled={loading}
             fullWidth={false}
+            className="font-serif tracking-widest px-6"
           >
             {cancelText}
           </Button>
@@ -92,8 +93,9 @@ export function Modal({
             onClick={handleConfirm}
             disabled={loading}
             fullWidth={false}
+            className="font-serif tracking-widest px-6"
           >
-            {loading ? "处理中..." : confirmText}
+            {loading ? "引墨..." : confirmText}
           </Button>
         </div>
       </div>

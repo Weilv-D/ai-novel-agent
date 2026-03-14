@@ -28,22 +28,21 @@ interface ButtonAsLink extends BaseButtonProps, Omit<AnchorHTMLAttributes<HTMLAn
 type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 const variantStyles: Record<Variant, string> = {
-  primary: "border-transparent bg-[rgba(var(--ink-950),0.94)] text-[rgb(var(--paper-soft))] shadow-[0_20px_48px_-28px_rgba(var(--shadow),0.72)] hover:-translate-y-0.5 hover:bg-[rgba(var(--ink-950),0.88)] focus-visible:ring-[rgba(var(--accent),0.24)]",
-  secondary: "border-transparent bg-[rgba(var(--accent),0.9)] text-[rgb(var(--paper-soft))] shadow-[0_18px_42px_-28px_rgba(var(--shadow),0.58)] hover:-translate-y-0.5 hover:bg-[rgba(var(--accent),0.82)] focus-visible:ring-[rgba(var(--accent),0.22)]",
-  outline: "border-[rgba(var(--line),0.2)] bg-[rgba(255,255,255,0.48)] text-[rgb(var(--ink-900))] hover:-translate-y-0.5 hover:bg-[rgba(255,255,255,0.72)] focus-visible:ring-[rgba(var(--accent),0.12)]",
-  ghost: "border-transparent bg-transparent text-[rgb(var(--ink-800))] hover:bg-[rgba(var(--ink-950),0.04)] focus-visible:ring-[rgba(var(--accent),0.12)]",
-  danger: "border-transparent bg-[rgba(var(--danger),0.94)] text-[rgb(var(--paper-soft))] shadow-[0_18px_40px_-26px_rgba(var(--danger),0.58)] hover:-translate-y-0.5 hover:bg-[rgba(var(--danger),0.86)] focus-visible:ring-[rgba(var(--danger),0.22)]",
+  primary: "border-transparent bg-ink-950/90 text-paper-soft shadow-lg hover:-translate-y-0.5 hover:bg-ink-900 focus-visible:ring-seal/30",
+  secondary: "border-transparent bg-seal/90 text-white shadow-md hover:-translate-y-0.5 hover:bg-seal focus-visible:ring-seal/30",
+  outline: "border-line/40 bg-white/40 text-ink-900 hover:-translate-y-0.5 hover:bg-white/70 focus-visible:ring-seal/20 backdrop-blur-sm",
+  ghost: "border-transparent bg-transparent text-ink-800 hover:bg-ink-950/5 focus-visible:ring-seal/20",
+  danger: "border-transparent bg-red-800/90 text-white shadow-md hover:-translate-y-0.5 hover:bg-red-800 focus-visible:ring-red-800/30",
 };
 
 const sizeStyles: Record<Size, string> = {
   sm: "px-4 py-2 text-sm",
-  md: "px-5 py-2.5 text-sm",
-  lg: "px-7 py-3.5 text-base",
+  md: "px-6 py-2.5 text-sm",
+  lg: "px-8 py-3.5 text-base",
 };
 
-const baseStyles = "inline-flex items-center justify-center rounded-full border font-medium tracking-[0.08em] transition-all duration-200 focus:outline-none focus-visible:ring-4 disabled:cursor-not-allowed disabled:opacity-50 disabled:translate-y-0";
+const baseStyles = "inline-flex items-center justify-center rounded-lg border font-medium tracking-[0.05em] transition-all duration-300 focus:outline-none focus-visible:ring-4 disabled:cursor-not-allowed disabled:opacity-50 disabled:translate-y-0";
 
-// Inner button/link renderer
 const ButtonInner = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(
   (
     {

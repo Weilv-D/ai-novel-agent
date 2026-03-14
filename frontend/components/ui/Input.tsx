@@ -8,15 +8,15 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className = "", id, ...props }, ref) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, "-");
-    const baseStyles = "w-full rounded-[1rem] border border-[rgba(var(--line),0.18)] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(247,244,238,0.95))] px-4 py-3 text-[rgb(var(--ink-950))] shadow-[0_18px_42px_-34px_rgba(var(--shadow),0.55)] transition-all duration-200 placeholder:text-[rgb(var(--ink-600))] focus:outline-none focus:ring-4 focus:ring-[rgba(var(--accent),0.08)] focus:border-[rgba(var(--accent),0.28)] disabled:cursor-not-allowed disabled:opacity-60";
-    const errorStyles = error ? "border-[rgba(var(--danger),0.35)] focus:border-[rgba(var(--danger),0.4)] focus:ring-[rgba(var(--danger),0.08)]" : "";
+    const baseStyles = "w-full rounded-lg border border-line/40 bg-white/50 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-600/50 focus:outline-none focus:ring-2 focus:ring-seal/20 focus:border-seal/40 focus:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60";
+    const errorStyles = error ? "border-red-800/40 focus:border-red-800/50 focus:ring-red-800/20 bg-red-50/50" : "";
 
     return (
       <div className="w-full">
         {label && (
           <label
             htmlFor={inputId}
-            className="ink-label"
+            className="block mb-2 text-sm font-medium tracking-wider text-ink-800"
           >
             {label}
           </label>
@@ -28,7 +28,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {error && (
-          <p className="mt-2 text-sm text-[rgb(var(--danger))]">{error}</p>
+          <p className="mt-2 text-xs text-red-800 tracking-wide">{error}</p>
         )}
       </div>
     );
@@ -45,15 +45,15 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, className = "", id, ...props }, ref) => {
     const textareaId = id || label?.toLowerCase().replace(/\s+/g, "-");
-    const baseStyles = "min-h-[120px] w-full rounded-[1rem] border border-[rgba(var(--line),0.18)] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(247,244,238,0.95))] px-4 py-3 text-[rgb(var(--ink-950))] shadow-[0_18px_42px_-34px_rgba(var(--shadow),0.55)] transition-all duration-200 placeholder:text-[rgb(var(--ink-600))] focus:outline-none focus:ring-4 focus:ring-[rgba(var(--accent),0.08)] focus:border-[rgba(var(--accent),0.28)] disabled:cursor-not-allowed disabled:opacity-60";
-    const errorStyles = error ? "border-[rgba(var(--danger),0.35)] focus:border-[rgba(var(--danger),0.4)] focus:ring-[rgba(var(--danger),0.08)]" : "";
+    const baseStyles = "min-h-[120px] w-full rounded-lg border border-line/40 bg-white/50 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-600/50 focus:outline-none focus:ring-2 focus:ring-seal/20 focus:border-seal/40 focus:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60";
+    const errorStyles = error ? "border-red-800/40 focus:border-red-800/50 focus:ring-red-800/20 bg-red-50/50" : "";
 
     return (
       <div className="w-full">
         {label && (
           <label
             htmlFor={textareaId}
-            className="ink-label"
+            className="block mb-2 text-sm font-medium tracking-wider text-ink-800"
           >
             {label}
           </label>
@@ -65,7 +65,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...props}
         />
         {error && (
-          <p className="mt-2 text-sm text-[rgb(var(--danger))]">{error}</p>
+          <p className="mt-2 text-xs text-red-800 tracking-wide">{error}</p>
         )}
       </div>
     );
