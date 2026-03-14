@@ -41,13 +41,17 @@ class Settings(BaseSettings):
     api_key_header: str = "X-API-Key"
     admin_api_key: str = ""
 
-    # LLM
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4o-mini"
-    openai_embedding_model: str = "text-embedding-3-small"
+    # LLM (Chat)
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
     max_tokens: int = 4096
     temperature: float = 0.7
+
+    # Embedding (defaults to same provider as chat if not set)
+    embedding_api_key: str = ""
+    embedding_base_url: str = ""
+    embedding_model: str = "text-embedding-3-small"
 
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"

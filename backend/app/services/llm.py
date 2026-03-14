@@ -34,43 +34,68 @@ class LLMService:
         base_url: str | None = None,
         model: str | None = None,
         embedding_model: str | None = None,
+        embedding_api_key: str | None = None,
+        embedding_base_url: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
     ) -> None:
         """Initialize the LLM service.
 
         Args:
-            api_key: OpenAI API key (defaults to settings)
-            base_url: API base URL (defaults to settings)
+            api_key: OpenAI API key for chat (defaults to settings)
+            base_url: API base URL for chat (defaults to settings)
             model: Model name for chat completions (defaults to settings)
             embedding_model: Model name for embeddings (defaults to settings)
+            embedding_api_key: API key for embeddings (defaults to chat api_key)
+            embedding_base_url: API base URL for embeddings (defaults to chat base_url)
             max_tokens: Max tokens for generation (defaults to settings)
             temperature: Sampling temperature (defaults to settings)
         """
-        # Use is not None check to allow falsy values (e.g., temperature=0.0)
-        self.api_key = api_key if api_key is not None else settings.openai_api_key
-        self.base_url = base_url if base_url is not None else settings.openai_base_url
-        self.model = model if model is not None else settings.openai_model
-        self.embedding_model = embedding_model if embedding_model is not None else settings.openai_embedding_model
+        # Chat config
+        self.api_key = api_key if api_key is not None else settings.llm_api_key
+        self.base_url = base_url if base_url is not None else settings.llm_base_url
+        self.model = model if model is not None else settings.llm_model
         self.max_tokens = max_tokens if max_tokens is not None else settings.max_tokens
         self.temperature = temperature if temperature is not None else settings.temperature
 
+        # Embedding config (falls back to chat config if not set)
+        self.embedding_model = embedding_model if embedding_model is not None else settings.embedding_model
+        self.embedding_api_key = embedding_api_key if embedding_api_key is not None else (settings.embedding_api_key or self.api_key)
+        self.embedding_base_url = embedding_base_url if embedding_base_url is not None else (settings.embedding_base_url or self.base_url)
+
         if not self.api_key:
-            logger.warning("OpenAI API key not configured")
+            logger.warning("LLM API key not configured")
 
         self._client: AsyncOpenAI | None = None
+        self._embedding_client: AsyncOpenAI | None = None
 
     @property
     def client(self) -> AsyncOpenAI:
-        """Get or create the async OpenAI client."""
+        """Get or create the async OpenAI client for chat."""
         if self._client is None:
             if not self.api_key:
-                raise BadRequestException("OpenAI API key not configured")
+                raise BadRequestException("LLM API key not configured")
             self._client = AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url,
             )
         return self._client
+
+    @property
+    def embedding_client(self) -> AsyncOpenAI:
+        """Get or create the async OpenAI client for embeddings."""
+        if self._embedding_client is None:
+            if not self.embedding_api_key:
+                raise BadRequestException("Embedding API key not configured")
+            # Reuse chat client if same provider
+            if self.embedding_api_key == self.api_key and self.embedding_base_url == self.base_url:
+                self._embedding_client = self.client
+            else:
+                self._embedding_client = AsyncOpenAI(
+                    api_key=self.embedding_api_key,
+                    base_url=self.embedding_base_url,
+                )
+        return self._embedding_client
 
     async def generate(
         self,
@@ -99,7 +124,7 @@ class LLMService:
         """
         # Check API key before retry logic
         if not self.api_key:
-            raise BadRequestException("OpenAI API key not configured")
+            raise BadRequestException("LLM API key not configured")
 
         # Retry wrapper - this is what gets retried
         @retry(
@@ -209,8 +234,8 @@ class LLMService:
         if not texts:
             raise BadRequestException("Cannot embed empty text list")
 
-        if not self.api_key:
-            raise BadRequestException("OpenAI API key not configured")
+        if not self.embedding_api_key:
+            raise BadRequestException("Embedding API key not configured")
 
         # Retry wrapper - this is what gets retried
         @retry(
@@ -222,7 +247,7 @@ class LLMService:
         )
         async def _do_embed() -> Any:
             """Inner function that performs the actual API call."""
-            return await self.client.embeddings.create(
+            return await self.embedding_client.embeddings.create(
                 model=model if model is not None else self.embedding_model,
                 input=texts,
             )

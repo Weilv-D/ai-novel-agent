@@ -19,7 +19,7 @@ AI 驱动的超长篇小说写作助手，通过多 Agent 协作帮助作者构�
 |------|------|
 | 后端 | FastAPI + SQLAlchemy 2.0 + PostgreSQL + pgvector |
 | 前端 | Next.js 15 (App Router) + TypeScript + Tailwind CSS + Zustand |
-| AI | OpenAI SDK（兼容模式，可切换模型） |
+| AI | OpenAI SDK 兼容模式（支持 DeepSeek、SiliconFlow 等） |
 | 部署 | Docker Compose |
 
 ## 快速开始
@@ -27,7 +27,8 @@ AI 驱动的超长篇小说写作助手，通过多 Agent 协作帮助作者构�
 ### 前置要求
 
 - Docker & Docker Compose
-- OpenAI API Key（或兼容 API）
+- LLM API Key（DeepSeek、OpenAI 或其他兼容服务）
+- Embedding API Key（SiliconFlow、OpenAI 或其他兼容服务）
 
 ### 启动
 
@@ -38,7 +39,7 @@ cd ai-novel-agent
 
 # 2. 配置环境变量
 cp backend/.env.example backend/.env
-# 编辑 backend/.env，填入 OPENAI_API_KEY
+# 编辑 backend/.env，配置 LLM 和 Embedding（见下方说明）
 
 # 3. 启动所有服务
 cd infra && docker-compose up -d
@@ -54,6 +55,35 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### 环境变量配置
+
+编辑 `backend/.env`，配置 LLM（对话生成）和 Embedding（向量嵌入）两个服务。两者支持不同提供商，只要兼容 OpenAI SDK 接口即可。
+
+```bash
+# ---- LLM 对话生成 ----
+LLM_API_KEY=sk-xxx              # API Key
+LLM_BASE_URL=https://api.deepseek.com   # API 地址
+LLM_MODEL=deepseek-chat         # 模型名称
+MAX_TOKENS=4096                 # 最大生成 token 数
+TEMPERATURE=0.7                 # 采样温度
+
+# ---- Embedding 向量嵌入 ----
+EMBEDDING_API_KEY=sk-xxx                     # API Key（留空则复用 LLM_API_KEY）
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1  # API 地址（留空则复用 LLM_BASE_URL）
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B     # 模型名称
+```
+
+**常见配置示例：**
+
+| 用途 | 提供商 | `BASE_URL` | 推荐模型 |
+|------|--------|-----------|----------|
+| LLM 对话 | DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
+| LLM 对话 | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| Embedding | SiliconFlow | `https://api.siliconflow.cn/v1` | `Qwen/Qwen3-Embedding-8B` |
+| Embedding | OpenAI | `https://api.openai.com/v1` | `text-embedding-3-small` |
+
+> 如果 LLM 和 Embedding 使用同一个提供商，可以只填 `LLM_*` 配置，`EMBEDDING_*` 留空即可自动复用。
 
 ### 访问
 
