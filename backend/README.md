@@ -6,8 +6,8 @@ This backend now targets a practical personal-use mode: one fixed local user own
 
 ## Current Validation Snapshot
 
-- `395` tests collected
-- `393 passed`, `2 skipped`
+- `398` tests collected
+- `396 passed`, `2 skipped`
 - `ruff check app tests` passes with the current repository rule set
 - `mypy app` passes with the current repository rule set
 - `verify.py` still works as a quick import/OpenAPI sanity check

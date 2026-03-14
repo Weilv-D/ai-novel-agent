@@ -4,7 +4,7 @@
 
 ## 仓库健康度
 
-- 后端测试：`395` collected / `393 passed` / `2 skipped`
+- 后端测试：`398` collected / `396 passed` / `2 skipped`
 - 前端校验：`npm run build` 通过，`npm run lint` 通过
 - 后端 lint：`ruff check app tests` 通过
 - 后端类型检查：`mypy app` 通过

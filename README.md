@@ -4,7 +4,7 @@ AI 驱动的长篇小说写作工具，当前仓库已经包含完整的 FastAPI
 
 ## 当前状态
 
-- 后端测试集：`395` collected, `393 passed`, `2 skipped`
+- 后端测试集：`398` collected, `396 passed`, `2 skipped`
 - 前端：`npm run build` 和 `npm run lint` 可通过
 - 仓库级完整校验入口：`make verify`
 - 本地有效环境：
