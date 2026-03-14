@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY pyproject.toml requirements.txt ./
+COPY pyproject.toml README.md requirements.txt ./
 RUN pip install --no-cache-dir -e ".[dev]"
 
 # Copy application code
