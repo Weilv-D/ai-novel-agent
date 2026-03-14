@@ -20,7 +20,7 @@ dependencies = [
     "openai>=1.0.0",
     "pgvector>=0.2.0",
     "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.1.0",
     "python-multipart>=0.0.6",
     "structlog>=23.2.0",
 ]
@@ -67,7 +67,7 @@ disallow_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["passlib.context", "pgvector.sqlalchemy"]
+module = ["pgvector.sqlalchemy"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

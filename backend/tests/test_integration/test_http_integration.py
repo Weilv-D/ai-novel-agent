@@ -24,6 +24,8 @@ class TestHealthEndpoint:
         data = response.json()
         assert data["status"] == "healthy"
         assert "version" in data
+        assert data["mode"] == "single_user"
+        assert data["auth_required"] is False
 
 
 class TestProjectsAPI:

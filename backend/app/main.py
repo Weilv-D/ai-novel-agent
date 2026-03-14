@@ -26,11 +26,11 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Lifespan context manager for startup and shutdown events."""
-    # Startup
-    logger.info("Starting AI Novel Agent API", version=settings.app_version, environment=settings.environment)
-
     # Initialize logging
     setup_logging(settings)
+
+    # Startup
+    logger.info("Starting AI Novel Agent API", version=settings.app_version, environment=settings.environment)
 
     # Initialize database connection and extensions
     await init_db()
@@ -75,8 +75,9 @@ app.include_router(api_v1_router)
 @app.get("/")
 async def root() -> dict[str, str]:
     """Root endpoint."""
+    current_settings = get_settings()
     return {
         "message": "AI Novel Agent API",
-        "version": settings.app_version,
+        "version": current_settings.app_version,
         "docs": "/docs",
     }

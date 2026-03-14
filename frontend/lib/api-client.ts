@@ -4,6 +4,54 @@
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_KEY_STORAGE_KEY = "api_key";
+const API_KEY_HEADER_STORAGE_KEY = "api_key_header";
+const DEFAULT_API_KEY_HEADER = "X-API-Key";
+
+export function getStoredApiKey(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return localStorage.getItem(API_KEY_STORAGE_KEY) || "";
+}
+
+export function setStoredApiKey(apiKey: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
+    localStorage.removeItem(API_KEY_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(API_KEY_STORAGE_KEY, trimmed);
+}
+
+export function clearStoredApiKey(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.removeItem(API_KEY_STORAGE_KEY);
+}
+
+export function getStoredApiKeyHeader(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return localStorage.getItem(API_KEY_HEADER_STORAGE_KEY) || "";
+}
+
+export function setStoredApiKeyHeader(headerName: string | null | undefined): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const trimmed = headerName?.trim();
+  if (!trimmed) {
+    localStorage.removeItem(API_KEY_HEADER_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(API_KEY_HEADER_STORAGE_KEY, trimmed);
+}
 
 /**
  * Custom error class for API errors
@@ -33,6 +81,42 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   return queryString ? `?${queryString}` : "";
 }
 
+export interface HealthResponse {
+  status: string;
+  version: string;
+  mode: string;
+  auth_required: boolean;
+  api_key_header?: string | null;
+  personal_user_email?: string | null;
+}
+
+function cacheHealthApiHeader(health: Partial<HealthResponse> | null): void {
+  if (!health?.api_key_header) {
+    return;
+  }
+  setStoredApiKeyHeader(health.api_key_header);
+}
+
+async function resolveApiKeyHeader(): Promise<string> {
+  const storedHeader = getStoredApiKeyHeader();
+  if (storedHeader) {
+    return storedHeader;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/health`);
+    if (!response.ok) {
+      return DEFAULT_API_KEY_HEADER;
+    }
+
+    const health = (await response.json()) as Partial<HealthResponse>;
+    cacheHealthApiHeader(health);
+    return health.api_key_header?.trim() || DEFAULT_API_KEY_HEADER;
+  } catch {
+    return DEFAULT_API_KEY_HEADER;
+  }
+}
+
 /**
  * Core fetch wrapper with error handling and authentication
  */
@@ -41,7 +125,8 @@ async function fetchApi<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const apiKey = typeof window !== "undefined" ? localStorage.getItem("api_key") : null;
+  const apiKey = getStoredApiKey();
+  const apiKeyHeader = apiKey ? await resolveApiKeyHeader() : DEFAULT_API_KEY_HEADER;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -49,7 +134,7 @@ async function fetchApi<T>(
   };
 
   if (apiKey) {
-    headers["X-API-Key"] = apiKey;
+    headers[apiKeyHeader] = apiKey;
   }
 
   const response = await fetch(url, {
@@ -72,17 +157,16 @@ async function fetchApi<T>(
     );
   }
 
+  if (endpoint === "/api/v1/health" && data && typeof data === "object") {
+    cacheHealthApiHeader(data as Partial<HealthResponse>);
+  }
+
   return data as T;
 }
 
 // ============================================================================
 // Health API
 // ============================================================================
-
-export interface HealthResponse {
-  status: string;
-  version: string;
-}
 
 export const healthApi = {
   check: () => fetchApi<HealthResponse>("/api/v1/health"),

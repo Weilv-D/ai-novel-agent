@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from app.core.personal import PERSONAL_USER_ID
 from app.main import app
 from app.schemas.project import ProjectResponse
 
@@ -25,6 +26,7 @@ class TestListProjects:
 
             assert response.status_code == status.HTTP_200_OK
             assert response.json() == []
+            assert mock_get.await_args.kwargs["user_id"] == PERSONAL_USER_ID
 
     def test_list_projects_with_data(self):
         """Test listing projects with existing data."""
@@ -50,6 +52,7 @@ class TestListProjects:
             data = response.json()
             assert len(data) == 1
             assert data[0]["name"] == "Test Novel"
+            assert mock_get.await_args.kwargs["user_id"] == PERSONAL_USER_ID
 
 
 class TestCreateProject:
@@ -86,6 +89,7 @@ class TestCreateProject:
             assert response.status_code == status.HTTP_201_CREATED
             data = response.json()
             assert data["name"] == "My Novel"
+            assert mock_create.await_args.kwargs["user_id"] == PERSONAL_USER_ID
 
     def test_create_project_invalid_schema(self):
         """Test creating a project with invalid schema."""
@@ -98,7 +102,34 @@ class TestCreateProject:
 
         response = client.post("/api/v1/projects", json=project_data)
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+    def test_list_projects_requires_api_key_when_configured(self):
+        """Test project endpoints require API key when ADMIN_API_KEY is configured."""
+        client = TestClient(app)
+
+        with patch("app.api.deps.get_settings") as mock_settings:
+            mock_settings.return_value.admin_api_key = "secret-key"
+            mock_settings.return_value.api_key_header = "X-API-Key"
+
+            response = client.get("/api/v1/projects")
+
+            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_list_projects_accepts_valid_api_key(self):
+        """Test configured API key grants access to project endpoints."""
+        client = TestClient(app)
+
+        with patch("app.api.deps.get_settings") as mock_settings:
+            mock_settings.return_value.admin_api_key = "secret-key"
+            mock_settings.return_value.api_key_header = "X-API-Key"
+
+            with patch("app.api.v1.projects.project_service.get_by_user", new_callable=AsyncMock) as mock_get:
+                mock_get.return_value = []
+
+                response = client.get("/api/v1/projects", headers={"X-API-Key": "secret-key"})
+
+                assert response.status_code == status.HTTP_200_OK
 
 
 class TestGetProject:
@@ -200,4 +231,3 @@ class TestDeleteProject:
             response = client.delete(f"/api/v1/projects/{project_id}")
 
             assert response.status_code == status.HTTP_200_OK
-

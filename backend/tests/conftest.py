@@ -29,12 +29,16 @@ TEST_ENV_DEFAULTS = {
     "EMBEDDING_BASE_URL": "",
     "EMBEDDING_MODEL": "text-embedding-3-small",
     "EMBEDDING_DIMENSION": "1536",
+    "PERSONAL_USER_EMAIL": "writer@local",
+    "PERSONAL_USER_NAME": "Test Writer",
 }
 for key, value in TEST_ENV_DEFAULTS.items():
     os.environ[key] = value
 
+from app.core.personal import PERSONAL_USER_ID, get_personal_user
 from app.main import app
 from app.models import Base
+from app.models.user import User
 
 
 # Test database URL - using SQLite for isolated, dependency-free testing
@@ -271,7 +275,19 @@ def db_session(db_engine: Any) -> Generator[AsyncSession, None, None]:
         expire_on_commit=False,
     )
 
-    session = AsyncCompatibleSession(sync_session_maker())
+    raw_session = sync_session_maker()
+    personal_user = get_personal_user()
+    raw_session.add(
+        User(
+            id=PERSONAL_USER_ID,
+            email=personal_user.email,
+            name=personal_user.name,
+            api_key_hash=None,
+            meta={"mode": "personal"},
+        )
+    )
+    raw_session.commit()
+    session = AsyncCompatibleSession(raw_session)
     try:
         yield session
     finally:

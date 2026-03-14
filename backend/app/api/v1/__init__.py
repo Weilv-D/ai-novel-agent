@@ -1,7 +1,8 @@
 """API v1 routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.deps import get_current_user
 from app.api.v1.agent import router as agent_router
 from app.api.v1.chapters import router as chapters_router
 from app.api.v1.chapters import scene_router, volume_router
@@ -20,14 +21,14 @@ router = APIRouter(prefix="/api/v1")
 # Include sub-routers
 router.include_router(health_router)
 router.include_router(projects_router)
-router.include_router(characters_router)
-router.include_router(world_settings_router)
-router.include_router(volume_router)
-router.include_router(chapters_router)
-router.include_router(scene_router)
-router.include_router(suggestions_router)
-router.include_router(dependencies_router)
-router.include_router(snapshots_router)
-router.include_router(memories_router)
-router.include_router(agent_router)
-router.include_router(export_router)
+router.include_router(characters_router, dependencies=[Depends(get_current_user)])
+router.include_router(world_settings_router, dependencies=[Depends(get_current_user)])
+router.include_router(volume_router, dependencies=[Depends(get_current_user)])
+router.include_router(chapters_router, dependencies=[Depends(get_current_user)])
+router.include_router(scene_router, dependencies=[Depends(get_current_user)])
+router.include_router(suggestions_router, dependencies=[Depends(get_current_user)])
+router.include_router(dependencies_router, dependencies=[Depends(get_current_user)])
+router.include_router(snapshots_router, dependencies=[Depends(get_current_user)])
+router.include_router(memories_router, dependencies=[Depends(get_current_user)])
+router.include_router(agent_router, dependencies=[Depends(get_current_user)])
+router.include_router(export_router, dependencies=[Depends(get_current_user)])

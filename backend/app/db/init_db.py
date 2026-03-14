@@ -1,8 +1,13 @@
 """Database initialization utilities."""
 
+import logging
+
 from sqlalchemy import text
 
-from app.db import engine
+from app.core.personal import ensure_personal_user
+from app.db import async_session_maker, engine
+
+logger = logging.getLogger(__name__)
 
 
 async def create_pgvector_extension() -> None:
@@ -25,6 +30,14 @@ async def init_database() -> None:
     Skips pgvector extension creation for non-PostgreSQL databases.
     """
     await create_pgvector_extension()
+    async with async_session_maker() as session:
+        try:
+            user = await ensure_personal_user(session)
+            await session.commit()
+            logger.info("Initialized personal user %s (%s)", user.email, user.id)
+        except Exception:
+            await session.rollback()
+            raise
 
 
 async def reset_database() -> None:

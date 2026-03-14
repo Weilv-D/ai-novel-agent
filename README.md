@@ -6,12 +6,14 @@ AI 驱动的长篇小说写作工具，当前仓库已经包含完整的 FastAPI
 
 - 后端测试集：`395` collected, `393 passed`, `2 skipped`
 - 前端：`npm run build` 和 `npm run lint` 可通过
+- 仓库级完整校验入口：`make verify`
 - 本地有效环境：
   - `backend/.venv`
   - `frontend/node_modules`
   - `backend/.env`
   - `frontend/.env.local`
 - 仓库根目录 `/.venv` 不参与项目运行，属于可清理遗留物
+- 当前后端工作流已按“个人单用户使用”实现
 
 ## 技术栈
 
@@ -34,6 +36,7 @@ cd backend
 python3 -m venv .venv
 ./.venv/bin/python -m pip install -e ".[dev]"
 cp .env.example .env
+./.venv/bin/alembic upgrade head
 ./.venv/bin/python -m pytest
 ./.venv/bin/python -m uvicorn app.main:app --reload --port 8000
 
@@ -66,6 +69,10 @@ EMBEDDING_API_KEY=...
 EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
 EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
 EMBEDDING_DIMENSION=4096
+
+PERSONAL_USER_EMAIL=writer@local
+PERSONAL_USER_NAME=Personal Writer
+ADMIN_API_KEY=
 ```
 
 说明：
@@ -73,6 +80,8 @@ EMBEDDING_DIMENSION=4096
 - 如果聊天模型和 embedding 走同一提供商，可只配置 `LLM_*`，把 `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` 留空。
 - `EMBEDDING_DIMENSION` 必须和模型真实输出维度一致；变更后需要同步数据库结构。
 - 运行后端命令时要先进入 `backend/`，因为配置默认从当前工作目录的 `.env` 读取。
+- `PERSONAL_USER_*` 控制本地单用户身份；项目数据默认归属于这个账号。
+- `ADMIN_API_KEY` 留空时前端/脚本可直接访问；填入后，除 `/` 和 `/api/v1/health` 外的接口都需要携带同一值。前端会通过健康接口自动识别 `API_KEY_HEADER`，首页也提供浏览器本地保存入口。
 
 ## 常用命令
 
@@ -81,12 +90,15 @@ EMBEDDING_DIMENSION=4096
 ```bash
 make backend-test
 make backend-lint
+make backend-typecheck
+make backend-verify
 make frontend-build
 make frontend-lint
+make verify
 make clean
 ```
 
-`make clean` 只清理缓存、前端构建产物和仓库根目录遗留 `/.venv`，不会删除 `backend/.venv`、`frontend/node_modules` 或本地 `.env` 文件。
+`make verify` 会串起后端 lint/typecheck/test 和前端 lint/build。`make clean` 只清理缓存、前端构建产物和仓库根目录遗留 `/.venv`，不会删除 `backend/.venv`、`frontend/node_modules` 或本地 `.env` 文件。
 
 ## 项目结构
 

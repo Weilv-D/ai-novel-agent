@@ -61,7 +61,7 @@ class TestListDependencies:
 
         response = client.get("/api/v1/dependencies")
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestCreateDependency:
@@ -116,7 +116,7 @@ class TestCreateDependency:
 
         response = client.post("/api/v1/dependencies", json=dependency_data)
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestGetDependency:

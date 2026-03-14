@@ -7,13 +7,19 @@
 - 后端测试：`395` collected / `393 passed` / `2 skipped`
 - 前端校验：`npm run build` 通过，`npm run lint` 通过
 - 后端 lint：`ruff check app tests` 通过
+- 后端类型检查：`mypy app` 通过
 - 后端可编辑安装已修复，`pip install -e ".[dev]"` 可用
+- 仓库级验证命令：`make verify`
 
 ## 已实现范围
 
 ### 后端
 
 - FastAPI 主应用、异常处理、配置与日志
+- 单用户个人模式：
+  - 固定个人用户身份
+  - 启动时自动补齐用户记录
+  - 可选 `ADMIN_API_KEY` 访问保护
 - SQLAlchemy 模型：
   - `User`
   - `Project`
@@ -50,6 +56,7 @@
 - 项目、人物、章节、场景、世界观页面
 - Suggestion / Diff / Impact Analysis 组件
 - API client、store、类型定义
+- 首页个人模式设置面板（浏览器本地 API Key 保存）
 
 ## 环境现状
 
@@ -69,10 +76,8 @@
 
 ## 仍然存在的明确缺口
 
-- 真实用户认证尚未接入，项目接口仍处于单用户占位模式
+- 多用户认证/权限体系未实现；当前明确定位为个人单用户应用
 - PostgreSQL + pgvector 的完整运行时联调未在本次整理中重跑
-- `mypy app` 仍有一批历史类型债，没有在这次清理里全部归零
-- `passlib` 依赖对 Python 3.13 的 `crypt` 弃用仍会产生告警
 
 ## 推荐开发入口
 

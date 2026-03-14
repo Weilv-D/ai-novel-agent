@@ -58,7 +58,7 @@ class TestListSnapshots:
 
         response = client.get("/api/v1/snapshots")
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestListTargetSnapshots:
@@ -174,7 +174,7 @@ class TestCreateSnapshot:
 
         response = client.post("/api/v1/snapshots", json=snapshot_data)
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestGetSnapshot:

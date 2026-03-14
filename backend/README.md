@@ -2,11 +2,14 @@
 
 FastAPI backend for the AI Novel Agent project. The backend is already beyond “skeleton” stage: CRUD APIs, agent routes, memory search, snapshots, dependency analysis, export, and test coverage are all present.
 
+This backend now targets a practical personal-use mode: one fixed local user owns all projects, with optional API key protection on application endpoints.
+
 ## Current Validation Snapshot
 
 - `395` tests collected
 - `393 passed`, `2 skipped`
 - `ruff check app tests` passes with the current repository rule set
+- `mypy app` passes with the current repository rule set
 - `verify.py` still works as a quick import/OpenAPI sanity check
 
 ## Local Setup
@@ -16,6 +19,7 @@ cd backend
 python3 -m venv .venv
 ./.venv/bin/python -m pip install -e ".[dev]"
 cp .env.example .env
+./.venv/bin/alembic upgrade head
 ```
 
 Run commands from `backend/` so `app.core.config.Settings` can resolve `.env` correctly.
@@ -36,6 +40,10 @@ Run commands from `backend/` so `app.core.config.Settings` can resolve `.env` co
 
 # local server
 ./.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# full repository verification
+cd ..
+make verify
 ```
 
 ## Runtime Notes
@@ -43,7 +51,9 @@ Run commands from `backend/` so `app.core.config.Settings` can resolve `.env` co
 - Production target is PostgreSQL 16 + pgvector.
 - Tests use SQLite and custom compatibility fixtures to stay isolated from local developer settings.
 - `EMBEDDING_DIMENSION` must match the selected embedding model output size.
-- Project routes currently run in a single-user placeholder mode; the real auth/user binding is not wired in yet.
+- `PERSONAL_USER_EMAIL` / `PERSONAL_USER_NAME` define the local single-user identity.
+- `ADMIN_API_KEY` is optional. When set, all data/agent/export routes require that value in the configured `API_KEY_HEADER`.
+- Startup now initializes the personal user record automatically after migrations.
 
 ## Scripts
 
@@ -51,6 +61,7 @@ Run commands from `backend/` so `app.core.config.Settings` can resolve `.env` co
 - `scripts/seed_data.py`: create sample development data
 - `scripts/verify_api_integration.py`: manual live-backend smoke test
 - `scripts/verify_sqlite_integration.py`: manual SQLite-backed HTTP smoke test
+- `scripts/start_dev.sh`: runs Alembic migrations, then starts the development server
 
 The old standalone SQLite migration test script has been removed. The maintained path is the pytest integration suite in `tests/test_integration/test_sqlite_migration.py`.
 

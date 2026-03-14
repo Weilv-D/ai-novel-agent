@@ -75,7 +75,7 @@ class TestListSuggestions:
 
         response = client.get("/api/v1/suggestions")
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestCreateSuggestion:
@@ -130,7 +130,7 @@ class TestCreateSuggestion:
 
         response = client.post("/api/v1/suggestions", json=suggestion_data)
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestGetSuggestion:
@@ -276,7 +276,7 @@ class TestSuggestionAction:
         # Pydantic should reject invalid action values
         response = client.post(f"/api/v1/suggestions/{suggestion_id}/action", json={"action": "invalid"})
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestDeleteSuggestion:

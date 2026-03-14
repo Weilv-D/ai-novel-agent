@@ -18,6 +18,7 @@ cd backend
 python3 -m venv .venv
 ./.venv/bin/python -m pip install -e ".[dev]"
 cp .env.example .env
+./.venv/bin/alembic upgrade head
 ./.venv/bin/python verify.py
 ./.venv/bin/python -m pytest
 ./.venv/bin/ruff check app tests
@@ -29,6 +30,7 @@ Notes:
 - Run backend commands from `backend/` so `app.core.config.Settings` can resolve `.env`.
 - Tests intentionally isolate themselves from developer-local `backend/.env` values.
 - PostgreSQL + pgvector is the target runtime. SQLite is used only for tests and lightweight verification.
+- The app runs in single-user mode. `PERSONAL_USER_EMAIL` / `PERSONAL_USER_NAME` define ownership, and `ADMIN_API_KEY` is an optional access gate for browser/API usage. The frontend will auto-discover the configured `API_KEY_HEADER` from `/api/v1/health`.
 
 ## Frontend
 
@@ -52,9 +54,12 @@ At the repository root:
 ```bash
 make backend-test
 make backend-lint
+make backend-typecheck
+make backend-verify
 make frontend-build
 make frontend-lint
+make verify
 make clean
 ```
 
-`make clean` removes generated caches, the disposable root `/.venv`, and the frontend build output. It does not remove `backend/.venv`, `frontend/node_modules`, or local `.env` files.
+`make verify` runs the complete local quality gate: backend lint, backend typecheck, backend tests, frontend lint, and frontend build. `make clean` removes generated caches, the disposable root `/.venv`, and the frontend build output. It does not remove `backend/.venv`, `frontend/node_modules`, or local `.env` files.

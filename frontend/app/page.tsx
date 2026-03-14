@@ -1,4 +1,6 @@
 import Link from "next/link";
+
+import { PersonalSetupPanel } from "@/components/PersonalSetupPanel";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 
@@ -27,6 +29,10 @@ export default function HomePage() {
           <Button size="lg" variant="outline">
             <Link href="/projects/new">新建项目</Link>
           </Button>
+        </div>
+
+        <div className="mb-16">
+          <PersonalSetupPanel />
         </div>
 
         {/* Features Grid */}
