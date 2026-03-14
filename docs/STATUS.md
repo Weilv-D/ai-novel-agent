@@ -1,92 +1,63 @@
-# AI Novel Agent - 当前状态
+# 项目状态
 
 最后更新：2026-03-15
 
-## 仓库健康度
+## 当前定位
 
-- 后端测试：`398` collected / `396 passed` / `2 skipped`
-- 前端校验：`npm run build` 通过，`npm run lint` 通过
-- 后端 lint：`ruff check app tests` 通过
-- 后端类型检查：`mypy app` 通过
-- 后端可编辑安装已修复，`pip install -e ".[dev]"` 可用
-- 仓库级验证命令：`make verify`
-- live smoke：
-  - `scripts/verify_sqlite_integration.py` 通过
-  - `scripts/verify_api_integration.py` 通过
-- Docker 联调：
-  - 前端 `http://localhost:3000` 可访问
-  - 后端 `http://localhost:8000/api/v1/health` 返回 `healthy`
-  - 健康接口当前会真实报告 `database` / `redis` 连接状态
-  - Docker PostgreSQL 暴露在宿主机 `5433`
+AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶段。它当前服务的对象很明确：单人、本地、长期创作。项目的设计重点是稳定的内容结构和 AI 辅助链路，而不是多用户协作系统。
 
-## 已实现范围
+## 已交付能力
 
 ### 后端
 
-- FastAPI 主应用、异常处理、配置与日志
-- 单用户个人模式：
-  - 固定个人用户身份
-  - 启动时自动补齐用户记录
-  - 可选 `ADMIN_API_KEY` 访问保护
-- SQLAlchemy 模型：
-  - `User`
-  - `Project`
-  - `Character`
-  - `WorldSetting`
-  - `Volume`
-  - `Chapter`
-  - `Scene`
-  - `Suggestion`
-  - `Dependency`
-  - `Snapshot`
-  - `Memory`
-- API 路由：
-  - Projects
-  - Characters
-  - WorldSettings
-  - Volumes / Chapters / Scenes
-  - Suggestions
-  - Dependencies
-  - Snapshots
-  - Memories
-  - Agent chat / stream / auto summarize / continuity check
-  - Export
+- FastAPI 主应用与异常处理
+- 配置、日志与健康检查
+- 单用户模式与可选 `ADMIN_API_KEY` 保护
+- 项目、人物、世界观、卷、章、场景的完整 API
+- Suggestion、Dependency、Snapshot、Memory 相关 API
+- Agent chat / stream / continuity / summarize
 - Alembic 初始化迁移
-- LLM service：
-  - chat generate
-  - stream
-  - embeddings
-  - retry / health check
+- PostgreSQL + pgvector 目标运行时
 
 ### 前端
 
 - Next.js 15 App Router
-- 项目、人物、章节、场景、世界观页面
+- 首页与个人模式配置入口
+- 项目、人物、章节、世界观主视图
 - Suggestion / Diff / Impact Analysis 组件
-- API client、store、类型定义
-- 首页个人模式设置面板（浏览器本地 API Key 保存）
+- API client、状态管理与类型定义
+- 当前版本的水墨风 UI 主题
 
-## 环境现状
+### 运行与验证
 
-当前仓库内与开发相关的本地环境有：
+- 仓库级验证命令：`make verify`
+- 后端快速验证：`backend/verify.py`
+- SQLite HTTP 集成验证：`scripts/verify_sqlite_integration.py`
+- 联调环境 live smoke：`scripts/verify_api_integration.py`
+- Docker Compose 本地联调可用
 
-- `backend/.venv`：有效 Python 环境
-- `frontend/node_modules`：有效 Node 环境
-- `backend/.env`：后端本地配置
-- `backend/.env.example`：后端示例配置
-- `frontend/.env.local`：前端本地配置
+## 当前质量状态
 
-已识别并清理的遗留/生成物方向：
+- 后端测试：`398` collected / `396 passed` / `2 skipped`
+- 后端 lint：通过
+- 后端类型检查：通过
+- 前端 lint：通过
+- 前端 build：通过
+- 健康接口：返回 API、数据库和 Redis 的实时状态
 
-- 仓库根目录 `/.venv`：遗留空壳，不参与项目运行
-- `frontend/.next`：前端构建产物
-- `__pycache__` / `.pytest_cache` / `.ruff_cache`：缓存目录
+## 当前边界
 
-## 仍然存在的明确缺口
+以下内容不在当前交付范围内：
 
-- 多用户认证/权限体系未实现；当前明确定位为个人单用户应用
-- 前端目前没有浏览器自动化 e2e 测试；当前依赖构建校验与 API/live smoke
+- 多用户注册、登录、组织与权限体系
+- 浏览器自动化 e2e 测试
+- 面向公网部署的完整安全加固方案
 
-## 推荐开发入口
+这些边界是当前产品定位的一部分，而不是遗漏。
 
-见 [开发说明](DEVELOPMENT.md)。
+## 维护建议
+
+- 把 `make verify` 作为提交前最低验证标准
+- 把 `/api/v1/health` 作为联调环境启动后的第一道检查
+- 修改 embedding 模型时，同步调整 `EMBEDDING_DIMENSION`
+- 保持 `frontend/.next-docker` 只作为 Docker 前端运行态目录使用

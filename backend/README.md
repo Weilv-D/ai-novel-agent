@@ -1,21 +1,24 @@
 # AI Novel Agent Backend
 
-FastAPI backend for the AI Novel Agent project. The backend is already beyond “skeleton” stage: CRUD APIs, agent routes, memory search, snapshots, dependency analysis, export, and test coverage are all present.
+后端基于 FastAPI，负责项目数据管理、对象间关系、AI 协作接口、记忆检索、导出以及运行时健康检查。当前后端明确服务于单用户个人使用场景：系统启动后会保证本地个人用户存在，所有业务数据都归属于该用户。
 
-This backend now targets a practical personal-use mode: one fixed local user owns all projects, with optional API key protection on application endpoints.
+## 后端职责
 
-## Current Validation Snapshot
+- 项目、人物、世界观、卷、章、场景的 CRUD
+- Suggestion、Dependency、Snapshot、Memory 的持久化与查询
+- Agent chat、流式响应、连续性检查与摘要接口
+- TXT / Markdown 导出
+- 运行时健康检查与单用户访问控制
 
-- `398` tests collected
-- `396 passed`, `2 skipped`
-- `ruff check app tests` passes with the current repository rule set
-- `mypy app` passes with the current repository rule set
-- `verify.py` still works as a quick import/OpenAPI sanity check
-- `scripts/verify_sqlite_integration.py` passes end-to-end against temporary SQLite
-- `scripts/verify_api_integration.py` passes against the live Docker-backed backend
-- `/api/v1/health` now reports actual database and Redis connectivity
+## 运行环境
 
-## Local Setup
+- Python `>= 3.11`
+- PostgreSQL 16 + pgvector
+- Redis
+
+测试与轻量验证可以使用 SQLite，但它不是目标生产/长期运行环境。
+
+## 初始化
 
 ```bash
 cd backend
@@ -25,50 +28,68 @@ cp .env.example .env
 ./.venv/bin/alembic upgrade head
 ```
 
-Run commands from `backend/` so `app.core.config.Settings` can resolve `.env` correctly.
+运行命令请保持在 `backend/` 目录内，这样配置系统才能正确解析本地 `.env`。
 
-## Common Commands
+## 常用命令
 
 ```bash
-# quick verification
+# 快速验证
 ./.venv/bin/python verify.py
 
-# tests
+# 测试
 ./.venv/bin/python -m pytest
-./.venv/bin/python -m pytest tests/test_integration/test_http_integration.py -v
 
-# lint / type check
+# 静态检查
 ./.venv/bin/ruff check app tests
 ./.venv/bin/python -m mypy app
 
-# local server
+# 开发服务
 ./.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-# full repository verification
+如果需要从仓库根目录执行完整验证：
+
+```bash
 cd ..
 make verify
 ```
 
-## Runtime Notes
+## 运行特性
 
-- Production target is PostgreSQL 16 + pgvector.
-- Tests use SQLite and custom compatibility fixtures to stay isolated from local developer settings.
-- `EMBEDDING_DIMENSION` must match the selected embedding model output size.
-- `PERSONAL_USER_EMAIL` / `PERSONAL_USER_NAME` define the local single-user identity.
-- `ADMIN_API_KEY` is optional. When set, all data/agent/export routes require that value in the configured `API_KEY_HEADER`.
-- Startup now initializes the personal user record automatically after migrations.
-- The health endpoint is non-fatal: it always returns API liveness, while `database` / `redis` reflect dependency reachability.
+### 单用户模式
 
-## Scripts
+- `PERSONAL_USER_EMAIL` / `PERSONAL_USER_NAME` 定义本地用户身份
+- 启动时会自动初始化该用户记录
+- `ADMIN_API_KEY` 可选；启用后，业务接口要求客户端在指定请求头中携带它
 
-- `verify.py`: quick backend sanity checks
-- `scripts/verify_api_integration.py`: manual live-backend smoke test
-- `scripts/verify_sqlite_integration.py`: manual SQLite-backed HTTP smoke test
-- `scripts/start_dev.sh`: runs Alembic migrations, then starts the development server
+### 健康检查
 
-The old standalone SQLite migration test script has been removed. The maintained path is the pytest integration suite in `tests/test_integration/test_sqlite_migration.py`.
+`/api/v1/health` 返回三类信息：
 
-## Structure
+- API 本身是否可响应
+- 当前单用户模式与鉴权配置
+- 数据库与 Redis 的实时连通性
+
+健康接口不会因为依赖异常而把整个 API 标记为不可访问，但会明确区分 `database` / `redis` 的当前状态。
+
+## 验证脚本
+
+- `verify.py`：导入、OpenAPI、路由与 Alembic 快速检查
+- `scripts/verify_sqlite_integration.py`：SQLite 驱动的 HTTP 集成验证
+- `scripts/verify_api_integration.py`：联调环境下的 live API smoke
+- `scripts/start_dev.sh`：先执行迁移，再启动开发服务
+
+## 质量门
+
+当前后端质量门由以下命令组成：
+
+- `ruff check app tests`
+- `mypy app`
+- `pytest`
+
+在当前仓库状态下，这组命令应当保持可通过。
+
+## 目录结构
 
 ```text
 backend/
@@ -87,10 +108,10 @@ backend/
 └── verify.py
 ```
 
-## API Docs
+## 接口文档
 
-Once the server is running:
+服务启动后：
 
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-- Health: `http://localhost:8000/api/v1/health`
+- Swagger UI：`http://localhost:8000/docs`
+- ReDoc：`http://localhost:8000/redoc`
+- Health：`http://localhost:8000/api/v1/health`
