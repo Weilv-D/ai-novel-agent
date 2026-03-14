@@ -79,6 +79,11 @@ docker-compose up -d
 
 - 前端：http://localhost:3000
 - 后端文档：http://localhost:8000/docs
+- PostgreSQL（宿主机访问）：localhost:5433
+
+说明：
+
+- 这里故意把 Docker 里的 PostgreSQL 映射到宿主机 `5433`，避免和你本机已经在用的 `5432` 冲突。
 
 ### 方式 B：本地手动启动
 
@@ -163,6 +168,10 @@ cd backend
 ```
 
 另外还要确认 PostgreSQL 和 Redis 已经可用。
+
+### 4. 本地 `npm run build` 提示 `.next` 权限错误
+
+如果你先跑过 Docker，再在宿主机直接跑前端构建，旧的 `.next` 产物可能会导致权限问题。当前 compose 已经把前端容器的 Next 输出目录改成 `frontend/.next-docker`，不会再和本地构建使用的 `frontend/.next` 冲突。
 
 ## 项目结构
 

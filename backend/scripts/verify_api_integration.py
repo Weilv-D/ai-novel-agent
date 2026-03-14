@@ -11,10 +11,10 @@ REQUIREMENTS:
 - httpx library installed: pip install httpx
 
 VERIFICATION STATUS:
-- Schema field names and route paths updated to match backend (2025-01-13)
+- Schema field names and route paths updated to match current backend
 - Routes: flat structure (e.g., /characters, /chapters, /world-settings)
 - Request bodies include project_id for resource creation
-- NOT YET RUN against live backend - requires running Docker/PostgreSQL
+- This script is a live-backend smoke test, not a replacement for pytest
 """
 
 import sys
@@ -74,7 +74,8 @@ async def verify_api() -> dict[str, Any]:
             response = await client.get(f"{API_BASE_URL}/api/v1/projects")
             if response.status_code == 200:
                 data = response.json()
-                print_result("List projects", True, f"Found {data.get('total', 0)} projects")
+                total = data.get("total", len(data)) if isinstance(data, dict) else len(data)
+                print_result("List projects", True, f"Found {total} projects")
                 results["passed"] += 1
             else:
                 print_result("List projects", False, f"Status: {response.status_code}")
@@ -190,7 +191,7 @@ async def verify_api() -> dict[str, Any]:
                 response = await client.get(f"{API_BASE_URL}/api/v1/chapters/project/{project_id}")
                 if response.status_code == 200:
                     data = response.json()
-                    chapters = data.get("items", data)
+                    chapters = data.get("items", data) if isinstance(data, dict) else data
                     print_result("List chapters", True, f"Found {len(chapters)} chapters")
                     results["passed"] += 1
                 else:

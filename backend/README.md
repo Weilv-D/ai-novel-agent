@@ -11,6 +11,8 @@ This backend now targets a practical personal-use mode: one fixed local user own
 - `ruff check app tests` passes with the current repository rule set
 - `mypy app` passes with the current repository rule set
 - `verify.py` still works as a quick import/OpenAPI sanity check
+- `scripts/verify_sqlite_integration.py` passes end-to-end against temporary SQLite
+- `scripts/verify_api_integration.py` passes against the live Docker-backed backend
 
 ## Local Setup
 
@@ -58,7 +60,6 @@ make verify
 ## Scripts
 
 - `verify.py`: quick backend sanity checks
-- `scripts/seed_data.py`: create sample development data
 - `scripts/verify_api_integration.py`: manual live-backend smoke test
 - `scripts/verify_sqlite_integration.py`: manual SQLite-backed HTTP smoke test
 - `scripts/start_dev.sh`: runs Alembic migrations, then starts the development server

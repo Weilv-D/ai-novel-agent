@@ -10,6 +10,13 @@
 - 后端类型检查：`mypy app` 通过
 - 后端可编辑安装已修复，`pip install -e ".[dev]"` 可用
 - 仓库级验证命令：`make verify`
+- live smoke：
+  - `scripts/verify_sqlite_integration.py` 通过
+  - `scripts/verify_api_integration.py` 通过
+- Docker 联调：
+  - 前端 `http://localhost:3000` 可访问
+  - 后端 `http://localhost:8000/api/v1/health` 返回 `healthy`
+  - Docker PostgreSQL 暴露在宿主机 `5433`
 
 ## 已实现范围
 

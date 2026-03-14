@@ -36,6 +36,7 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     container_name: novel_agent_backend
+    user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,16 +60,17 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
     container_name: novel_agent_frontend
+    user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - backend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_DIST_DIR=.next-docker
     ports:
       - "3000:3000"
     volumes:
       - ../frontend:/app
       - /app/node_modules
-      - /app/.next
     command: npm run dev
 
 volumes:

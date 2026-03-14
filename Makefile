@@ -32,5 +32,5 @@ verify: backend-verify frontend-lint frontend-build
 
 clean:
 	rm -rf .pytest_cache .venv
-	rm -rf backend/.pytest_cache backend/.ruff_cache backend/.mypy_cache frontend/.next
+	rm -rf backend/.pytest_cache backend/.ruff_cache backend/.mypy_cache frontend/.next frontend/.next-docker frontend/tmp
 	find backend -type d -name __pycache__ -prune -exec rm -rf {} +

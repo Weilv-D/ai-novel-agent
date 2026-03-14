@@ -46,6 +46,7 @@ Notes:
 
 - Next.js config lives in `frontend/next.config.mjs`.
 - Frontend scripts call the local Next.js CLI through `node`, so they do not depend on executable bits inside `node_modules/.bin`.
+- Docker Compose runs the frontend with `NEXT_DIST_DIR=.next-docker`, so container dev mode no longer collides with local `frontend/.next` builds.
 
 ## Common Commands
 
