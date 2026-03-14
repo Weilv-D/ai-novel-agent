@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useProjectStore } from "@/lib/stores/projectStore";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, exportApi } from "@/lib/api-client";
+import { AgentChatPanel } from "@/components/AgentChatPanel";
+import { SuggestionList } from "@/components/SuggestionList";
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -197,9 +199,28 @@ export default function ProjectDetailPage() {
               <Button href={`/projects/${project.id}/chapters`}>章节管理</Button>
               <Button variant="outline" href={`/projects/${project.id}/characters`}>人物管理</Button>
               <Button variant="outline" href={`/projects/${project.id}/worldsettings`}>世界观</Button>
+              <Button variant="outline" onClick={() => exportApi.download(project.id, "txt")}>
+                导出 TXT
+              </Button>
+              <Button variant="outline" onClick={() => exportApi.download(project.id, "markdown")}>
+                导出 Markdown
+              </Button>
             </div>
           </CardContent>
         </Card>
+
+        {/* Suggestions */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="text-lg">AI 建议</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SuggestionList projectId={project.id} status="draft" />
+          </CardContent>
+        </Card>
+
+        {/* Agent Chat */}
+        <AgentChatPanel projectId={project.id} />
 
         {/* Delete Confirmation Modal */}
         <Modal

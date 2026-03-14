@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { chapterApi, sceneApi } from "@/lib/api-client";
 import type { Chapter, Scene } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
+import { AgentChatPanel } from "@/components/AgentChatPanel";
 
 export default function ChapterDetailPage() {
   const params = useParams();
@@ -251,6 +252,12 @@ export default function ChapterDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Agent Chat */}
+        <AgentChatPanel
+          projectId={projectId}
+          context={{ chapter_id: chapterId, chapter_number: chapter.chapter_number }}
+        />
 
         {/* Delete Confirmation Modal */}
         <Modal

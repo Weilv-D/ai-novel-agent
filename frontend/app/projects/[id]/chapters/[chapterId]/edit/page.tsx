@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
-import { chapterApi } from "@/lib/api-client";
+import { chapterApi, agentApi } from "@/lib/api-client";
 import type { Chapter, ChapterUpdate, ChapterStatus } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
@@ -63,6 +63,14 @@ export default function EditChapterPage() {
       setSaving(true);
       setError(null);
       await chapterApi.update(chapterId, formData);
+      // Auto-summarize in background if content exists
+      if (formData.content && formData.content.length > 100) {
+        agentApi.autoSummarize({
+          project_id: projectId,
+          chapter_id: chapterId,
+          content: formData.content,
+        }).catch(() => { /* background task, ignore errors */ });
+      }
       router.push(`/projects/${projectId}/chapters/${chapterId}`);
     } catch (err) {
       if (err instanceof ApiError) {

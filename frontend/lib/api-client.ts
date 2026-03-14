@@ -326,3 +326,138 @@ export const dependencyApi = {
       `/api/v1/dependencies/analysis${buildQueryString(params)}`
     ),
 };
+
+// ============================================================================
+// Agent API
+// ============================================================================
+
+import type { AgentChatRequest, AgentChatResponse, Suggestion } from "@/lib/types";
+
+export const agentApi = {
+  chat: (data: AgentChatRequest) =>
+    fetchApi<AgentChatResponse>("/api/v1/agent/chat", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  chatStream: async function* (data: AgentChatRequest): AsyncGenerator<string, void, unknown> {
+    const url = `${API_BASE_URL}/api/v1/agent/chat/stream`;
+    const apiKey = typeof window !== "undefined" ? localStorage.getItem("api_key") : null;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey) {
+      headers["X-API-Key"] = apiKey;
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, "Stream request failed");
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) return;
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") return;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.content) {
+              yield parsed.content;
+            }
+          } catch {
+            // skip malformed data
+          }
+        }
+      }
+    }
+  },
+
+  autoSummarize: (data: { project_id: string; chapter_id: string; content: string }) =>
+    fetchApi<{ memories: unknown[]; count: number }>("/api/v1/agent/auto-summarize", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  continuityCheck: (data: { project_id: string; content: string }) =>
+    fetchApi<AgentChatResponse>("/api/v1/agent/continuity-check", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// ============================================================================
+// Suggestion API (enhanced)
+// ============================================================================
+
+export const suggestionApi = {
+  list: (projectId: string, params?: { status?: string; skip?: number; limit?: number }) =>
+    fetchApi<Suggestion[]>(
+      `/api/v1/suggestions${buildQueryString({ project_id: projectId, ...params })}`
+    ),
+
+  get: (id: string) =>
+    fetchApi<Suggestion>(`/api/v1/suggestions/${id}`),
+
+  action: (id: string, action: "confirm" | "discard" | "commit") =>
+    fetchApi<{ success: boolean; message: string }>(
+      `/api/v1/suggestions/${id}/action`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action }),
+      }
+    ),
+
+  pendingCount: (projectId: string) =>
+    fetchApi<{ count: number }>(
+      `/api/v1/suggestions/pending/count${buildQueryString({ project_id: projectId })}`
+    ),
+};
+
+// ============================================================================
+// Export API
+// ============================================================================
+
+export const exportApi = {
+  download: async (projectId: string, format: "txt" | "markdown" = "txt") => {
+    const url = `${API_BASE_URL}/api/v1/projects/${projectId}/export?format=${format}`;
+    const apiKey = typeof window !== "undefined" ? localStorage.getItem("api_key") : null;
+
+    const headers: Record<string, string> = {};
+    if (apiKey) {
+      headers["X-API-Key"] = apiKey;
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new ApiError(response.status, "Export failed");
+    }
+
+    const blob = await response.blob();
+    const filename = format === "txt" ? "novel.txt" : "novel.md";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
+};

@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { characterApi } from "@/lib/api-client";
 import type { Character } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
+import { AgentChatPanel } from "@/components/AgentChatPanel";
 
 export default function CharacterDetailPage() {
   const params = useParams();
@@ -207,6 +208,12 @@ export default function CharacterDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Agent Chat */}
+        <AgentChatPanel
+          projectId={projectId}
+          context={{ character_id: characterId, character_name: character.name }}
+        />
 
         {/* Delete Confirmation Modal */}
         <Modal

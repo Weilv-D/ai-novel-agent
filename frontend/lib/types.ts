@@ -249,3 +249,51 @@ export interface DependencyAnalysis {
   }>;
   risks: string[];
 }
+
+// Suggestion types
+export type SuggestionStatus = "draft" | "patched" | "committed" | "discarded";
+export type SuggestionType =
+  | "character_edit"
+  | "world_edit"
+  | "chapter_edit"
+  | "scene_edit"
+  | "content_gen"
+  | "outline_gen"
+  | "continuity_fix";
+
+export interface Suggestion {
+  id: string;
+  project_id: string;
+  target_type: string;
+  target_id: string;
+  type: SuggestionType;
+  content: Record<string, unknown>;
+  status: SuggestionStatus;
+  impact_analysis?: Record<string, unknown>;
+  committed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Chat types
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  suggestions?: Suggestion[];
+  metadata?: Record<string, unknown>;
+  timestamp: number;
+}
+
+export interface AgentChatRequest {
+  project_id: string;
+  message: string;
+  history: Array<{ role: string; content: string }>;
+  context?: Record<string, unknown>;
+}
+
+export interface AgentChatResponse {
+  message: string;
+  suggestions: Array<Record<string, unknown>>;
+  metadata: Record<string, unknown>;
+}
