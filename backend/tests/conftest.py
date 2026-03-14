@@ -1,22 +1,109 @@
 """Pytest configuration and fixtures."""
 
 import asyncio
+import os
+import tempfile
 import uuid as uuid_lib
 from collections.abc import AsyncGenerator, AsyncIterator, Generator
+from pathlib import Path
 from typing import Any
 
+import fastapi.testclient
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import String, TypeDecorator, event
+from httpx import ASGITransport, AsyncClient, Response
+from sqlalchemy import String, TypeDecorator, create_engine
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session, sessionmaker
+
+# Isolate tests from any developer-local backend/.env values.
+TEST_ENV_DEFAULTS = {
+    "DEBUG": "true",
+    "CORS_ORIGINS": "http://localhost:3000,http://localhost:3001",
+    "LLM_API_KEY": "",
+    "LLM_BASE_URL": "https://api.openai.com/v1",
+    "LLM_MODEL": "gpt-4o-mini",
+    "MAX_TOKENS": "4096",
+    "TEMPERATURE": "0.7",
+    "EMBEDDING_API_KEY": "",
+    "EMBEDDING_BASE_URL": "",
+    "EMBEDDING_MODEL": "text-embedding-3-small",
+    "EMBEDDING_DIMENSION": "1536",
+}
+for key, value in TEST_ENV_DEFAULTS.items():
+    os.environ[key] = value
 
 from app.main import app
 from app.models import Base
 
+
 # Test database URL - using SQLite for isolated, dependency-free testing
 # Note: For production-like testing with PostgreSQL, override via environment variable
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+class CompatibleTestClient:
+    """Minimal sync test client backed by httpx ASGI transport.
+
+    Starlette's TestClient currently hangs in this environment when issuing
+    requests from synchronous tests. This wrapper preserves the simple
+    request/response API used by the test suite.
+    """
+
+    __test__ = False
+
+    def __init__(
+        self,
+        app: Any,
+        *,
+        base_url: str = "http://testserver",
+        raise_server_exceptions: bool = True,
+        headers: dict[str, str] | None = None,
+        follow_redirects: bool = True,
+        **_: Any,
+    ) -> None:
+        self.app = app
+        self.base_url = base_url
+        self.raise_server_exceptions = raise_server_exceptions
+        self.headers = headers or {}
+        self.follow_redirects = follow_redirects
+
+    async def _request_async(self, method: str, url: str, **kwargs: Any) -> Response:
+        transport = ASGITransport(
+            app=self.app,
+            raise_app_exceptions=self.raise_server_exceptions,
+        )
+        async with AsyncClient(
+            transport=transport,
+            base_url=self.base_url,
+            headers=self.headers,
+            follow_redirects=self.follow_redirects,
+        ) as client:
+            return await client.request(method, url, **kwargs)
+
+    def request(self, method: str, url: str, **kwargs: Any) -> Response:
+        return asyncio.run(self._request_async(method, url, **kwargs))
+
+    def get(self, url: str, **kwargs: Any) -> Response:
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> Response:
+        return self.request("POST", url, **kwargs)
+
+    def patch(self, url: str, **kwargs: Any) -> Response:
+        return self.request("PATCH", url, **kwargs)
+
+    def put(self, url: str, **kwargs: Any) -> Response:
+        return self.request("PUT", url, **kwargs)
+
+    def delete(self, url: str, **kwargs: Any) -> Response:
+        return self.request("DELETE", url, **kwargs)
+
+    def __enter__(self) -> "CompatibleTestClient":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        return None
+
+
+fastapi.testclient.TestClient = CompatibleTestClient
 
 
 class SQLiteUUID(TypeDecorator):
@@ -46,6 +133,81 @@ class SQLiteUUID(TypeDecorator):
         return value
 
 
+class AsyncCompatibleConnection:
+    """Async-shaped wrapper around a synchronous SQLAlchemy connection."""
+
+    def __init__(self, connection: Any):
+        self._connection = connection
+
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        return self._connection.execute(*args, **kwargs)
+
+
+class AsyncCompatibleBeginContext:
+    """Async context manager proxy for engine.begin()."""
+
+    def __init__(self, begin_ctx: Any):
+        self._begin_ctx = begin_ctx
+        self._connection: Any | None = None
+
+    async def __aenter__(self) -> AsyncCompatibleConnection:
+        self._connection = self._begin_ctx.__enter__()
+        return AsyncCompatibleConnection(self._connection)
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self._begin_ctx.__exit__(exc_type, exc, tb)
+
+
+class AsyncCompatibleEngine:
+    """Async-shaped wrapper around a synchronous SQLAlchemy engine."""
+
+    def __init__(self, engine: Any):
+        self._engine = engine
+
+    def begin(self) -> AsyncCompatibleBeginContext:
+        return AsyncCompatibleBeginContext(self._engine.begin())
+
+    async def dispose(self) -> None:
+        self._engine.dispose()
+
+
+class AsyncCompatibleSession:
+    """Async-shaped wrapper around a synchronous SQLAlchemy session."""
+
+    def __init__(self, session: Session):
+        self._session = session
+
+    def add(self, instance: Any) -> None:
+        self._session.add(instance)
+
+    def add_all(self, instances: list[Any]) -> None:
+        self._session.add_all(instances)
+
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        return self._session.execute(*args, **kwargs)
+
+    async def flush(self) -> None:
+        self._session.flush()
+
+    async def refresh(self, instance: Any) -> None:
+        self._session.refresh(instance)
+
+    async def delete(self, instance: Any) -> None:
+        self._session.delete(instance)
+
+    async def commit(self) -> None:
+        self._session.commit()
+
+    async def rollback(self) -> None:
+        self._session.rollback()
+
+    async def close(self) -> None:
+        self._session.close()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._session, name)
+
+
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     """Create event loop for async tests."""
@@ -55,49 +217,43 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 
 @pytest.fixture(scope="function")
-async def db_engine() -> AsyncGenerator[Any, None]:
+def db_engine() -> Generator[Any, None, None]:
     """Create test database engine with UUID support for SQLite."""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = Path(tmp.name)
 
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
+    sync_engine = create_engine(
+        f"sqlite:///{db_path}",
         echo=False,
-        connect_args={"check_same_thread": False}
     )
+    wrapped_engine = AsyncCompatibleEngine(sync_engine)
 
     # Replace UUID columns with SQLite-compatible UUID type
-    async def _replace_uuid_types():
+    def _replace_uuid_types() -> None:
         """Replace UUID column types for SQLite compatibility."""
-        from sqlalchemy import inspect
-
-        from app.models import Base
-
         for table in Base.metadata.sorted_tables:
             for col in table.columns:
                 if isinstance(col.type, UUID):
-                    # Replace with SQLiteUUID
                     col.type = SQLiteUUID()
 
     # Save original UUID column types to restore after test
-    from app.models import Base
     _original_types = {}
     for table in Base.metadata.sorted_tables:
         for col in table.columns:
             if isinstance(col.type, UUID):
                 _original_types[(table.name, col.name)] = col.type
 
-    await _replace_uuid_types()
+    _replace_uuid_types()
 
     # Create all tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    with sync_engine.begin() as conn:
+        Base.metadata.create_all(bind=conn)
 
-    yield engine
+    yield wrapped_engine
 
-    # Drop all tables after test
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-    await engine.dispose()
+    sync_engine.dispose()
+    if db_path.exists():
+        db_path.unlink()
 
     # Restore original UUID column types to prevent global side effects
     for table in Base.metadata.sorted_tables:
@@ -107,16 +263,19 @@ async def db_engine() -> AsyncGenerator[Any, None]:
 
 
 @pytest.fixture(scope="function")
-async def db_session(db_engine: Any) -> AsyncGenerator[AsyncSession, None]:
+def db_session(db_engine: Any) -> Generator[AsyncSession, None, None]:
     """Create test database session."""
-    async_session_maker = async_sessionmaker(
-        bind=db_engine,
-        class_=AsyncSession,
+    sync_session_maker = sessionmaker(
+        bind=db_engine._engine,
+        class_=Session,
         expire_on_commit=False,
     )
 
-    async with async_session_maker() as session:
+    session = AsyncCompatibleSession(sync_session_maker())
+    try:
         yield session
+    finally:
+        session._session.close()
 
 
 @pytest.fixture(scope="function")

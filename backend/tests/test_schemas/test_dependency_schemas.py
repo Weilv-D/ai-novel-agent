@@ -145,7 +145,6 @@ class TestDependencySchemas:
         """Test ImpactAnalysisResponse schema."""
         source_id = uuid.uuid4()
         target_id = uuid.uuid4()
-        from app.schemas import ImpactDetail
 
         data = {
             "source_type": "character",

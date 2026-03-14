@@ -3,8 +3,9 @@
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any, cast
 
 from app.services.llm import LLMService, llm_service
 
@@ -90,12 +91,17 @@ class BaseAgent(ABC):
 
         Handles responses with markdown code fences or bare JSON.
         """
+        def _as_json_object(value: Any) -> dict[str, Any] | None:
+            if isinstance(value, dict):
+                return cast(dict[str, Any], value)
+            return None
+
         # Try to find JSON in code block
         import re
         json_match = re.search(r"```(?:json)?\s*\n?([\s\S]*?)\n?```", text)
         if json_match:
             try:
-                return json.loads(json_match.group(1).strip())
+                return _as_json_object(json.loads(json_match.group(1).strip()))
             except json.JSONDecodeError:
                 pass
 
@@ -103,7 +109,7 @@ class BaseAgent(ABC):
         for start in range(len(text)):
             if text[start] == "{":
                 try:
-                    return json.loads(text[start:])
+                    return _as_json_object(json.loads(text[start:]))
                 except json.JSONDecodeError:
                     continue
 

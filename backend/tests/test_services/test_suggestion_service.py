@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, NotFoundException
 from app.models.project import Project
-from app.models.suggestion import Suggestion, SuggestionStatus, SuggestionType
+from app.models.suggestion import SuggestionStatus, SuggestionType
 from app.schemas.suggestion import SuggestionCreate, SuggestionUpdate
 from app.services.project import project_service
 from app.services.suggestion import suggestion_service

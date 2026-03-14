@@ -3,8 +3,9 @@
 from fastapi import APIRouter
 
 from app.api.v1.agent import router as agent_router
+from app.api.v1.chapters import router as chapters_router
+from app.api.v1.chapters import scene_router, volume_router
 from app.api.v1.characters import router as characters_router
-from app.api.v1.chapters import router as chapters_router, scene_router, volume_router
 from app.api.v1.dependencies import router as dependencies_router
 from app.api.v1.export import router as export_router
 from app.api.v1.health import router as health_router

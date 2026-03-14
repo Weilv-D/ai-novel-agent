@@ -1,6 +1,5 @@
 """Integration tests for Snapshot service layer with real DB."""
 
-import asyncio
 from uuid import UUID, uuid4
 
 import pytest
@@ -8,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
 from app.models.project import Project
-from app.models.snapshot import Snapshot
 from app.schemas.snapshot import SnapshotCreate, SnapshotUpdate
 from app.services.project import project_service
 from app.services.snapshot import snapshot_service

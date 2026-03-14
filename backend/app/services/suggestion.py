@@ -1,12 +1,12 @@
 """Suggestion service layer with three-state modification system."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import BadRequestException, NotFoundException
+from app.core.exceptions import BadRequestException
 from app.models.suggestion import Suggestion, SuggestionStatus
 from app.schemas.suggestion import SuggestionCreate, SuggestionUpdate
 from app.services.base import CRUDBase
@@ -115,7 +115,7 @@ class CRUDSuggestion(CRUDBase[Suggestion, SuggestionCreate, SuggestionUpdate]):
                 f"Only patched suggestions can be committed."
             )
         suggestion.status = SuggestionStatus.COMMITTED.value
-        suggestion.committed_at = datetime.now(timezone.utc)
+        suggestion.committed_at = datetime.now(UTC)
         await db.flush()
         await db.refresh(suggestion)
         return suggestion

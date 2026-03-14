@@ -1,6 +1,7 @@
 """Suggestion model for three-state modification system."""
 
 import uuid
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -61,7 +62,7 @@ class Suggestion(Base, UUIDMixin, TimestampMixin):
     impact_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # When committed
-    committed_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return f"Suggestion(id={self.id!r}, type={self.type!r}, status={self.status!r})"

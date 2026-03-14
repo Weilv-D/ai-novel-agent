@@ -8,6 +8,8 @@
 - 创建日期：2026-03-11
 - 更新日期：2026-03-12
 
+> 实现说明：本文件保留“目标架构”视角，部分目录示意早于当前代码实现。当前仓库实际结构、开发命令和测试状态以 `README.md`、`docs/STATUS.md`、`docs/DEVELOPMENT.md` 为准。
+
 ---
 
 ## 1. 整体架构
@@ -270,7 +272,7 @@ frontend/
 ├── public/
 ├── package.json
 ├── tsconfig.json
-├── next.config.js
+├── next.config.mjs
 └── tailwind.config.ts
 ```
 

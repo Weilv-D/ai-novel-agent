@@ -4,8 +4,8 @@ This test verifies that UUID type replacements are properly isolated between tes
 The key insight: during a test, types are SQLiteUUID (not UUID instance), but
 fixture cleanup restores them to original UUID for next test.
 """
-import pytest
 from sqlalchemy.dialects.postgresql import UUID
+
 from app.models import Base
 
 

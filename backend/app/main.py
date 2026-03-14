@@ -1,6 +1,8 @@
 """FastAPI application entry point."""
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +24,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting AI Novel Agent API", version=settings.app_version, environment=settings.environment)
@@ -62,9 +64,9 @@ app.add_middleware(
 )
 
 # Register exception handlers
-app.add_exception_handler(AppException, app_exception_handler)
-app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(AppException, cast(Any, app_exception_handler))
+app.add_exception_handler(HTTPException, cast(Any, http_exception_handler))
+app.add_exception_handler(Exception, cast(Any, generic_exception_handler))
 
 # Include routers
 app.include_router(api_v1_router)

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field
 
 # ============ Enums ============
 
@@ -37,7 +37,7 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     """Schema for creating a project."""
 
-    status: ProjectStatusLiteral = Field(default=ProjectStatus.DRAFTING)
+    status: ProjectStatusLiteral = Field(default="drafting")
 
 
 class ProjectUpdate(BaseModel):

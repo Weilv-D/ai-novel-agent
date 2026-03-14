@@ -4,12 +4,11 @@ import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models.suggestion import Suggestion, SuggestionStatus
+from app.models.suggestion import SuggestionStatus
 from app.schemas.suggestion import SuggestionResponse
 
 

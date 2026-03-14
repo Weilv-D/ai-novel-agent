@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
 from app.main import app
-from app.schemas.memory import MemoryResponse, MemoryMatch
+from app.schemas.memory import MemoryResponse
 
 EMBEDDING_DIMENSION = get_settings().embedding_dimension
 
@@ -507,9 +507,6 @@ class TestAutoEmbedBehavior:
         client = TestClient(app)
         project_id = uuid.uuid4()
         memory_id = uuid.uuid4()
-
-        # Capture the actual Memory model created
-        created_memory = None
 
         async def mock_create_with_project(db, *, obj_in, project_id):
             # Simulate what the real service does: model_dump with exclude

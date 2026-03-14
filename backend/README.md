@@ -1,149 +1,82 @@
 # AI Novel Agent Backend
 
-Backend service for AI Novel Agent - a long-form novel writing system with agent-based AI collaboration.
+FastAPI backend for the AI Novel Agent project. The backend is already beyond “skeleton” stage: CRUD APIs, agent routes, memory search, snapshots, dependency analysis, export, and test coverage are all present.
 
-## Tech Stack
+## Current Validation Snapshot
 
-- **Framework**: FastAPI
-- **ORM**: SQLAlchemy 2.0 (async)
-- **Database**: PostgreSQL 16 + pgvector
-- **Cache**: Redis
-- **Task Queue**: Celery
-- **LLM**: OpenAI SDK (compatible)
+- `395` tests collected
+- `393 passed`, `2 skipped`
+- `ruff check app tests` passes with the current repository rule set
+- `verify.py` still works as a quick import/OpenAPI sanity check
 
-## Development Setup
-
-### Prerequisites
-
-**Option 1: Full Docker Setup (Recommended)**
-- Docker & Docker Compose
-- No Python installation required
-
-**Option 2: Local Python Setup**
-- Python 3.11+
-- pip and venv module
-- PostgreSQL 16 + pgvector (for full features)
-- Redis (for caching/celery)
-
-> **Note**: The `verify.py` script and basic tests require Python dependencies to be installed.
-
-### Quick Start (No Database Required)
+## Local Setup
 
 ```bash
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run verification to check installation
-python verify.py
-
-# Run tests (uses SQLite, no external dependencies)
-pytest
-
-# Start development server (health endpoint works without database)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd backend
+python3 -m venv .venv
+./.venv/bin/python -m pip install -e ".[dev]"
+cp .env.example .env
 ```
 
-### Full Local Development (with PostgreSQL)
+Run commands from `backend/` so `app.core.config.Settings` can resolve `.env` correctly.
+
+## Common Commands
 
 ```bash
-# Start services with Docker Compose
-cd ../infra && docker-compose up -d
+# quick verification
+./.venv/bin/python verify.py
 
-# Run database migrations
-alembic upgrade head
+# tests
+./.venv/bin/python -m pytest
+./.venv/bin/python -m pytest tests/test_integration/test_http_integration.py -v
 
-# Run development server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# lint / type check
+./.venv/bin/ruff check app tests
+./.venv/bin/python -m mypy app
+
+# local server
+./.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Running Tests
+## Runtime Notes
 
-```bash
-# Run all tests
-pytest
+- Production target is PostgreSQL 16 + pgvector.
+- Tests use SQLite and custom compatibility fixtures to stay isolated from local developer settings.
+- `EMBEDDING_DIMENSION` must match the selected embedding model output size.
+- Project routes currently run in a single-user placeholder mode; the real auth/user binding is not wired in yet.
 
-# Run with coverage
-pytest --cov=app --cov-report=html
+## Scripts
 
-# Run specific test file
-pytest tests/test_api/test_health.py -v
+- `verify.py`: quick backend sanity checks
+- `scripts/seed_data.py`: create sample development data
+- `scripts/verify_api_integration.py`: manual live-backend smoke test
+- `scripts/verify_sqlite_integration.py`: manual SQLite-backed HTTP smoke test
 
-# Run HTTP integration tests (end-to-end API testing with real DB)
-pytest tests/test_integration/test_http_integration.py -v
+The old standalone SQLite migration test script has been removed. The maintained path is the pytest integration suite in `tests/test_integration/test_sqlite_migration.py`.
 
-# Run SQLite integration verification script
-python scripts/verify_sqlite_integration.py
-```
+## Structure
 
-**Database Note**: Tests use SQLite for isolation and speed. SQLite is sufficient for unit/integration tests, but production requires PostgreSQL 16 + pgvector for full feature support (vector similarity search, JSONB, native UUID).
-
-### Code Quality
-
-```bash
-# Linting
-ruff check app/
-
-# Formatting
-ruff format app/
-
-# Type checking
-mypy app/
-```
-
-## Project Structure
-
-```
+```text
 backend/
 ├── app/
-│   ├── api/v1/          # API routes
-│   │   └── health.py    # Health check endpoint (no DB required)
-│   ├── core/            # Configuration, logging, security
-│   ├── models/          # SQLAlchemy models
-│   ├── schemas/         # Pydantic schemas
-│   ├── services/        # Business logic (to be implemented)
-│   ├── agents/          # Agent orchestration (to be implemented)
-│   ├── db/              # Database session management
-│   └── main.py          # FastAPI entry point
-├── tests/               # Test suite (uses SQLite for isolation)
-│   ├── conftest.py      # Pytest configuration
-│   └── test_api/        # API tests
-├── alembic/             # Database migrations
-│   └── versions/        # Migration files
-├── scripts/             # Utility scripts
-├── pyproject.toml       # Project configuration
-└── verify.py            # Quick verification script
+│   ├── agents/
+│   ├── api/v1/
+│   ├── core/
+│   ├── db/
+│   ├── models/
+│   ├── schemas/
+│   └── services/
+├── alembic/
+├── scripts/
+├── tests/
+├── pyproject.toml
+└── verify.py
 ```
 
-## API Documentation
+## API Docs
 
-Once running, visit:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- Health check: http://localhost:8000/api/v1/health
+Once the server is running:
 
-## Database Migrations
-
-```bash
-# Create a new migration
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback one migration
-alembic downgrade -1
-
-# View migration history
-alembic history
-```
-
-## Current Status
-
-Phase 1 (Backend Skeleton) - In Progress
-- ✅ Project structure and configuration
-- ✅ All SQLAlchemy models defined
-- ✅ Health check API endpoint (no DB dependency)
-- ✅ Initial Alembic migration
-- ✅ Basic test suite with isolated tests
-- ✅ Docker Compose setup (postgres, redis, backend services)
-- ⏳ LLM service integration
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+- Health: `http://localhost:8000/api/v1/health`

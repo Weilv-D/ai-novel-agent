@@ -9,16 +9,8 @@ Run with:
     pytest tests/test_integration/test_http_integration.py -v
 """
 
-import uuid
-from typing import Any
 
-import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.main import app
-from app.models.user import User
-from app.core.security import get_password_hash
+from httpx import AsyncClient
 
 
 class TestHealthEndpoint:

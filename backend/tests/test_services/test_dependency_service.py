@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
-from app.models.dependency import Dependency, DependencyType
+from app.models.dependency import DependencyType
 from app.models.project import Project
 from app.schemas.dependency import DependencyCreate, DependencyUpdate
 from app.services.dependency import dependency_service

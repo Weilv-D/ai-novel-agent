@@ -2,7 +2,8 @@
 
 import logging
 import uuid
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +14,8 @@ from app.agents.draft_agent import DraftAgent
 from app.agents.lore_agent import LoreAgent
 from app.agents.outline_agent import OutlineAgent
 from app.schemas.suggestion import SuggestionCreate
-from app.services.character import character_service
 from app.services.chapter import chapter_service
+from app.services.character import character_service
 from app.services.llm import LLMService, llm_service
 from app.services.memory import memory_service
 from app.services.suggestion import suggestion_service
@@ -105,7 +106,12 @@ class WritingOrchestrator:
         try:
             settings = await world_setting_service.get_by_project(db, project_id=pid, limit=20)
             context_data["world_settings"] = [
-                {"id": str(ws.id), "category": ws.category, "name": ws.name, "content": ws.content[:300]}
+                {
+                    "id": str(ws.id),
+                    "category": ws.category,
+                    "name": ws.name,
+                    "content": (ws.content or "")[:300],
+                }
                 for ws in settings
             ]
         except Exception:
@@ -255,7 +261,6 @@ class WritingOrchestrator:
         content: str,
     ) -> list[dict[str, Any]]:
         """Auto-summarize chapter content into memory facts."""
-        from app.schemas.memory import MemoryCreate
 
         prompt = f"""分析以下章节内容，提取关键事实和情节要点。
 以 JSON 数组格式返回，每个元素包含：

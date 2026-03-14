@@ -13,7 +13,6 @@ from app.core.exceptions import (
     generic_exception_handler,
     http_exception_handler,
 )
-from app.main import app
 
 
 class TestAppException:

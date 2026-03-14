@@ -5,7 +5,6 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.services.project import project_service
 

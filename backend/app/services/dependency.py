@@ -1,13 +1,19 @@
 """Dependency service layer for impact analysis and relationship tracking."""
 
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import BadRequestException
 from app.models.dependency import Dependency, DependencyType
-from app.schemas.dependency import DependencyCreate, DependencyUpdate, ImpactDetail
+from app.schemas.dependency import (
+    DependencyCreate,
+    DependencyEntityTypeLiteral,
+    DependencyTypeLiteral,
+    DependencyUpdate,
+    ImpactDetail,
+)
 from app.services.base import CRUDBase
 
 
@@ -193,7 +199,7 @@ class CRUDDependency(CRUDBase[Dependency, DependencyCreate, DependencyUpdate]):
         )
         result = await db.execute(stmt)
         await db.flush()
-        return result.rowcount
+        return cast(CursorResult[Any], result).rowcount or 0
 
     async def delete_by_source(
         self,
@@ -213,7 +219,7 @@ class CRUDDependency(CRUDBase[Dependency, DependencyCreate, DependencyUpdate]):
         )
         result = await db.execute(stmt)
         await db.flush()
-        return result.rowcount
+        return cast(CursorResult[Any], result).rowcount or 0
 
     async def analyze_impact(
         self,
@@ -236,9 +242,9 @@ class CRUDDependency(CRUDBase[Dependency, DependencyCreate, DependencyUpdate]):
         for dep in dependencies:
             impacts.append(
                 ImpactDetail(
-                    target_type=dep.target_type,  # type: ignore
+                    target_type=cast(DependencyEntityTypeLiteral, dep.target_type),
                     target_id=dep.target_id,
-                    dependency_type=dep.dependency_type,  # type: ignore
+                    dependency_type=cast(DependencyTypeLiteral | None, dep.dependency_type),
                     description=self._describe_impact(dep),
                 )
             )
@@ -265,9 +271,9 @@ class CRUDDependency(CRUDBase[Dependency, DependencyCreate, DependencyUpdate]):
         for dep in dependencies:
             impacts.append(
                 ImpactDetail(
-                    target_type=dep.source_type,  # type: ignore
+                    target_type=cast(DependencyEntityTypeLiteral, dep.source_type),
                     target_id=dep.source_id,
-                    dependency_type=dep.dependency_type,  # type: ignore
+                    dependency_type=cast(DependencyTypeLiteral | None, dep.dependency_type),
                     description=self._describe_reverse_impact(dep),
                 )
             )

@@ -75,7 +75,7 @@ class SuggestionCreate(SuggestionBase):
     """Schema for creating a suggestion."""
 
     project_id: UUID
-    status: SuggestionStatusLiteral = Field(default=SuggestionStatus.DRAFT)
+    status: SuggestionStatusLiteral = Field(default="draft")
 
 
 class SuggestionUpdate(BaseModel):

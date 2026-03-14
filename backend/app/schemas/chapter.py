@@ -66,7 +66,7 @@ class ChapterBase(BaseModel):
     title: str | None = Field(None, max_length=255)
     outline: str | None = None
     content: str | None = None
-    status: ChapterStatusLiteral = Field(default=ChapterStatus.DRAFT)
+    status: ChapterStatusLiteral = Field(default="draft")
     notes: str | None = None
 
 

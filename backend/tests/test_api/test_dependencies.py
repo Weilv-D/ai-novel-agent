@@ -4,13 +4,11 @@ import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models.dependency import Dependency
-from app.schemas.dependency import DependencyResponse, ImpactAnalysisResponse
+from app.schemas.dependency import DependencyResponse
 
 
 class TestListDependencies:

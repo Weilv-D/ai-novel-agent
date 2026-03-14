@@ -1,6 +1,5 @@
 """WorldSetting API routes."""
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status

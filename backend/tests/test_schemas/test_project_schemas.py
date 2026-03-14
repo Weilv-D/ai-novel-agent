@@ -18,7 +18,6 @@ class TestProjectSchemas:
 
     def test_project_create_valid(self):
         """Test valid ProjectCreate schema."""
-        user_id = uuid.uuid4()
         data = {
             "name": "My Novel",
             "genre": "Fantasy",

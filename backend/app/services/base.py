@@ -1,10 +1,9 @@
 """Base service class for CRUD operations."""
 
-from importlib import import_module
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
-from sqlalchemy import Select, UnaryExpression, select
+from sqlalchemy import UnaryExpression, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
@@ -54,7 +53,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def create(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
         """Create a new record."""
         obj_dict = obj_in.model_dump()
-        db_obj = self.model(**obj_dict)  # type: ignore[arg-type]
+        db_obj = self.model(**obj_dict)
         db.add(db_obj)
         await db.flush()
         await db.refresh(db_obj)

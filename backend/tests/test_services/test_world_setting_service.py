@@ -5,7 +5,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.world_setting import WorldSetting
 from app.schemas.project import ProjectCreate
 from app.schemas.world_setting import WorldSettingCreate, WorldSettingUpdate
 from app.services.project import project_service
@@ -18,7 +17,6 @@ class TestWorldSettingServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_empty(self, db_session: AsyncSession):
         """Test get_by_project returns empty list when no settings exist."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(
@@ -33,7 +31,6 @@ class TestWorldSettingServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_settings(self, db_session: AsyncSession):
         """Test get_by_project returns settings for specific project."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(
@@ -74,7 +71,6 @@ class TestWorldSettingServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_pagination(self, db_session: AsyncSession):
         """Test get_by_project with skip and limit parameters."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(
@@ -108,7 +104,6 @@ class TestWorldSettingServiceGetByCategory:
     @pytest.mark.asyncio
     async def test_get_by_category_empty(self, db_session: AsyncSession):
         """Test get_by_category returns empty list when no settings exist."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(
@@ -125,7 +120,6 @@ class TestWorldSettingServiceGetByCategory:
     @pytest.mark.asyncio
     async def test_get_by_category_filters_correctly(self, db_session: AsyncSession):
         """Test get_by_category filters by category correctly."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(
@@ -172,7 +166,6 @@ class TestWorldSettingServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_valid(self, db_session: AsyncSession):
         """Test creating a world setting with valid data."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(
@@ -203,7 +196,6 @@ class TestWorldSettingServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_minimal(self, db_session: AsyncSession):
         """Test creating a world setting with minimal required fields."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(
@@ -232,7 +224,6 @@ class TestWorldSettingServiceUpdate:
     @pytest.mark.asyncio
     async def test_update_partial(self, db_session: AsyncSession):
         """Test updating specific fields of a world setting."""
-        from app.schemas.project import ProjectCreate
 
         user_id = uuid4()
         project = await project_service.create_with_user(

@@ -4,7 +4,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -71,13 +71,40 @@ async def run_async_migrations() -> None:
     await connectable.dispose()
 
 
+def run_sync_migrations() -> None:
+    """Run migrations with a synchronous engine.
+
+    SQLite is used only for local tests here, and the synchronous driver is
+    substantially more reliable than aiosqlite in this environment.
+    """
+    section = dict(config.get_section(config.config_ini_section, {}) or {})
+    url = section.get("sqlalchemy.url", "")
+    if url.startswith("sqlite+aiosqlite://"):
+        section["sqlalchemy.url"] = url.replace("sqlite+aiosqlite://", "sqlite://", 1)
+
+    connectable = engine_from_config(
+        section,
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
+
+    connectable.dispose()
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    asyncio.run(run_async_migrations())
+    url = config.get_main_option("sqlalchemy.url")
+    if url.startswith("sqlite"):
+        run_sync_migrations()
+    else:
+        asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():

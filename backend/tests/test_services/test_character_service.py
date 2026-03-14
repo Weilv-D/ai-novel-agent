@@ -5,7 +5,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.character import Character
 from app.schemas.character import CharacterCreate, CharacterUpdate
 from app.schemas.project import ProjectCreate
 from app.services.character import character_service

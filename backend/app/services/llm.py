@@ -7,15 +7,17 @@ Provides methods for:
 """
 
 import logging
-from typing import Any
+from collections.abc import AsyncIterator
+from typing import Any, Literal, TypedDict, cast, overload
 
-from openai import AsyncOpenAI, APIError, RateLimitError
+from openai import APIError, AsyncOpenAI, AsyncStream, RateLimitError
+from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessageParam
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
 
 from app.core.config import get_settings
@@ -23,6 +25,29 @@ from app.core.exceptions import BadRequestException, ServiceUnavailableException
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+class LLMUsage(TypedDict):
+    """Token usage metadata returned by chat completions."""
+
+    tokens_in: int
+    tokens_out: int
+    total: int
+
+
+class LLMGenerateResponse(TypedDict):
+    """Non-streaming LLM response payload."""
+
+    content: str
+    model: str
+    usage: LLMUsage
+
+
+class LLMStreamResponse(TypedDict):
+    """Streaming LLM response payload."""
+
+    stream: AsyncStream[ChatCompletionChunk]
+    model: str
 
 
 class LLMService:
@@ -97,6 +122,28 @@ class LLMService:
                 )
         return self._embedding_client
 
+    @overload
+    async def generate(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        stream: Literal[False] = False,
+    ) -> LLMGenerateResponse: ...
+
+    @overload
+    async def generate(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        stream: Literal[True],
+    ) -> LLMStreamResponse: ...
+
     async def generate(
         self,
         messages: list[dict[str, str]],
@@ -105,7 +152,7 @@ class LLMService:
         max_tokens: int | None = None,
         temperature: float | None = None,
         stream: bool = False,
-    ) -> dict[str, Any]:
+    ) -> LLMGenerateResponse | LLMStreamResponse:
         """Generate text using the LLM.
 
         Args:
@@ -134,11 +181,12 @@ class LLMService:
             before_sleep=before_sleep_log(logger, logging.WARNING),
             reraise=True,
         )
-        async def _do_generate() -> Any:
+        async def _do_generate() -> ChatCompletion | AsyncStream[ChatCompletionChunk]:
             """Inner function that performs the actual API call."""
+            typed_messages = cast(list[ChatCompletionMessageParam], messages)
             return await self.client.chat.completions.create(
                 model=model if model is not None else self.model,
-                messages=messages,
+                messages=typed_messages,
                 max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
                 temperature=temperature if temperature is not None else self.temperature,
                 stream=stream,
@@ -150,17 +198,19 @@ class LLMService:
             if stream:
                 # Return streaming response for async handling
                 return {
-                    "stream": response,
+                    "stream": cast(AsyncStream[ChatCompletionChunk], response),
                     "model": model if model is not None else self.model,
                 }
 
+            completion = cast(ChatCompletion, response)
+            usage = completion.usage
             return {
-                "content": response.choices[0].message.content,
-                "model": response.model,
+                "content": completion.choices[0].message.content or "",
+                "model": completion.model,
                 "usage": {
-                    "tokens_in": response.usage.prompt_tokens,
-                    "tokens_out": response.usage.completion_tokens,
-                    "total": response.usage.total_tokens,
+                    "tokens_in": usage.prompt_tokens if usage is not None else 0,
+                    "tokens_out": usage.completion_tokens if usage is not None else 0,
+                    "total": usage.total_tokens if usage is not None else 0,
                 },
             }
 
@@ -185,7 +235,7 @@ class LLMService:
         model: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-    ):
+    ) -> AsyncIterator[str]:
         """Generate text using the LLM with streaming.
 
         Yields chunks of content as they arrive.

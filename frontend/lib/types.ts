@@ -4,7 +4,7 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-export interface ApiError {
+export interface ApiErrorResponse {
   detail: string;
   status: number;
 }
@@ -183,71 +183,167 @@ export interface SceneUpdate {
   meta?: Record<string, unknown>;
 }
 
+// Volume types
+export interface Volume {
+  id: string;
+  project_id: string;
+  volume_number?: number;
+  title?: string;
+  outline?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VolumeCreate {
+  project_id: string;
+  volume_number?: number;
+  title?: string;
+  outline?: string;
+  notes?: string;
+}
+
+export interface VolumeUpdate {
+  volume_number?: number;
+  title?: string;
+  outline?: string;
+  notes?: string;
+}
+
 // Memory types
+export type MemoryType = "episode" | "semantic" | "fact";
+
 export interface Memory {
   id: string;
   project_id: string;
-  chapter_id?: string;
-  fact_type: string;
+  memory_type: MemoryType;
   content: string;
-  embedding?: number[];
-  metadata?: Record<string, unknown>;
+  meta: Record<string, unknown>;
+  embedding?: number[] | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface MemoryCreate {
   project_id: string;
-  chapter_id?: string;
-  fact_type: string;
+  memory_type: MemoryType;
   content: string;
-  metadata?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  embedding?: number[] | null;
+  auto_embed?: boolean;
+}
+
+export interface MemoryUpdate {
+  memory_type?: MemoryType;
+  content?: string;
+  meta?: Record<string, unknown>;
+  embedding?: number[] | null;
+  auto_embed?: boolean;
+}
+
+export interface MemoryMatch {
+  id: string;
+  memory_type: MemoryType;
+  content: string;
+  meta: Record<string, unknown>;
+  similarity: number;
+}
+
+export interface VectorSearchResponse {
+  matches: MemoryMatch[];
+  total_count: number;
+  search_summary?: string | null;
 }
 
 // Snapshot types
+export type SnapshotTargetType =
+  | "project"
+  | "character"
+  | "world_setting"
+  | "volume"
+  | "chapter"
+  | "scene"
+  | "suggestion";
+
 export interface Snapshot {
   id: string;
   project_id: string;
-  name: string;
-  description?: string;
+  target_type: SnapshotTargetType;
+  target_id: string;
+  data: Record<string, unknown>;
   created_at: string;
+  updated_at: string;
 }
 
 export interface SnapshotCreate {
   project_id: string;
-  name: string;
-  description?: string;
+  target_type: SnapshotTargetType;
+  target_id: string;
+  data: Record<string, unknown>;
+}
+
+export interface SnapshotUpdate {
+  data?: Record<string, unknown>;
+}
+
+export interface RollbackResponse {
+  snapshot_id: string;
+  target_type: SnapshotTargetType;
+  target_id: string;
+  rolled_back_at: string;
+  message: string;
 }
 
 // Dependency types
+export type DependencyEntityType =
+  | "project"
+  | "character"
+  | "world_setting"
+  | "volume"
+  | "chapter"
+  | "scene"
+  | "suggestion";
+
+export type DependencyType = "references" | "influences" | "contains" | "precedes";
+
 export interface Dependency {
   id: string;
-  source_type: string;
+  project_id: string;
+  source_type: DependencyEntityType;
   source_id: string;
-  target_type: string;
+  target_type: DependencyEntityType;
   target_id: string;
-  dependency_type: string;
-  metadata?: Record<string, unknown>;
+  dependency_type?: DependencyType | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface DependencyCreate {
-  source_type: string;
+  project_id: string;
+  source_type: DependencyEntityType;
   source_id: string;
-  target_type: string;
+  target_type: DependencyEntityType;
   target_id: string;
-  dependency_type: string;
-  metadata?: Record<string, unknown>;
+  dependency_type?: DependencyType | null;
 }
 
-export interface DependencyAnalysis {
-  affected_objects: Array<{
-    type: string;
-    id: string;
-    name: string;
-    impact_level: string;
-  }>;
-  risks: string[];
+export interface DependencyUpdate {
+  dependency_type?: DependencyType | null;
+}
+
+export interface ImpactDetail {
+  target_type: DependencyEntityType;
+  target_id: string;
+  dependency_type?: DependencyType | null;
+  description?: string | null;
+}
+
+export interface ImpactAnalysisResponse {
+  source_type: DependencyEntityType;
+  source_id: string;
+  impacted_objects: ImpactDetail[];
+  total_count: number;
+  analysis_summary?: string | null;
 }
 
 // Suggestion types
@@ -261,18 +357,45 @@ export type SuggestionType =
   | "outline_gen"
   | "continuity_fix";
 
+export type SuggestionTargetType = "character" | "world_setting" | "chapter" | "scene";
+export type SuggestionAction = "confirm" | "discard" | "commit";
+
 export interface Suggestion {
   id: string;
   project_id: string;
-  target_type: string;
+  target_type: SuggestionTargetType;
   target_id: string;
   type: SuggestionType;
   content: Record<string, unknown>;
   status: SuggestionStatus;
-  impact_analysis?: Record<string, unknown>;
-  committed_at?: string;
+  impact_analysis?: Record<string, unknown> | null;
+  committed_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SuggestionCreate {
+  project_id: string;
+  target_type: SuggestionTargetType;
+  target_id: string;
+  type: SuggestionType;
+  content: Record<string, unknown>;
+  status?: SuggestionStatus;
+}
+
+export interface SuggestionActionRequest {
+  action: SuggestionAction;
+  impact_analysis?: Record<string, unknown> | null;
+}
+
+export interface DependencyAnalysis {
+  affected_objects: Array<{
+    type: string;
+    id: string;
+    name: string;
+    impact_level: string;
+  }>;
+  risks: string[];
 }
 
 // Chat types

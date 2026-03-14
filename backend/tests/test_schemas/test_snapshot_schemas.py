@@ -1,6 +1,7 @@
 """Tests for snapshot schemas."""
 
 import uuid
+from datetime import UTC
 
 import pytest
 from pydantic import ValidationError
@@ -137,9 +138,9 @@ class TestSnapshotSchemas:
         """Test RollbackResponse schema."""
         snapshot_id = uuid.uuid4()
         target_id = uuid.uuid4()
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         data = {
             "snapshot_id": snapshot_id,
             "target_type": "chapter",

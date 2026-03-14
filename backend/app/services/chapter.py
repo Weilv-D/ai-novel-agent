@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chapter import Chapter, Scene, Volume

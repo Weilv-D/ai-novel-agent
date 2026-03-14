@@ -1,10 +1,10 @@
 """Tests for LLM service."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
-import httpx
 
+import httpx
 import pytest
-from openai import RateLimitError, APIError
+from openai import APIError, RateLimitError
 
 from app.core.exceptions import BadRequestException, ServiceUnavailableException
 from app.services.llm import LLMService

@@ -1,6 +1,7 @@
 """Agent API routes for AI-assisted writing."""
 
 import json
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -48,7 +49,7 @@ async def agent_chat_stream(
 ) -> StreamingResponse:
     """Send a message to the AI writing assistant with SSE streaming."""
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[str]:
         async for chunk in orchestrator.chat_stream(
             db,
             project_id=req.project_id,

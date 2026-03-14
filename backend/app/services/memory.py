@@ -12,7 +12,6 @@ from app.models.memory import Memory
 from app.schemas.memory import MemoryCreate, MemoryUpdate, VectorSearchRequest
 from app.services.base import CRUDBase
 
-
 EMBEDDING_DIMENSION = get_settings().embedding_dimension
 
 
@@ -64,8 +63,7 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
 
         # Import Vector for distance calculation
         from pgvector.sqlalchemy import Vector
-        from sqlalchemy import cast, case
-        from sqlalchemy.orm import aliased
+        from sqlalchemy import cast
 
         # Build query with cosine distance
         # Cosine distance = 1 - cosine_similarity, so we invert the threshold
@@ -97,7 +95,6 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
 
         # Use subquery to enable filtering by calculated similarity
         memory_subquery = base_query.subquery()
-        mem_alias = aliased(Memory, memory_subquery)
 
         # Final query filters by threshold and orders by similarity
         stmt = (

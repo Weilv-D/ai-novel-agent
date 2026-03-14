@@ -1,43 +1,60 @@
 """Memory model for storing narrative facts and vector embeddings."""
 
+import json
 import uuid
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
-from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.core.config import get_settings
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 # Import Vector type conditionally for SQLite compatibility
 try:
-    from pgvector.sqlalchemy import Vector
+    from pgvector.sqlalchemy import Vector as PgVector
 except ImportError:
-    # Fallback for SQLite testing: use a TypeDecorator that stores as JSON
-    from sqlalchemy import TypeDecorator, TEXT
-    import json
+    PgVector = None
 
-    class Vector(TypeDecorator):
-        """Fallback Vector type for SQLite compatibility."""
 
-        impl = TEXT
-        cache_ok = True
+class SQLiteVector(TypeDecorator[list[float]]):
+    """Fallback Vector type for SQLite compatibility."""
 
-        def __init__(self, dimension: int):
-            super().__init__()
-            self.dimension = dimension
+    impl = Text
+    cache_ok = True
 
-        def process_bind_param(self, value, dialect):
-            if value is None:
-                return None
-            return json.dumps(value)
+    def __init__(self, dimension: int) -> None:
+        super().__init__()
+        self.dimension = dimension
 
-        def process_result_value(self, value, dialect):
-            if value is None:
-                return None
-            return json.loads(value)
+    def process_bind_param(
+        self,
+        value: list[float] | None,
+        dialect: Dialect,
+    ) -> str | None:
+        if value is None:
+            return None
+        return json.dumps(value)
+
+    def process_result_value(
+        self,
+        value: str | None,
+        dialect: Dialect,
+    ) -> list[float] | None:
+        if value is None:
+            return None
+        return cast(list[float], json.loads(value))
+
+
+def vector_type(dimension: int) -> Any:
+    """Return the configured vector column type for the active environment."""
+    if PgVector is not None:
+        return PgVector(dimension)
+    return SQLiteVector(dimension)
 
 
 class MemoryType(str, Enum):
@@ -68,7 +85,7 @@ class Memory(Base, UUIDMixin, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Vector embedding dimension is configured via EMBEDDING_DIMENSION.
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSION), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(vector_type(EMBEDDING_DIMENSION), nullable=True)
 
     # Metadata
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False, name="metadata")

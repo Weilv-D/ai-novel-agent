@@ -11,10 +11,14 @@ echo ""
 # Change to script directory
 cd "$(dirname "$0")"
 
-# Check if docker-compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    echo "Error: docker-compose is not installed."
-    echo "Please install Docker Compose first."
+# Resolve Docker Compose command (supports v1 and v2)
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD=(docker-compose)
+elif docker compose version &> /dev/null; then
+    COMPOSE_CMD=(docker compose)
+else
+    echo "Error: Docker Compose is not installed."
+    echo "Install either 'docker-compose' or the 'docker compose' plugin first."
     exit 1
 fi
 
@@ -29,7 +33,7 @@ echo "Starting all services with Docker Compose..."
 echo ""
 
 # Start services
-docker-compose up -d
+"${COMPOSE_CMD[@]}" up -d
 
 echo ""
 echo "=================================================="
@@ -43,11 +47,11 @@ echo "  PostgreSQL:     localhost:5432"
 echo "  Redis:          localhost:6379"
 echo ""
 echo "To view logs:"
-echo "  docker-compose logs -f [service]"
+echo "  ${COMPOSE_CMD[*]} logs -f [service]"
 echo ""
 echo "To stop services:"
-echo "  docker-compose down"
+echo "  ${COMPOSE_CMD[*]} down"
 echo ""
-echo "To verify API integration:"
-echo "  cd ../backend && python scripts/verify_api_integration.py"
+echo "To run the backend test suite:"
+echo "  cd ../backend && ./.venv/bin/python -m pytest"
 echo ""

@@ -1,6 +1,7 @@
 """Database session and connection management."""
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -16,7 +17,7 @@ settings = get_settings()
 # Create engine args based on database type
 # SQLite doesn't support pool_size and max_overflow
 if settings.database_url.startswith("sqlite"):
-    engine_args = {"echo": settings.debug}
+    engine_args: dict[str, Any] = {"echo": settings.debug}
 else:
     engine_args = {
         "echo": settings.debug,

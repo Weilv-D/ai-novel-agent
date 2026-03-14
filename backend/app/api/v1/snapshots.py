@@ -1,6 +1,6 @@
 """Snapshot API routes for version control and rollback."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -13,7 +13,6 @@ from app.schemas.snapshot import (
     RollbackRequest,
     RollbackResponse,
     SnapshotCreate,
-    SnapshotQueryRequest,
     SnapshotResponse,
     SnapshotUpdate,
 )
@@ -132,7 +131,7 @@ async def rollback_to_snapshot(
         snapshot_id=snapshot.id,
         target_type=snapshot.target_type,
         target_id=snapshot.target_id,
-        rolled_back_at=datetime.now(timezone.utc),
+        rolled_back_at=datetime.now(UTC),
         message=f"Rollback data prepared for {snapshot.target_type}:{snapshot.target_id}. "
         f"Apply the snapshot.data to restore the object state.",
     )

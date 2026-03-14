@@ -38,12 +38,12 @@ class TestVolumeServiceGetByProject:
         )
 
         # Create volumes
-        volume1 = await volume_service.create_with_project(
+        await volume_service.create_with_project(
             db_session,
             obj_in=VolumeCreate(title="Volume 1", volume_number=1, project_id=project.id),
             project_id=project.id,
         )
-        volume2 = await volume_service.create_with_project(
+        await volume_service.create_with_project(
             db_session,
             obj_in=VolumeCreate(title="Volume 2", volume_number=2, project_id=project.id),
             project_id=project.id,
@@ -117,12 +117,12 @@ class TestChapterServiceGetByProject:
         )
 
         # Create chapters
-        chapter1 = await chapter_service.create_with_project(
+        await chapter_service.create_with_project(
             db_session,
             obj_in=ChapterCreate(title="Chapter 1", chapter_number=1, project_id=project.id),
             project_id=project.id,
         )
-        chapter2 = await chapter_service.create_with_project(
+        await chapter_service.create_with_project(
             db_session,
             obj_in=ChapterCreate(title="Chapter 2", chapter_number=2, project_id=project.id),
             project_id=project.id,
@@ -185,7 +185,6 @@ class TestChapterServiceGetByVolume:
         )
 
         # Update chapters to belong to volume
-        from app.services.base import CRUDBase
         chapter1.volume_id = volume.id
         chapter2.volume_id = volume.id
         await db_session.flush()
@@ -235,12 +234,12 @@ class TestSceneServiceGetByChapter:
         )
 
         # Create scenes
-        scene1 = await scene_service.create_with_chapter(
+        await scene_service.create_with_chapter(
             db_session,
             obj_in=SceneCreate(scene_order=1, content="Content 1", chapter_id=chapter.id),
             chapter_id=chapter.id,
         )
-        scene2 = await scene_service.create_with_chapter(
+        await scene_service.create_with_chapter(
             db_session,
             obj_in=SceneCreate(scene_order=2, content="Content 2", chapter_id=chapter.id),
             chapter_id=chapter.id,

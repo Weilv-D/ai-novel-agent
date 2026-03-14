@@ -16,7 +16,7 @@ async def export_project(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: str,
-    format: str = Query("txt", regex="^(txt|markdown)$"),
+    format: str = Query("txt", pattern="^(txt|markdown)$"),
 ) -> PlainTextResponse:
     """Export project content as TXT or Markdown."""
     if format == "txt":

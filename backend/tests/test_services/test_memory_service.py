@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException
-from app.models.memory import Memory
 from app.schemas.memory import MemoryCreate, MemoryUpdate, VectorSearchRequest
 from app.schemas.project import ProjectCreate
 from app.services.memory import memory_service

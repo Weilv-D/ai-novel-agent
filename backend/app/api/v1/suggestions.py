@@ -1,6 +1,5 @@
 """Suggestion API routes for three-state modification system."""
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status

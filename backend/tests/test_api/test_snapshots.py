@@ -4,12 +4,11 @@ import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.snapshot import RollbackResponse, SnapshotResponse
+from app.schemas.snapshot import SnapshotResponse
 
 
 class TestListSnapshots:
