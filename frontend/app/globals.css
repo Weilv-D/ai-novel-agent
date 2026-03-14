@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 :root {
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Songti SC",
+    "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif;
+  --font-display: "Baskerville", "Iowan Old Style", "Georgia", "Songti SC",
+    "Source Han Serif SC", "Noto Serif CJK SC", serif;
+
   /* Warm Rice Paper Tones (宣纸) */
   --paper: 247 243 235;
   --paper-soft: 254 252 248;
@@ -41,6 +46,7 @@ body {
   min-height: 100vh;
   color: rgb(var(--ink-950));
   background-color: rgb(var(--paper));
+  font-family: var(--font-serif);
   font-feature-settings: "liga" 1, "kern" 1, "palt" 1;
   position: relative;
   isolation: isolate;

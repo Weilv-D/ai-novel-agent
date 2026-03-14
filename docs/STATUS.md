@@ -27,6 +27,7 @@ AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶�
 - Suggestion / Diff / Impact Analysis 组件
 - API client、状态管理与类型定义
 - 当前版本的水墨风 UI 主题
+- 本地 serif 字体栈，无外部字体依赖
 
 ### 运行与验证
 

@@ -64,6 +64,7 @@ npm run build
 - Next.js 配置位于 `frontend/next.config.mjs`
 - 前端脚本通过 `node` 直接调用本地 CLI，不依赖 `node_modules/.bin` 的可执行位
 - 全局样式入口由 `frontend/app/layout.tsx` 引入 `frontend/app/globals.css`
+- 前端排版使用本地 serif 字体栈，不依赖外部字体服务
 - Docker 前端运行目录是 `frontend/.next-docker`；它属于运行态目录，不应由通用清理命令在服务运行时删除
 
 ## Docker 开发
