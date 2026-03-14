@@ -530,7 +530,7 @@ CREATE TABLE memories (
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
     memory_type VARCHAR(50) NOT NULL, -- episode, semantic, fact
     content TEXT NOT NULL,
-    embedding vector(1536), -- OpenAI embedding dimension
+    embedding vector(<configured_dimension>), -- 由 EMBEDDING_DIMENSION 决定
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP DEFAULT NOW()
 );

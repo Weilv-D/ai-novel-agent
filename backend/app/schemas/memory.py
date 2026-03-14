@@ -4,7 +4,24 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.config import get_settings
+
+EMBEDDING_DIMENSION = get_settings().embedding_dimension
+
+
+def _validate_embedding_length(
+    value: list[float] | None,
+    *,
+    field_name: str,
+) -> list[float] | None:
+    """Validate that an embedding matches the configured vector size."""
+    if value is not None and len(value) != EMBEDDING_DIMENSION:
+        raise ValueError(
+            f"{field_name} must have {EMBEDDING_DIMENSION} dimensions, got {len(value)}"
+        )
+    return value
 
 # ============ Enums ============
 
@@ -41,11 +58,18 @@ class MemoryCreate(MemoryBase):
 
     project_id: UUID = Field(..., description="Project ID this memory belongs to")
     embedding: list[float] | None = Field(
-        None, description="Vector embedding (1536 dimensions for OpenAI)"
+        None,
+        description=f"Vector embedding ({EMBEDDING_DIMENSION} dimensions)",
     )
     auto_embed: bool = Field(
         False, description="Automatically generate embedding from content"
     )
+
+    @field_validator("embedding")
+    @classmethod
+    def validate_embedding(cls, value: list[float] | None) -> list[float] | None:
+        """Validate embedding length when supplied explicitly."""
+        return _validate_embedding_length(value, field_name="embedding")
 
 
 class MemoryUpdate(BaseModel):
@@ -58,6 +82,12 @@ class MemoryUpdate(BaseModel):
     auto_embed: bool | None = Field(
         False, description="Automatically regenerate embedding from content if content changes"
     )
+
+    @field_validator("embedding")
+    @classmethod
+    def validate_embedding(cls, value: list[float] | None) -> list[float] | None:
+        """Validate embedding length when supplied explicitly."""
+        return _validate_embedding_length(value, field_name="embedding")
 
 
 class MemoryResponse(MemoryBase):
@@ -90,6 +120,13 @@ class VectorSearchRequest(BaseModel):
     memory_type: MemoryTypeLiteral | None = Field(
         None, description="Optional filter by memory type"
     )
+
+    @field_validator("query_embedding")
+    @classmethod
+    def validate_query_embedding(cls, value: list[float]) -> list[float]:
+        """Validate search embedding length."""
+        validated = _validate_embedding_length(value, field_name="query_embedding")
+        return validated if validated is not None else value
 
 
 class MemoryMatch(BaseModel):

@@ -7,8 +7,11 @@ from unittest.mock import AsyncMock, patch
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.main import app
 from app.schemas.memory import MemoryResponse, MemoryMatch
+
+EMBEDDING_DIMENSION = get_settings().embedding_dimension
 
 
 class TestListMemories:
@@ -175,7 +178,7 @@ class TestCreateMemory:
             "project_id": str(project_id),
             "memory_type": "semantic",
             "content": "Magic exists in this world.",
-            "embedding": [0.1] * 1536,
+            "embedding": [0.1] * EMBEDDING_DIMENSION,
         }
 
         mock_response = MemoryResponse(
@@ -184,7 +187,7 @@ class TestCreateMemory:
             memory_type="semantic",
             content="Magic exists in this world.",
             meta={},
-            embedding=[0.1] * 1536,
+            embedding=[0.1] * EMBEDDING_DIMENSION,
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
@@ -210,7 +213,7 @@ class TestCreateMemory:
             "auto_embed": True,
         }
 
-        mock_embedding = [0.1] * 1536
+        mock_embedding = [0.1] * EMBEDDING_DIMENSION
 
         mock_response = MemoryResponse(
             id=uuid.uuid4(),
@@ -248,7 +251,7 @@ class TestSearchMemoriesByEmbedding:
         project_id = uuid.uuid4()
 
         search_request = {
-            "query_embedding": [0.1] * 1536,
+            "query_embedding": [0.1] * EMBEDDING_DIMENSION,
             "limit": 10,
             "threshold": 0.7,
         }
@@ -284,7 +287,7 @@ class TestSearchMemoriesByEmbedding:
         project_id = uuid.uuid4()
 
         search_request = {
-            "query_embedding": [0.1] * 1536,
+            "query_embedding": [0.1] * EMBEDDING_DIMENSION,
             "memory_type": "episode",
             "limit": 5,
         }
@@ -376,7 +379,7 @@ class TestUpdateMemory:
             memory_type="fact",
             content="Updated content",
             meta={},
-            embedding=[0.2] * 1536,
+            embedding=[0.2] * EMBEDDING_DIMENSION,
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
@@ -387,7 +390,7 @@ class TestUpdateMemory:
             with patch(
                 "app.api.v1.memories.llm_service.embed_single", new_callable=AsyncMock
             ) as mock_embed:
-                mock_embed.return_value = [0.2] * 1536
+                mock_embed.return_value = [0.2] * EMBEDDING_DIMENSION
 
                 with patch(
                     "app.api.v1.memories.memory_service.update", new_callable=AsyncMock
@@ -529,7 +532,7 @@ class TestAutoEmbedBehavior:
         with patch("app.api.v1.memories.memory_service.create_with_project", new=mock_create_with_project):
             # Mock successful embedding
             with patch("app.api.v1.memories.llm_service.embed_single", new_callable=AsyncMock) as mock_embed:
-                mock_embed.return_value = [0.1, 0.2, 0.3]
+                mock_embed.return_value = [0.1] * EMBEDDING_DIMENSION
 
                 response = client.post(
                     f"/api/v1/memories?project_id={project_id}",
@@ -618,7 +621,7 @@ class TestAutoEmbedBehavior:
         """Test that providing embedding directly skips auto-embed even if True."""
         client = TestClient(app)
         project_id = uuid.uuid4()
-        provided_embedding = [0.5, 0.6, 0.7]
+        provided_embedding = [0.5] * EMBEDDING_DIMENSION
 
         with patch("app.api.v1.memories.memory_service.create_with_project", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = MemoryResponse(

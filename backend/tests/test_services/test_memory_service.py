@@ -5,12 +5,15 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.exceptions import BadRequestException
 from app.models.memory import Memory
 from app.schemas.memory import MemoryCreate, MemoryUpdate, VectorSearchRequest
 from app.schemas.project import ProjectCreate
 from app.services.memory import memory_service
 from app.services.project import project_service
+
+EMBEDDING_DIMENSION = get_settings().embedding_dimension
 
 
 class TestMemoryServiceGetByProject:
@@ -160,7 +163,7 @@ class TestMemoryServiceCreateWithProject:
             user_id=user_id,
         )
 
-        embedding = [0.1] * 1536
+        embedding = [0.1] * EMBEDDING_DIMENSION
         mem_in = MemoryCreate(
             project_id=project.id,
             memory_type="semantic",
@@ -175,7 +178,7 @@ class TestMemoryServiceCreateWithProject:
         )
 
         assert result.embedding is not None
-        assert len(result.embedding) == 1536
+        assert len(result.embedding) == EMBEDDING_DIMENSION
 
 
 class TestMemoryServiceUpdate:
@@ -231,7 +234,7 @@ class TestMemoryServiceUpdate:
             project_id=project.id,
         )
 
-        new_embedding = [0.2] * 1536
+        new_embedding = [0.2] * EMBEDDING_DIMENSION
         updated = await memory_service.update(
             db_session,
             db_obj=memory,
@@ -239,7 +242,7 @@ class TestMemoryServiceUpdate:
         )
 
         assert updated.embedding is not None
-        assert len(updated.embedding) == 1536
+        assert len(updated.embedding) == EMBEDDING_DIMENSION
         assert updated.embedding[0] == 0.2
 
 
@@ -333,10 +336,15 @@ class TestMemoryServiceSearchByEmbedding:
             await memory_service.search_by_embedding(
                 db_session,
                 project_id=project.id,
-                search_params=VectorSearchRequest(query_embedding=[0.1] * 100),
+                search_params=VectorSearchRequest.model_construct(
+                    query_embedding=[0.1] * 100,
+                    limit=10,
+                    threshold=0.7,
+                    memory_type=None,
+                ),
             )
 
-        assert "1536" in str(exc_info.value)
+        assert str(EMBEDDING_DIMENSION) in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_search_by_embedding_no_results(self, db_session: AsyncSession):

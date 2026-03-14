@@ -65,13 +65,14 @@ npm run dev
 LLM_API_KEY=sk-xxx              # API Key
 LLM_BASE_URL=https://api.deepseek.com   # API 地址
 LLM_MODEL=deepseek-chat         # 模型名称
-MAX_TOKENS=4096                 # 最大生成 token 数
+MAX_TOKENS=64                 # 最大生成 token 数
 TEMPERATURE=0.7                 # 采样温度
 
 # ---- Embedding 向量嵌入 ----
 EMBEDDING_API_KEY=sk-xxx                     # API Key（留空则复用 LLM_API_KEY）
 EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1  # API 地址（留空则复用 LLM_BASE_URL）
 EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B     # 模型名称
+EMBEDDING_DIMENSION=4096                    # 必须与模型实际输出维度一致
 ```
 
 **常见配置示例：**
@@ -79,11 +80,11 @@ EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B     # 模型名称
 | 用途 | 提供商 | `BASE_URL` | 推荐模型 |
 |------|--------|-----------|----------|
 | LLM 对话 | DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
-| LLM 对话 | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
 | Embedding | SiliconFlow | `https://api.siliconflow.cn/v1` | `Qwen/Qwen3-Embedding-8B` |
-| Embedding | OpenAI | `https://api.openai.com/v1` | `text-embedding-3-small` |
+
 
 > 如果 LLM 和 Embedding 使用同一个提供商，可以只填 `LLM_*` 配置，`EMBEDDING_*` 留空即可自动复用。
+> `EMBEDDING_DIMENSION` 必须和 `EMBEDDING_MODEL` 的真实输出维度一致；如果数据库已经初始化，修改它后需要重建 `memories` 表或重新迁移数据库。
 
 ### 访问
 

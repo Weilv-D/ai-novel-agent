@@ -6,14 +6,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
+from app.core.config import get_settings
 from app.core.exceptions import BadRequestException
 from app.models.memory import Memory
 from app.schemas.memory import MemoryCreate, MemoryUpdate, VectorSearchRequest
 from app.services.base import CRUDBase
 
 
+EMBEDDING_DIMENSION = get_settings().embedding_dimension
+
+
 class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
     """CRUD operations for Memory model with vector search."""
+
+    @staticmethod
+    def _validate_embedding(embedding: list[float] | None) -> None:
+        """Validate an embedding before persisting or querying."""
+        if embedding is None:
+            return
+        if len(embedding) != EMBEDDING_DIMENSION:
+            raise BadRequestException(
+                f"Embedding dimension mismatch: expected {EMBEDDING_DIMENSION}, got {len(embedding)}"
+            )
 
     async def get_by_project(
         self,
@@ -46,10 +60,7 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
             Matches include id, memory_type, content, meta, and similarity score
         """
         # Validate embedding dimension
-        if len(search_params.query_embedding) != 1536:
-            raise BadRequestException(
-                f"Embedding dimension mismatch: expected 1536, got {len(search_params.query_embedding)}"
-            )
+        self._validate_embedding(search_params.query_embedding)
 
         # Import Vector for distance calculation
         from pgvector.sqlalchemy import Vector
@@ -62,7 +73,10 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
         embedding_col = Memory.embedding
 
         # Calculate similarity expression for reuse
-        similarity_expr = 1 - func.cosine_distance(embedding_col, cast(query_embedding, Vector(1536)))
+        similarity_expr = 1 - func.cosine_distance(
+            embedding_col,
+            cast(query_embedding, Vector(EMBEDDING_DIMENSION)),
+        )
 
         # Build base query with similarity calculation
         base_query = (
@@ -131,12 +145,27 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
         project_id: Any,
     ) -> Memory:
         """Create a new memory for a specific project."""
+        self._validate_embedding(obj_in.embedding)
         obj_dict = obj_in.model_dump(exclude={"project_id", "auto_embed"})
         db_obj = Memory(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()
         await db.refresh(db_obj)
         return db_obj
+
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: Memory,
+        obj_in: MemoryUpdate | dict[str, Any],
+    ) -> Memory:
+        """Update a memory while enforcing embedding dimension consistency."""
+        if isinstance(obj_in, dict):
+            self._validate_embedding(obj_in.get("embedding"))
+        else:
+            self._validate_embedding(obj_in.embedding)
+        return await super().update(db, db_obj=db_obj, obj_in=obj_in)
 
     async def get_by_type(
         self,

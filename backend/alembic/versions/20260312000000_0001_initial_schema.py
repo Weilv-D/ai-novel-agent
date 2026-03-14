@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-03-12
 
 """
+import os
 from typing import Sequence, Union
 
 from alembic import op
@@ -24,6 +25,8 @@ revision: str = "0001"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
 
 
 def upgrade() -> None:
@@ -167,7 +170,7 @@ def upgrade() -> None:
 
     # Determine the embedding column type based on dialect
     if PGVECTOR_AVAILABLE and dialect == "postgresql":
-        embedding_type = Vector(1536)  # pgvector VECTOR type for 1536-dim embeddings
+        embedding_type = Vector(EMBEDDING_DIMENSION)
     else:
         # SQLite fallback: use TEXT to store JSON array
         embedding_type = sa.Text()

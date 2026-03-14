@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.core.config import get_settings
 
 # Import Vector type conditionally for SQLite compatibility
 try:
@@ -47,6 +48,9 @@ class MemoryType(str, Enum):
     FACT = "fact"  # Specific facts that may be referenced
 
 
+EMBEDDING_DIMENSION = get_settings().embedding_dimension
+
+
 class Memory(Base, UUIDMixin, TimestampMixin):
     """Memory model for narrative facts with vector embeddings."""
 
@@ -63,8 +67,8 @@ class Memory(Base, UUIDMixin, TimestampMixin):
     # Content
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Vector embedding (1536 dimensions for OpenAI embeddings)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+    # Vector embedding dimension is configured via EMBEDDING_DIMENSION.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSION), nullable=True)
 
     # Metadata
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False, name="metadata")

@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     embedding_base_url: str = ""
     embedding_model: str = "text-embedding-3-small"
+    embedding_dimension: int = 1536
 
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
@@ -63,6 +64,14 @@ class Settings(BaseSettings):
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
+        return v
+
+    @field_validator("embedding_dimension")
+    @classmethod
+    def validate_embedding_dimension(cls, v: int) -> int:
+        """Ensure embedding dimensions are positive."""
+        if v <= 0:
+            raise ValueError("embedding_dimension must be > 0")
         return v
 
     @property

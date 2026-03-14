@@ -5,6 +5,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
+from app.core.config import get_settings
 from app.schemas.memory import (
     MemoryCreate,
     MemoryMatch,
@@ -14,6 +15,8 @@ from app.schemas.memory import (
     VectorSearchResponse,
 )
 
+EMBEDDING_DIMENSION = get_settings().embedding_dimension
+
 
 class TestMemorySchemas:
     """Tests for Memory schemas."""
@@ -21,7 +24,7 @@ class TestMemorySchemas:
     def test_memory_create_valid(self):
         """Test valid MemoryCreate schema."""
         project_id = uuid.uuid4()
-        embedding = [0.1] * 1536
+        embedding = [0.1] * EMBEDDING_DIMENSION
         data = {
             "project_id": project_id,
             "memory_type": "episode",
@@ -74,10 +77,24 @@ class TestMemorySchemas:
 
     def test_memory_update_with_embedding(self):
         """Test MemoryUpdate with new embedding."""
-        embedding = [0.2] * 1536
+        embedding = [0.2] * EMBEDDING_DIMENSION
         data = {"embedding": embedding}
         schema = MemoryUpdate(**data)
         assert schema.embedding == embedding
+
+    def test_memory_create_invalid_embedding_dimension(self):
+        """Test MemoryCreate rejects embeddings with the wrong dimension."""
+        project_id = uuid.uuid4()
+
+        with pytest.raises(ValidationError) as exc_info:
+            MemoryCreate(
+                project_id=project_id,
+                memory_type="episode",
+                content="The hero defeated the dragon.",
+                embedding=[0.1] * 8,
+            )
+
+        assert str(EMBEDDING_DIMENSION) in str(exc_info.value)
 
     def test_memory_response(self):
         """Test MemoryResponse schema."""
@@ -106,7 +123,7 @@ class TestVectorSearchSchemas:
 
     def test_vector_search_request_valid(self):
         """Test valid VectorSearchRequest schema."""
-        embedding = [0.1] * 1536
+        embedding = [0.1] * EMBEDDING_DIMENSION
         data = {
             "query_embedding": embedding,
             "limit": 10,
@@ -121,7 +138,7 @@ class TestVectorSearchSchemas:
 
     def test_vector_search_request_defaults(self):
         """Test VectorSearchRequest with default values."""
-        embedding = [0.1] * 1536
+        embedding = [0.1] * EMBEDDING_DIMENSION
         schema = VectorSearchRequest(query_embedding=embedding)
         assert schema.limit == 10
         assert schema.threshold == 0.7
@@ -129,7 +146,7 @@ class TestVectorSearchSchemas:
 
     def test_vector_search_request_limit_validation(self):
         """Test limit validation (1-100)."""
-        embedding = [0.1] * 1536
+        embedding = [0.1] * EMBEDDING_DIMENSION
         with pytest.raises(ValidationError):
             VectorSearchRequest(query_embedding=embedding, limit=0)
 
@@ -138,7 +155,7 @@ class TestVectorSearchSchemas:
 
     def test_vector_search_request_threshold_validation(self):
         """Test threshold validation (0.0-1.0)."""
-        embedding = [0.1] * 1536
+        embedding = [0.1] * EMBEDDING_DIMENSION
         with pytest.raises(ValidationError):
             VectorSearchRequest(query_embedding=embedding, threshold=-0.1)
 
