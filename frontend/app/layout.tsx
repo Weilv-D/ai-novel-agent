@@ -1,3 +1,5 @@
+import "./globals.css";
+
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Noto_Serif_SC } from "next/font/google";
 

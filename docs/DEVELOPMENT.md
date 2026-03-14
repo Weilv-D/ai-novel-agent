@@ -65,4 +65,4 @@ make verify
 make clean
 ```
 
-`make verify` runs the complete local quality gate: backend lint, backend typecheck, backend tests, frontend lint, and frontend build. `make clean` removes generated caches, the disposable root `/.venv`, and the frontend build output. It does not remove `backend/.venv`, `frontend/node_modules`, or local `.env` files.
+`make verify` runs the complete local quality gate: backend lint, backend typecheck, backend tests, frontend lint, and frontend build. `make clean` removes generated caches, the disposable root `/.venv`, and the local frontend build output in `frontend/.next`. It intentionally does not remove `frontend/.next-docker`, because that directory is the runtime state for the Docker-based frontend dev server. It also does not remove `backend/.venv`, `frontend/node_modules`, or local `.env` files.

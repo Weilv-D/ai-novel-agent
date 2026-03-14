@@ -186,6 +186,8 @@ cd backend
 
 如果你先跑过 Docker，再在宿主机直接跑前端构建，旧的 `.next` 产物可能会导致权限问题。当前 compose 已经把前端容器的 Next 输出目录改成 `frontend/.next-docker`，不会再和本地构建使用的 `frontend/.next` 冲突。
 
+另外，`frontend/.next-docker` 是 Docker 前端 dev server 的运行时目录。不要在前端容器运行时手工删除它；如果误删了，直接在 `infra/` 下执行一次 `docker compose restart frontend` 即可恢复。
+
 ## 项目结构
 
 ```text
