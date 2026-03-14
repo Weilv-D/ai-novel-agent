@@ -23,7 +23,7 @@ export default function HomePage() {
       <div className="mx-auto max-w-6xl px-6 py-16 sm:px-8 sm:py-24 relative z-10">
         <div className="grid items-start gap-16 lg:grid-cols-[1.1fr_0.9fr]">
           <section className="animate-wash-rise space-y-10 relative">
-            
+
             {/* The beautiful modern decorative element */}
             <div className="absolute -left-12 top-4 hidden md:block">
               <span className="ink-kicker-text text-seal/80 text-xl font-medium tracking-[0.4em] mix-blend-multiply">
@@ -75,7 +75,7 @@ export default function HomePage() {
 
           <section className="animate-wash-rise stagger-1 space-y-8 relative">
              <div className="absolute -inset-4 bg-gradient-to-br from-paper-soft/40 to-transparent -z-10 rounded-2xl blur-xl"></div>
-            
+
             <Card className="animate-paper-float overflow-hidden rounded-2xl p-0 border border-line/40 bg-white/40 backdrop-blur-xl shadow-2xl shadow-ink-900/5">
               <div className="border-b border-line/30 bg-paper-soft/60 px-8 py-5">
                 <p className="ink-kicker !text-jade/80">Workspace</p>
