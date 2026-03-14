@@ -28,20 +28,20 @@ interface ButtonAsLink extends BaseButtonProps, Omit<AnchorHTMLAttributes<HTMLAn
 type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 const variantStyles: Record<Variant, string> = {
-  primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
-  secondary: "bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500",
-  outline: "border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-300",
-  ghost: "text-gray-700 hover:bg-gray-100 focus:ring-gray-200",
-  danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
+  primary: "border-transparent bg-[rgba(var(--ink-950),0.94)] text-[rgb(var(--paper-soft))] shadow-[0_20px_48px_-28px_rgba(var(--shadow),0.72)] hover:-translate-y-0.5 hover:bg-[rgba(var(--ink-950),0.88)] focus-visible:ring-[rgba(var(--accent),0.24)]",
+  secondary: "border-transparent bg-[rgba(var(--accent),0.9)] text-[rgb(var(--paper-soft))] shadow-[0_18px_42px_-28px_rgba(var(--shadow),0.58)] hover:-translate-y-0.5 hover:bg-[rgba(var(--accent),0.82)] focus-visible:ring-[rgba(var(--accent),0.22)]",
+  outline: "border-[rgba(var(--line),0.2)] bg-[rgba(255,255,255,0.48)] text-[rgb(var(--ink-900))] hover:-translate-y-0.5 hover:bg-[rgba(255,255,255,0.72)] focus-visible:ring-[rgba(var(--accent),0.12)]",
+  ghost: "border-transparent bg-transparent text-[rgb(var(--ink-800))] hover:bg-[rgba(var(--ink-950),0.04)] focus-visible:ring-[rgba(var(--accent),0.12)]",
+  danger: "border-transparent bg-[rgba(var(--danger),0.94)] text-[rgb(var(--paper-soft))] shadow-[0_18px_40px_-26px_rgba(var(--danger),0.58)] hover:-translate-y-0.5 hover:bg-[rgba(var(--danger),0.86)] focus-visible:ring-[rgba(var(--danger),0.22)]",
 };
 
 const sizeStyles: Record<Size, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-4 py-2 text-base",
-  lg: "px-6 py-3 text-lg",
+  sm: "px-4 py-2 text-sm",
+  md: "px-5 py-2.5 text-sm",
+  lg: "px-7 py-3.5 text-base",
 };
 
-const baseStyles = "inline-flex items-center justify-center font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+const baseStyles = "inline-flex items-center justify-center rounded-full border font-medium tracking-[0.08em] transition-all duration-200 focus:outline-none focus-visible:ring-4 disabled:cursor-not-allowed disabled:opacity-50 disabled:translate-y-0";
 
 // Inner button/link renderer
 const ButtonInner = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(

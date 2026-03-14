@@ -66,17 +66,15 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 transition-opacity"
+        className="fixed inset-0 bg-[rgba(17,13,10,0.48)] backdrop-blur-sm transition-opacity"
         onClick={handleClose}
         aria-hidden="true"
       />
 
-      {/* Modal */}
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-        <p className="text-sm text-gray-600 mb-6">{message}</p>
+      <div className="ink-panel relative mx-4 w-full max-w-md rounded-[1.75rem] p-6">
+        <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">{title}</h3>
+        <p className="mb-6 text-sm leading-7 text-[rgb(var(--ink-700))]">{message}</p>
 
         <div className="flex justify-end gap-3">
           <Button

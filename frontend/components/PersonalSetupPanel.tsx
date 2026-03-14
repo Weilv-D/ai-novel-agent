@@ -39,16 +39,17 @@ export function PersonalSetupPanel() {
   };
 
   return (
-    <Card className="border-blue-100 bg-white/90 backdrop-blur">
-      <CardHeader>
-        <CardTitle className="text-lg">个人模式设置</CardTitle>
+    <Card className="overflow-hidden rounded-[2rem] border-none p-0">
+      <CardHeader className="border-b border-[rgba(var(--line),0.12)] px-6 py-6">
+        <p className="ink-kicker">Personal Mode</p>
+        <CardTitle className="mt-3 text-2xl">个人模式设置</CardTitle>
         <CardDescription>
           当前项目已按单用户使用方式收口。后端会把数据归属到固定个人账户。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 px-6 py-6">
         {health && (
-          <div className="rounded-md bg-blue-50 p-4 text-sm text-gray-700">
+          <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--accent),0.06)] p-4 text-sm text-[rgb(var(--ink-800))]">
             <p>运行模式：{health.mode}</p>
             <p>个人账号：{health.personal_user_email || "未配置"}</p>
             <p>
@@ -61,7 +62,7 @@ export function PersonalSetupPanel() {
         )}
 
         {loadError && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+          <div className="ink-alert ink-alert-danger">
             无法读取后端健康状态：{loadError}
           </div>
         )}
@@ -82,7 +83,7 @@ export function PersonalSetupPanel() {
           </Button>
         </div>
 
-        {message && <p className="text-sm text-gray-600">{message}</p>}
+        {message && <p className="text-sm text-[rgb(var(--ink-700))]">{message}</p>}
       </CardContent>
     </Card>
   );

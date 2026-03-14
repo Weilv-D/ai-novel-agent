@@ -19,7 +19,7 @@ export function Card({
 }: CardProps) {
   return (
     <div
-      className={`bg-white rounded-lg shadow-sm border border-gray-200 ${paddingStyles[padding]} ${className}`}
+      className={`ink-panel rounded-[1.6rem] ${paddingStyles[padding]} ${className}`}
       {...props}
     >
       {children}
@@ -37,7 +37,7 @@ export function CardHeader({ className = "", children, ...props }: HTMLAttribute
 
 export function CardTitle({ className = "", children, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={`text-lg font-semibold text-gray-900 ${className}`} {...props}>
+    <h3 className={`ink-display text-xl font-semibold text-[rgb(var(--ink-950))] ${className}`} {...props}>
       {children}
     </h3>
   );
@@ -45,7 +45,7 @@ export function CardTitle({ className = "", children, ...props }: HTMLAttributes
 
 export function CardDescription({ className = "", children, ...props }: HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={`text-sm text-gray-600 mt-1 ${className}`} {...props}>
+    <p className={`mt-1 text-sm text-[rgb(var(--ink-700))] ${className}`} {...props}>
       {children}
     </p>
   );
@@ -61,7 +61,7 @@ export function CardContent({ className = "", children, ...props }: HTMLAttribut
 
 export function CardFooter({ className = "", children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`mt-4 pt-4 border-t border-gray-200 ${className}`} {...props}>
+    <div className={`mt-4 border-t border-[rgba(var(--line),0.14)] pt-4 ${className}`} {...props}>
       {children}
     </div>
   );

@@ -4,16 +4,16 @@ interface LoadingProps {
 }
 
 const sizeStyles: Record<NonNullable<LoadingProps["size"]>, string> = {
-  sm: "w-4 h-4 border-2",
-  md: "w-8 h-8 border-3",
-  lg: "w-12 h-12 border-4",
+  sm: "h-4 w-4 border-2",
+  md: "h-8 w-8 border-[3px]",
+  lg: "h-12 w-12 border-4",
 };
 
 export function Loading({ size = "md", className = "" }: LoadingProps) {
   return (
     <div className="flex items-center justify-center" role="status" aria-label="Loading">
       <svg
-        className={`animate-spin rounded-full border-gray-300 border-t-blue-600 ${sizeStyles[size]} ${className}`}
+        className={`animate-spin rounded-full border-[rgba(var(--line),0.18)] border-t-[rgb(var(--accent))] ${sizeStyles[size]} ${className}`}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -46,7 +46,7 @@ export function LoadingSpinner({ size = "md", text, className = "" }: LoadingSpi
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>
       <Loading size={size} />
-      {text && <p className="text-sm text-gray-600">{text}</p>}
+      {text && <p className="text-sm text-[rgb(var(--ink-700))]">{text}</p>}
     </div>
   );
 }

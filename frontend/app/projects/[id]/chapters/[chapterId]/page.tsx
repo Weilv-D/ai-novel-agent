@@ -1,16 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useParams, useRouter } from "next/navigation";
+
+import { AgentChatPanel } from "@/components/AgentChatPanel";
 import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
-import { chapterApi, sceneApi } from "@/lib/api-client";
+import { ApiError, chapterApi, sceneApi } from "@/lib/api-client";
+import { getChapterStatusMeta } from "@/lib/presentation";
 import type { Chapter, Scene } from "@/lib/types";
-import { ApiError } from "@/lib/api-client";
-import { AgentChatPanel } from "@/components/AgentChatPanel";
 
 export default function ChapterDetailPage() {
   const params = useParams();
@@ -50,7 +51,6 @@ export default function ChapterDetailPage() {
       const data = await sceneApi.list(chapterId) as Scene[];
       setScenes(data.sort((a, b) => a.scene_order - b.scene_order));
     } catch (err) {
-      // Scenes are optional, don't show error if loading fails
       console.error("Failed to load scenes:", err);
     }
   }, [chapterId]);
@@ -76,44 +76,24 @@ export default function ChapterDetailPage() {
     }
   }
 
-  function getStatusLabel(status: string): string {
-    const labels: Record<string, string> = {
-      draft: "草稿",
-      writing: "写作中",
-      completed: "已完成",
-    };
-    return labels[status] || status;
-  }
-
-  function getStatusColor(status: string): string {
-    const colors: Record<string, string> = {
-      draft: "bg-gray-100 text-gray-800",
-      writing: "bg-blue-100 text-blue-800",
-      completed: "bg-green-100 text-green-800",
-    };
-    return colors[status] || "bg-gray-100 text-gray-800";
-  }
-
-  // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 py-8">
+      <main className="ink-page">
+        <div className="mx-auto max-w-4xl px-4 py-8">
           <LoadingSpinner size="lg" text="加载章节中..." />
         </div>
       </main>
     );
   }
 
-  // Error state
   if (error || !chapter) {
     return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 py-8">
+      <main className="ink-page">
+        <div className="mx-auto max-w-4xl px-4 py-8">
           <Card padding="lg">
             <CardContent>
-              <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <div className="py-8 text-center">
+                <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">
                   {error || "章节未找到"}
                 </h3>
                 <Button href={`/projects/${projectId}/chapters`}>返回章节列表</Button>
@@ -125,28 +105,29 @@ export default function ChapterDetailPage() {
     );
   }
 
+  const statusMeta = getChapterStatusMeta(chapter.status);
+
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Header */}
+    <main className="ink-page">
+      <div className="mx-auto max-w-4xl px-4 py-10">
         <div className="mb-8">
-          <Link
-            href={`/projects/${projectId}/chapters`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
-          >
+          <Link href={`/projects/${projectId}/chapters`} className="ink-backlink mb-4">
             ← 返回章节列表
           </Link>
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm font-medium text-gray-500">第 {chapter.chapter_number} 章</span>
-                <h1 className="text-3xl font-bold text-gray-900">{chapter.title || "无标题"}</h1>
-                <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(chapter.status)}`}>
-                  {getStatusLabel(chapter.status)}
+              <p className="ink-kicker">Chapter Detail</p>
+              <div className="mb-2 mt-3 flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-[rgb(var(--ink-600))]">
+                  第 {chapter.chapter_number} 章
                 </span>
+                <h1 className="ink-display text-4xl font-semibold text-[rgb(var(--ink-950))]">
+                  {chapter.title || "无标题"}
+                </h1>
+                <span className={statusMeta.className}>{statusMeta.label}</span>
               </div>
               {chapter.outline && (
-                <p className="text-gray-600">{chapter.outline}</p>
+                <p className="text-[rgb(var(--ink-700))]">{chapter.outline}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -160,26 +141,25 @@ export default function ChapterDetailPage() {
           </div>
         </div>
 
-        {/* Chapter Info */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">统计信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">场景数</span>
-                <span className="font-medium">{scenes.length}</span>
+              <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
+                <span className="text-[rgb(var(--ink-700))]">场景数</span>
+                <span className="font-medium text-[rgb(var(--ink-950))]">{scenes.length}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">创建时间</span>
-                <span className="font-medium">
+              <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
+                <span className="text-[rgb(var(--ink-700))]">创建时间</span>
+                <span className="font-medium text-[rgb(var(--ink-950))]">
                   {new Date(chapter.created_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">更新时间</span>
-                <span className="font-medium">
+              <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
+                <span className="text-[rgb(var(--ink-700))]">更新时间</span>
+                <span className="font-medium text-[rgb(var(--ink-950))]">
                   {new Date(chapter.updated_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
@@ -192,13 +172,14 @@ export default function ChapterDetailPage() {
                 <CardTitle className="text-lg">备注</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{chapter.notes}</p>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">
+                  {chapter.notes}
+                </p>
               </CardContent>
             </Card>
           )}
         </div>
 
-        {/* Scenes */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -210,7 +191,7 @@ export default function ChapterDetailPage() {
           </CardHeader>
           <CardContent>
             {scenes.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className="py-8 text-center text-[rgb(var(--ink-600))]">
                 <p>暂无场景</p>
                 <Button
                   variant="outline"
@@ -226,24 +207,22 @@ export default function ChapterDetailPage() {
                 {scenes.map((scene) => (
                   <div
                     key={scene.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 rounded-md hover:bg-gray-50"
+                    className="flex items-center justify-between rounded-[1.15rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.42)] p-4 transition-colors hover:bg-[rgba(255,255,255,0.6)]"
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">场景 {scene.scene_order}</span>
+                        <span className="text-sm text-[rgb(var(--ink-600))]">场景 {scene.scene_order}</span>
                         {scene.location && (
-                          <span className="text-sm text-gray-600">📍 {scene.location}</span>
+                          <span className="text-sm text-[rgb(var(--ink-700))]">📍 {scene.location}</span>
                         )}
                       </div>
                       {scene.content && (
-                        <p className="text-sm text-gray-700 mt-1 line-clamp-2">{scene.content}</p>
+                        <p className="mt-1 line-clamp-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
+                          {scene.content}
+                        </p>
                       )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      href={`/projects/${projectId}/chapters/${chapterId}/scenes/${scene.id}`}
-                    >
+                    <Button variant="outline" size="sm" href={`/projects/${projectId}/chapters/${chapterId}/scenes/${scene.id}`}>
                       查看
                     </Button>
                   </div>
@@ -253,13 +232,11 @@ export default function ChapterDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Agent Chat */}
         <AgentChatPanel
           projectId={projectId}
           context={{ chapter_id: chapterId, chapter_number: chapter.chapter_number }}
         />
 
-        {/* Delete Confirmation Modal */}
         <Modal
           isOpen={deleteModalOpen}
           onClose={() => setDeleteModalOpen(false)}

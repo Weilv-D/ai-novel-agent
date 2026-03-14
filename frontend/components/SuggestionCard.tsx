@@ -4,6 +4,7 @@ import { useState } from "react";
 import { suggestionApi } from "@/lib/api-client";
 import type { Suggestion } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
+import { getSuggestionStatusMeta } from "@/lib/presentation";
 
 interface SuggestionCardProps {
   suggestion: Suggestion;
@@ -18,20 +19,6 @@ const TYPE_LABELS: Record<string, string> = {
   content_gen: "内容生成",
   outline_gen: "大纲生成",
   continuity_fix: "连续性修复",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "待确认",
-  patched: "已确认",
-  committed: "已应用",
-  discarded: "已丢弃",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-yellow-100 text-yellow-800",
-  patched: "bg-blue-100 text-blue-800",
-  committed: "bg-green-100 text-green-800",
-  discarded: "bg-gray-100 text-gray-500",
 };
 
 export function SuggestionCard({ suggestion, onAction }: SuggestionCardProps) {
@@ -57,19 +44,18 @@ export function SuggestionCard({ suggestion, onAction }: SuggestionCardProps) {
     (content.suggested_fix as string) ||
     (content.issue as string) ||
     JSON.stringify(content).slice(0, 150);
+  const statusMeta = getSuggestionStatusMeta(suggestion.status);
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 bg-white">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-gray-500">
+    <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.54)] p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--ink-600))]">
           {TYPE_LABELS[suggestion.type] || suggestion.type}
         </span>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[suggestion.status] || ""}`}>
-          {STATUS_LABELS[suggestion.status] || suggestion.status}
-        </span>
+        <span className={statusMeta.className}>{statusMeta.label}</span>
       </div>
 
-      <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap">{summary}</p>
+      <p className="mb-4 whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">{summary}</p>
 
       {suggestion.status === "draft" && (
         <div className="flex gap-2">

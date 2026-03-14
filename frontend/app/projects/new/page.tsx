@@ -1,13 +1,13 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import Link from "next/link";
 import { useState } from "react";
-import { projectApi } from "@/lib/api-client";
-import { ApiError } from "@/lib/api-client";
+import Link from "next/link";
+
+import { ApiError, projectApi } from "@/lib/api-client";
 import type { ProjectCreate } from "@/lib/types";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 
 export default function NewProjectPage() {
   const [formData, setFormData] = useState<ProjectCreate>({
@@ -30,7 +30,6 @@ export default function NewProjectPage() {
       setLoading(true);
       setError(null);
       const result = await projectApi.create(formData) as { id: string };
-      // Redirect to project detail page
       window.location.href = `/projects/${result.id}`;
     } catch (err) {
       if (err instanceof ApiError) {
@@ -44,30 +43,25 @@ export default function NewProjectPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Header */}
+    <main className="ink-page">
+      <div className="mx-auto max-w-2xl px-4 py-10">
         <div className="mb-8">
-          <Link
-            href="/projects"
-            className="text-sm text-blue-600 hover:text-blue-700 mb-4 inline-block"
-          >
+          <Link href="/projects" className="ink-backlink mb-4">
             ← 返回项目列表
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">新建项目</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            创建一个新的小说创作项目
+          <p className="ink-kicker">New Project</p>
+          <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">新建项目</h1>
+          <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-700))]">
+            先定义作品的基本边界，再逐步扩展章节、角色和世界观。
           </p>
         </div>
 
-        {/* Form */}
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle>项目信息</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Name */}
               <Input
                 label="项目名称 *"
                 placeholder="输入小说名称"
@@ -76,7 +70,6 @@ export default function NewProjectPage() {
                 required
               />
 
-              {/* Genre */}
               <Input
                 label="题材"
                 placeholder="例如：奇幻、科幻、都市..."
@@ -84,7 +77,6 @@ export default function NewProjectPage() {
                 onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
               />
 
-              {/* Target Audience */}
               <Input
                 label="目标受众"
                 placeholder="例如：青少年、成人..."
@@ -92,33 +84,23 @@ export default function NewProjectPage() {
                 onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
               />
 
-              {/* Target Word Count */}
               <Input
                 label="目标字数"
                 type="number"
                 placeholder="例如：100000"
                 value={formData.target_word_count || ""}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  target_word_count: e.target.value ? parseInt(e.target.value) : undefined,
-                })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    target_word_count: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  })
+                }
               />
 
-              {/* Error Message */}
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
+              {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 
-              {/* Actions */}
               <div className="flex gap-4 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  href="/projects"
-                  fullWidth
-                >
+                <Button type="button" variant="outline" href="/projects" fullWidth>
                   取消
                 </Button>
                 <Button type="submit" disabled={loading} fullWidth>

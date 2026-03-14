@@ -28,9 +28,11 @@ cp .env.example .env
 Notes:
 
 - Run backend commands from `backend/` so `app.core.config.Settings` can resolve `.env`.
+- Shell environment variables take precedence over `.env`. If your terminal or IDE injects values like `DEBUG=release`, the app now treats common release/prod spellings as `False`, but you should still keep local runtime values explicit in `backend/.env`.
 - Tests intentionally isolate themselves from developer-local `backend/.env` values.
 - PostgreSQL + pgvector is the target runtime. SQLite is used only for tests and lightweight verification.
 - The app runs in single-user mode. `PERSONAL_USER_EMAIL` / `PERSONAL_USER_NAME` define ownership, and `ADMIN_API_KEY` is an optional access gate for browser/API usage. The frontend will auto-discover the configured `API_KEY_HEADER` from `/api/v1/health`.
+- `/api/v1/health` now reports real database and Redis connectivity instead of placeholder strings, so it is useful as a first runtime check after startup.
 
 ## Frontend
 

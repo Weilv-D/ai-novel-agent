@@ -77,6 +77,25 @@ class Settings(BaseSettings):
             raise ValueError("embedding_dimension must be > 0")
         return v
 
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug_flag(cls, v: bool | str | int) -> bool:
+        """Handle common boolean spellings and shell DEBUG values safely."""
+        if isinstance(v, bool):
+            return v
+
+        if isinstance(v, int):
+            return v != 0
+
+        if isinstance(v, str):
+            value = v.strip().lower()
+            if value in {"1", "true", "yes", "on", "debug", "development"}:
+                return True
+            if value in {"0", "false", "no", "off", "release", "prod", "production"}:
+                return False
+
+        raise ValueError("debug must be a boolean-compatible value")
+
     @property
     def is_production(self) -> bool:
         """Check if running in production."""

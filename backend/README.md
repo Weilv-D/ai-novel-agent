@@ -13,6 +13,7 @@ This backend now targets a practical personal-use mode: one fixed local user own
 - `verify.py` still works as a quick import/OpenAPI sanity check
 - `scripts/verify_sqlite_integration.py` passes end-to-end against temporary SQLite
 - `scripts/verify_api_integration.py` passes against the live Docker-backed backend
+- `/api/v1/health` now reports actual database and Redis connectivity
 
 ## Local Setup
 
@@ -56,6 +57,7 @@ make verify
 - `PERSONAL_USER_EMAIL` / `PERSONAL_USER_NAME` define the local single-user identity.
 - `ADMIN_API_KEY` is optional. When set, all data/agent/export routes require that value in the configured `API_KEY_HEADER`.
 - Startup now initializes the personal user record automatically after migrations.
+- The health endpoint is non-fatal: it always returns API liveness, while `database` / `redis` reflect dependency reachability.
 
 ## Scripts
 

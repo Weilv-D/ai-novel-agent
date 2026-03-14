@@ -1,5 +1,7 @@
 "use client";
 
+import { getImpactLevelClass } from "@/lib/presentation";
+
 interface ImpactItem {
   type: string;
   id: string;
@@ -14,15 +16,9 @@ interface ImpactAnalysisProps {
   } | null;
 }
 
-const LEVEL_COLORS: Record<string, string> = {
-  high: "text-red-600 bg-red-50",
-  medium: "text-yellow-600 bg-yellow-50",
-  low: "text-green-600 bg-green-50",
-};
-
 export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
   if (!analysis) {
-    return <div className="text-sm text-gray-400">暂无影响分析</div>;
+    return <div className="text-sm text-[rgb(var(--ink-600))]">暂无影响分析</div>;
   }
 
   const objects = analysis.affected_objects || [];
@@ -32,12 +28,12 @@ export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
     <div className="space-y-3">
       {objects.length > 0 && (
         <div>
-          <div className="text-xs font-medium text-gray-500 mb-1">影响范围</div>
-          <div className="space-y-1">
+          <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--ink-600))]">影响范围</div>
+          <div className="flex flex-wrap gap-2">
             {objects.map((obj, i) => (
               <div
                 key={i}
-                className={`text-sm px-2 py-1 rounded ${LEVEL_COLORS[obj.impact_level] || "text-gray-600 bg-gray-50"}`}
+                className={getImpactLevelClass(obj.impact_level)}
               >
                 [{obj.type}] {obj.name} - {obj.impact_level}
               </div>
@@ -47,8 +43,8 @@ export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
       )}
       {risks.length > 0 && (
         <div>
-          <div className="text-xs font-medium text-gray-500 mb-1">风险提示</div>
-          <ul className="text-sm text-red-600 list-disc list-inside space-y-1">
+          <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--ink-600))]">风险提示</div>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-[rgb(var(--danger))]">
             {risks.map((risk, i) => (
               <li key={i}>{risk}</li>
             ))}
@@ -56,7 +52,7 @@ export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
         </div>
       )}
       {objects.length === 0 && risks.length === 0 && (
-        <div className="text-sm text-gray-400">无已知影响</div>
+        <div className="text-sm text-[rgb(var(--ink-600))]">无已知影响</div>
       )}
     </div>
   );

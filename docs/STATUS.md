@@ -1,6 +1,6 @@
 # AI Novel Agent - 当前状态
 
-最后更新：2026-03-14
+最后更新：2026-03-15
 
 ## 仓库健康度
 
@@ -16,6 +16,7 @@
 - Docker 联调：
   - 前端 `http://localhost:3000` 可访问
   - 后端 `http://localhost:8000/api/v1/health` 返回 `healthy`
+  - 健康接口当前会真实报告 `database` / `redis` 连接状态
   - Docker PostgreSQL 暴露在宿主机 `5433`
 
 ## 已实现范围
@@ -84,7 +85,7 @@
 ## 仍然存在的明确缺口
 
 - 多用户认证/权限体系未实现；当前明确定位为个人单用户应用
-- PostgreSQL + pgvector 的完整运行时联调未在本次整理中重跑
+- 前端目前没有浏览器自动化 e2e 测试；当前依赖构建校验与 API/live smoke
 
 ## 推荐开发入口
 

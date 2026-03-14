@@ -80,6 +80,7 @@ docker-compose up -d
 - 前端：http://localhost:3000
 - 后端文档：http://localhost:8000/docs
 - PostgreSQL（宿主机访问）：localhost:5433
+- 健康检查：http://localhost:8000/api/v1/health
 
 说明：
 
@@ -142,6 +143,18 @@ npm run dev
 ### 关于 API Key 请求头
 
 如果你设置了 `ADMIN_API_KEY`，前端会自动从后端健康接口读取当前使用的请求头名称，不需要你手工改前端代码。
+
+### 关于健康检查接口
+
+`/api/v1/health` 会返回：
+
+- 服务状态
+- 当前单用户模式信息
+- 是否启用 `ADMIN_API_KEY`
+- 数据库连接状态
+- Redis 连接状态
+
+适合你在 Docker 或本地手动启动后，先用它确认运行态是否正常。
 
 ## 常见问题
 

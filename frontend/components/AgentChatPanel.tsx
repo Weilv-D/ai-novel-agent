@@ -38,7 +38,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 flex items-center justify-center text-2xl z-50 ${className}`}
+        className={`fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border border-[rgba(var(--line),0.18)] bg-[linear-gradient(180deg,rgba(var(--ink-950),0.94),rgba(var(--ink-900),0.94))] text-lg font-semibold tracking-[0.2em] text-[rgb(var(--paper-soft))] shadow-[0_28px_60px_-28px_rgba(var(--shadow),0.82)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_32px_72px_-28px_rgba(var(--shadow),0.85)] ${className}`}
       >
         AI
       </button>
@@ -46,24 +46,25 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
   }
 
   return (
-    <div className={`fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col z-50 ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-blue-600 text-white rounded-t-lg">
-        <span className="font-medium">AI 写作助手</span>
+    <div className={`ink-panel fixed bottom-6 right-6 z-50 flex h-[540px] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[1.75rem] ${className}`}>
+      <div className="flex items-center justify-between border-b border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.94)] px-4 py-4 text-[rgb(var(--paper-soft))]">
+        <div>
+          <div className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">Creative Agent</div>
+          <span className="ink-display text-xl font-semibold">AI 写作助手</span>
+        </div>
         <div className="flex gap-2">
-          <button onClick={clearMessages} className="text-sm opacity-80 hover:opacity-100">
+          <button onClick={clearMessages} className="text-sm opacity-80 transition-opacity hover:opacity-100">
             清空
           </button>
-          <button onClick={() => setIsOpen(false)} className="text-sm opacity-80 hover:opacity-100">
+          <button onClick={() => setIsOpen(false)} className="text-sm opacity-80 transition-opacity hover:opacity-100">
             收起
           </button>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
-          <div className="text-center text-gray-400 mt-8 text-sm">
+          <div className="mt-8 text-center text-sm text-[rgb(var(--ink-600))]">
             <p>你好！我是 AI 写作助手。</p>
             <p className="mt-1">你可以问我关于世界观、人物、大纲、写作等问题。</p>
           </div>
@@ -76,25 +77,24 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
             <div
               className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                 msg.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-800"
+                  ? "rounded-br-sm bg-[rgba(var(--ink-950),0.94)] text-[rgb(var(--paper-soft))]"
+                  : "rounded-bl-sm border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.6)] text-[rgb(var(--ink-800))]"
               }`}
             >
               {msg.content}
               {msg.role === "assistant" && streaming && msg.id === messages[messages.length - 1]?.id && (
-                <span className="inline-block w-1 h-4 bg-gray-400 ml-1 animate-pulse" />
+                <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-[rgb(var(--ink-600))]" />
               )}
             </div>
           </div>
         ))}
         {error && (
-          <div className="text-center text-red-500 text-sm">{error}</div>
+          <div className="text-center text-sm text-[rgb(var(--danger))]">{error}</div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="border-t border-gray-200 p-3">
+      <div className="border-t border-[rgba(var(--line),0.12)] p-3">
         <div className="flex gap-2">
           <textarea
             value={input}
@@ -102,7 +102,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
             onKeyDown={handleKeyDown}
             placeholder="输入消息..."
             rows={1}
-            className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-h-[46px] flex-1 resize-none rounded-[1rem] border border-[rgba(var(--line),0.18)] bg-[rgba(255,255,255,0.64)] px-4 py-3 text-sm text-[rgb(var(--ink-950))] placeholder:text-[rgb(var(--ink-600))] focus:outline-none focus:ring-4 focus:ring-[rgba(var(--accent),0.08)]"
             disabled={loading || streaming}
           />
           <Button
