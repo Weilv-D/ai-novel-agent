@@ -48,6 +48,7 @@ cp .env.example .env
 - 项目级 `agent_profile_id` 决定实际使用哪一套 planner / operation skills
 - `AGENT_SKILLS_DIR` 作为 profile 根目录覆盖入口，可新增或替换 profile
 - 覆盖后，可通过 `GET /api/v1/agent/profiles` 和 `GET /api/v1/agent/skills?project_id=...` 检查实际加载结果
+- 线程状态接口 `GET /api/v1/agent/threads/{thread_id}` 现在会携带最新 `checkpoint`，用于前端展示压缩摘要
 
 ## 前端开发
 

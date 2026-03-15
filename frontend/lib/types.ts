@@ -485,6 +485,20 @@ export interface AgentSubtask {
   updated_at: string;
 }
 
+export interface AgentThreadCheckpoint {
+  id: string;
+  thread_id: string;
+  profile_id: string;
+  thread_summary: string;
+  active_object_bundle: Record<string, unknown>;
+  recent_run_digest: Record<string, unknown>;
+  source_message_count: number;
+  source_run_count: number;
+  total_context_characters: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AgentRun {
   id: string;
   thread_id: string;
@@ -514,6 +528,7 @@ export interface AgentThreadState {
   messages: AgentThreadMessage[];
   recent_runs: AgentRun[];
   current_run?: AgentRun | null;
+  latest_checkpoint?: AgentThreadCheckpoint | null;
 }
 
 export interface AgentThreadMessageRequest {

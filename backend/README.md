@@ -71,6 +71,7 @@ make verify
 - 项目可绑定 `agent_profile_id`；当前内置 `default` 与 `xianxia_intrigue`
 - run 会带出内部 `subtask` 摘要，展示 planner / researcher / writer / editor / continuity
 - 高风险正文覆盖会进入二次确认，而不是直接执行
+- 长线程达到阈值后会生成 `AgentThreadCheckpoint`，并通过线程状态接口返回最近一条压缩摘要
 - 执行阶段复用现有 CRUD service，并在落库前为目标对象创建 snapshot
 - planner 与每个 operation 都由文件化 skill 驱动；通用技能位于 `app/agent_skills/`，profile 覆盖位于 `app/agent_profiles/`
 - `AGENT_SKILLS_DIR` 作为 profile 根目录覆盖入口，可新增或替换某个 profile

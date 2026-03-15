@@ -115,6 +115,24 @@ class AgentSubtaskResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgentThreadCheckpointResponse(BaseModel):
+    """Compressed thread state snapshot exposed to the workspace."""
+
+    id: UUID
+    thread_id: UUID
+    profile_id: str
+    thread_summary: str
+    active_object_bundle: dict[str, Any] = Field(default_factory=dict)
+    recent_run_digest: dict[str, Any] = Field(default_factory=dict)
+    source_message_count: int
+    source_run_count: int
+    total_context_characters: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AgentRunResponse(BaseModel):
     """An executable plan generated from one user request."""
 
@@ -150,6 +168,7 @@ class AgentThreadStateResponse(BaseModel):
     messages: list[AgentMessageResponse] = Field(default_factory=list)
     recent_runs: list[AgentRunResponse] = Field(default_factory=list)
     current_run: AgentRunResponse | None = None
+    latest_checkpoint: AgentThreadCheckpointResponse | None = None
 
 
 class AgentThreadMessageRequest(BaseModel):

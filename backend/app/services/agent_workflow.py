@@ -46,6 +46,7 @@ from app.schemas.agent import (
     AgentSkillCatalogResponse,
     AgentSkillSummaryResponse,
     AgentSubtaskResponse,
+    AgentThreadCheckpointResponse,
     AgentThreadMessageResponse,
     AgentThreadResponse,
     AgentThreadStateResponse,
@@ -581,6 +582,7 @@ class AgentWorkflowService:
         thread = await self.thread_store.get(db, thread_id)
         messages = await self.message_store.list_by_thread(db, thread_id=thread.id, limit=60)
         runs = await self.run_store.list_recent_by_thread(db, thread_id=thread.id, limit=8)
+        latest_checkpoint = await self.checkpoint_store.latest_by_thread(db, thread_id=thread.id)
         current_run: AgentRunResponse | None = None
         recent_runs: list[AgentRunResponse] = []
         for run in runs:
@@ -593,6 +595,7 @@ class AgentWorkflowService:
             messages=[self._message_response(message) for message in messages],
             recent_runs=recent_runs,
             current_run=current_run,
+            latest_checkpoint=self._checkpoint_response(latest_checkpoint) if latest_checkpoint is not None else None,
         )
 
     async def get_profile_catalog_response(self) -> list[AgentProfileResponse]:
@@ -1936,6 +1939,24 @@ class AgentWorkflowService:
             meta=subtask.meta or {},
             created_at=subtask.created_at,
             updated_at=subtask.updated_at,
+        )
+
+    def _checkpoint_response(
+        self,
+        checkpoint: AgentThreadCheckpoint,
+    ) -> AgentThreadCheckpointResponse:
+        return AgentThreadCheckpointResponse(
+            id=checkpoint.id,
+            thread_id=checkpoint.thread_id,
+            profile_id=checkpoint.profile_id,
+            thread_summary=checkpoint.thread_summary,
+            active_object_bundle=checkpoint.active_object_bundle or {},
+            recent_run_digest=checkpoint.recent_run_digest or {},
+            source_message_count=checkpoint.source_message_count,
+            source_run_count=checkpoint.source_run_count,
+            total_context_characters=checkpoint.total_context_characters,
+            created_at=checkpoint.created_at,
+            updated_at=checkpoint.updated_at,
         )
 
     def _classify_operations(self, operations: list[dict[str, Any]]) -> list[dict[str, Any]]:

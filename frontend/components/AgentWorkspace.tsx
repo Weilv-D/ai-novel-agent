@@ -3,7 +3,14 @@
 import { useEffect, useState, useTransition } from "react";
 
 import { agentWorkflowApi, ApiError } from "@/lib/api-client";
-import type { AgentOperation, AgentRun, AgentSubtask, AgentThread, AgentThreadMessage } from "@/lib/types";
+import type {
+  AgentOperation,
+  AgentRun,
+  AgentSubtask,
+  AgentThread,
+  AgentThreadCheckpoint,
+  AgentThreadMessage,
+} from "@/lib/types";
 import { getRunStatusMeta } from "@/lib/presentation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -173,6 +180,7 @@ export function AgentWorkspace({
   const [messages, setMessages] = useState<AgentThreadMessage[]>([]);
   const [recentRuns, setRecentRuns] = useState<AgentRun[]>([]);
   const [currentRun, setCurrentRun] = useState<AgentRun | null>(null);
+  const [latestCheckpoint, setLatestCheckpoint] = useState<AgentThreadCheckpoint | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -197,6 +205,7 @@ export function AgentWorkspace({
       setMessages(state.messages);
       setRecentRuns(state.recent_runs);
       setCurrentRun(state.current_run || null);
+      setLatestCheckpoint(state.latest_checkpoint || null);
     } catch (err) {
       const message = err instanceof ApiError ? err.detail : "加载 Agent 工作台失败";
       setError(message);
@@ -403,6 +412,41 @@ export function AgentWorkspace({
             )}
           </CardContent>
         </Card>
+
+        {latestCheckpoint && (
+          <Card>
+            <CardHeader>
+              <p className="ink-kicker">Context Checkpoint</p>
+              <CardTitle className="mt-3 text-2xl">最新线程压缩摘要</CardTitle>
+              <CardDescription>
+                长线程达到阈值后，系统会生成 checkpoint，后续 planning 会优先参考这里的摘要与对象上下文。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-600))]">Profile</div>
+                  <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.profile_id}</div>
+                </div>
+                <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-600))]">Messages</div>
+                  <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.source_message_count}</div>
+                </div>
+                <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-600))]">Runs</div>
+                  <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.source_run_count}</div>
+                </div>
+              </div>
+              <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-4">
+                <div className="mb-2 text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-600))]">Summary</div>
+                <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{latestCheckpoint.thread_summary}</p>
+              </div>
+              <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-600))]">
+                生成时间：{formatTimestamp(latestCheckpoint.created_at)}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

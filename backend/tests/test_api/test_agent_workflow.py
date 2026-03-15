@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import AsyncClient
 
+import app.services.agent_workflow as agent_workflow_module
 from app.services.agent_workflow import agent_workflow_service
 
 
@@ -442,6 +443,69 @@ async def test_high_risk_run_requires_second_confirmation(client: AsyncClient, m
     chapter = await client.get(f"/api/v1/chapters/{chapter_id}")
     assert chapter.status_code == 200
     assert chapter.json()["content"] == long_content
+
+
+@pytest.mark.asyncio
+async def test_thread_state_exposes_latest_checkpoint(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Thread state should surface the latest checkpoint after compaction runs."""
+    project_id = await create_project(client, name="Checkpoint Test")
+    thread_id = await create_thread(client, project_id)
+
+    monkeypatch.setattr(agent_workflow_module, "COMPACTION_MESSAGE_THRESHOLD", 1)
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            side_effect=[
+                planner_response(
+                    assistant_message="先创建人物。",
+                    summary="创建人物",
+                    operations=[
+                        {
+                            "tool_name": "create_character",
+                            "description": "创建人物沈陵",
+                            "reason": "测试压缩",
+                            "payload": {"name": "沈陵", "role": "修士"},
+                        }
+                    ],
+                ),
+                planner_response(
+                    assistant_message="继续创建第二个人物。",
+                    summary="再次创建人物",
+                    operations=[
+                        {
+                            "tool_name": "create_character",
+                            "description": "创建人物顾照",
+                            "reason": "触发 checkpoint",
+                            "payload": {"name": "顾照", "role": "谋士"},
+                        }
+                    ],
+                ),
+            ]
+        ),
+    )
+
+    first = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "创建一个修士人物沈陵"},
+    )
+    assert first.status_code == 200
+
+    second = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "再创建一个谋士顾照"},
+    )
+    assert second.status_code == 200
+
+    state = await client.get(f"/api/v1/agent/threads/{thread_id}")
+    assert state.status_code == 200
+    payload = state.json()
+    assert payload["latest_checkpoint"] is not None
+    assert payload["latest_checkpoint"]["profile_id"] == "default"
+    assert payload["latest_checkpoint"]["source_message_count"] >= 2
 
 
 @pytest.mark.asyncio

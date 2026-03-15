@@ -19,6 +19,7 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - operation 风险分级与高风险二次确认
 - 执行后 verification gate
 - 长线程 checkpoint 基础设施
+- 工作台可见的 latest checkpoint 摘要
 
 ## 当前质量状态
 
