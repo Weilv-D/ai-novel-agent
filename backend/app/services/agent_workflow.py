@@ -151,6 +151,29 @@ class SubtaskExecutionResult(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class SubtaskExecutionAttempt(BaseModel):
+    """One attempt inside a child execution unit."""
+
+    attempt_number: int
+    source: str
+    accepted: bool
+    validation_status: Literal["passed", "recovered", "failed"]
+    summary: str
+
+
+class SubtaskExecutionTrace(BaseModel):
+    """Observable execution trace for one internal child unit."""
+
+    unit_id: str
+    role: Literal["planner", "researcher", "writer", "editor", "continuity"]
+    retry_strategy: Literal["service_only", "planner_then_service_fallback"]
+    depends_on: list[str] = Field(default_factory=list)
+    operation_positions: list[int] = Field(default_factory=list)
+    input_summary: str | None = None
+    output_summary: str | None = None
+    attempts: list[SubtaskExecutionAttempt] = Field(default_factory=list)
+
+
 class CRUDAgentThread:
     """Persistence helpers for project threads."""
 
@@ -2137,6 +2160,8 @@ class AgentWorkflowService:
                 provided=provided_by_role.get(role),
                 synthesized=synthesized_by_role[role],
                 operations=operations,
+                context_data=context_data,
+                latest_checkpoint=latest_checkpoint,
             ).model_dump()
             for role in (
                 AgentSubtaskRole.PLANNER.value,
@@ -2279,6 +2304,8 @@ class AgentWorkflowService:
         provided: PlannedSubtaskSpec | None,
         synthesized: PlannedSubtaskSpec,
         operations: list[dict[str, Any]],
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
     ) -> SubtaskExecutionResult:
         """Validate one subtask unit and recover to the service-generated fallback when needed."""
         max_attempts = 2 if provided is not None else 1
@@ -2291,6 +2318,7 @@ class AgentWorkflowService:
             candidate=chosen,
             operations=operations,
         )
+        initial_validation_error = validation_error
 
         if validation_error is not None and provided is not None:
             chosen = synthesized
@@ -2318,6 +2346,19 @@ class AgentWorkflowService:
             summary = summary or validation_error
 
         next_meta = dict(chosen.meta or {})
+        child_trace = self._build_subtask_execution_trace(
+            role=role,
+            source=source,
+            max_attempts=max_attempts,
+            validation_status=validation_status,
+            validation_summary=validation_summary,
+            initial_validation_error=initial_validation_error,
+            chosen=chosen,
+            operations=operations,
+            context_data=context_data,
+            latest_checkpoint=latest_checkpoint,
+            summary=summary,
+        )
         next_meta.update(
             {
                 "unit": role,
@@ -2327,6 +2368,8 @@ class AgentWorkflowService:
                 "retryable": retryable,
                 "validation_status": validation_status,
                 "validation_summary": validation_summary,
+                "retry_strategy": child_trace.retry_strategy,
+                "child_trace": child_trace.model_dump(),
             }
         )
 
@@ -2338,6 +2381,113 @@ class AgentWorkflowService:
             error_message=error_message,
             meta=next_meta,
         )
+
+    def _build_subtask_execution_trace(
+        self,
+        *,
+        role: str,
+        source: str,
+        max_attempts: int,
+        validation_status: str,
+        validation_summary: str,
+        initial_validation_error: str | None,
+        chosen: PlannedSubtaskSpec,
+        operations: list[dict[str, Any]],
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+        summary: str | None,
+    ) -> SubtaskExecutionTrace:
+        """Build an observable child execution trace for one internal unit."""
+        depends_on = [str(item) for item in cast(list[Any], chosen.meta.get("depends_on", []))]
+        operation_positions = [
+            int(position)
+            for position in cast(list[Any], chosen.meta.get("operation_positions", []))
+            if isinstance(position, int)
+        ]
+        retry_strategy: Literal["service_only", "planner_then_service_fallback"] = (
+            "planner_then_service_fallback" if max_attempts > 1 else "service_only"
+        )
+        attempts: list[SubtaskExecutionAttempt] = []
+
+        if source == "service_recovery":
+            attempts.append(
+                SubtaskExecutionAttempt(
+                    attempt_number=1,
+                    source="planner",
+                    accepted=False,
+                    validation_status="failed",
+                    summary=initial_validation_error or "Planner-provided subtask failed validation.",
+                )
+            )
+            attempts.append(
+                SubtaskExecutionAttempt(
+                    attempt_number=2,
+                    source="service_recovery",
+                    accepted=validation_status != "failed",
+                    validation_status=cast(Any, validation_status),
+                    summary=validation_summary,
+                )
+            )
+        else:
+            attempts.append(
+                SubtaskExecutionAttempt(
+                    attempt_number=1,
+                    source=source,
+                    accepted=validation_status != "failed",
+                    validation_status=cast(Any, validation_status),
+                    summary=validation_summary,
+                )
+            )
+
+        return SubtaskExecutionTrace(
+            unit_id=f"{role}-{uuid.uuid4().hex[:10]}",
+            role=cast(Any, role),
+            retry_strategy=retry_strategy,
+            depends_on=depends_on,
+            operation_positions=operation_positions,
+            input_summary=self._build_subtask_input_summary(
+                role=role,
+                operations=operations,
+                context_data=context_data,
+                latest_checkpoint=latest_checkpoint,
+                operation_positions=operation_positions,
+            ),
+            output_summary=summary,
+            attempts=attempts,
+        )
+
+    def _build_subtask_input_summary(
+        self,
+        *,
+        role: str,
+        operations: list[dict[str, Any]],
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+        operation_positions: list[int],
+    ) -> str:
+        """Summarize the resolved input contract for one child unit."""
+        if role == AgentSubtaskRole.PLANNER.value:
+            return f"基于 {len(operations)} 个待执行 operation 构建用户可见蓝图。"
+        if role == AgentSubtaskRole.RESEARCHER.value:
+            summary = (
+                f"上下文包含人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
+                f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
+                f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
+            )
+            if latest_checkpoint is not None:
+                summary += " 已加载最近 checkpoint。"
+            return summary
+        if role == AgentSubtaskRole.WRITER.value:
+            return (
+                f"为正文候选准备 {len(operation_positions)} 个写作型 operation，"
+                f"位置 {operation_positions or ['none']}。"
+            )
+        if role == AgentSubtaskRole.EDITOR.value:
+            return (
+                f"为结构化 patch 准备 {len(operation_positions)} 个编辑型 operation，"
+                f"位置 {operation_positions or ['none']}。"
+            )
+        return f"对 {len(operations)} 个 operation 执行最终一致性与写入前检查。"
 
     def _validate_subtask_candidate(
         self,

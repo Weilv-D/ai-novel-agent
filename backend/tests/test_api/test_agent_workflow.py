@@ -95,6 +95,12 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert run["meta"]["skill_snapshot"]["planner"]["name"] == "novel-agent-planner"
     assert run["meta"]["skill_snapshot"]["profile_id"] == "default"
     assert run["meta"]["skill_snapshot"]["operations"][0]["tool_name"] == "create_character"
+    planner_subtask = next(subtask for subtask in run["subtasks"] if subtask["role"] == "planner")
+    planner_trace = planner_subtask["meta"]["child_trace"]
+    assert planner_subtask["meta"]["retry_strategy"] == "service_only"
+    assert planner_trace["depends_on"] == []
+    assert planner_trace["attempts"][0]["source"] == "service"
+    assert planner_trace["attempts"][0]["accepted"] is True
 
     confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
     assert confirm_response.status_code == 200
@@ -402,6 +408,11 @@ async def test_invalid_planner_subtask_recovers_to_service_unit(
     assert researcher["meta"]["source"] == "service_recovery"
     assert researcher["meta"]["attempt_count"] == 2
     assert researcher["meta"]["validation_status"] == "recovered"
+    assert researcher["meta"]["retry_strategy"] == "planner_then_service_fallback"
+    assert researcher["meta"]["child_trace"]["attempts"][0]["source"] == "planner"
+    assert researcher["meta"]["child_trace"]["attempts"][0]["accepted"] is False
+    assert researcher["meta"]["child_trace"]["attempts"][1]["source"] == "service_recovery"
+    assert researcher["meta"]["child_trace"]["attempts"][1]["accepted"] is True
     assert run["meta"]["hook_trace"][-1]["meta"]["recovered_roles"] == ["researcher"]
 
 

@@ -106,6 +106,12 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
   const source = typeof subtask.meta.source === "string" ? subtask.meta.source : null;
   const attemptCount = typeof subtask.meta.attempt_count === "number" ? subtask.meta.attempt_count : null;
   const maxAttempts = typeof subtask.meta.max_attempts === "number" ? subtask.meta.max_attempts : null;
+  const retryStrategy = typeof subtask.meta.retry_strategy === "string" ? subtask.meta.retry_strategy : null;
+  const childTrace = subtask.meta.child_trace && typeof subtask.meta.child_trace === "object"
+    ? (subtask.meta.child_trace as Record<string, unknown>)
+    : null;
+  const dependsOn = childTrace?.depends_on;
+  const dependencyList = Array.isArray(dependsOn) ? dependsOn.filter((item): item is string => typeof item === "string") : [];
   return (
     <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.46)] px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -118,7 +124,7 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
       {subtask.summary && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{subtask.summary}</p>
       )}
-      {(source || validationStatus || attemptCount !== null) && (
+      {(source || validationStatus || attemptCount !== null || retryStrategy) && (
         <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
           {source && (
             <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
@@ -135,6 +141,20 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
               attempts:{attemptCount}/{maxAttempts ?? attemptCount}
             </span>
           )}
+          {retryStrategy && (
+            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+              strategy:{retryStrategy}
+            </span>
+          )}
+        </div>
+      )}
+      {dependencyList.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+          {dependencyList.map((dependency) => (
+            <span key={dependency} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
+              depends:{dependency}
+            </span>
+          ))}
         </div>
       )}
       {subtask.error_message && (
