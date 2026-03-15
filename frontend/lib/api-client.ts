@@ -609,3 +609,62 @@ export const exportApi = {
     URL.revokeObjectURL(a.href);
   },
 };
+
+export interface ProjectImportWarning {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ProjectImportResponse {
+  project_id: string;
+  project_name: string;
+  imported_counts: Record<string, number>;
+  warnings: ProjectImportWarning[];
+}
+
+export const projectPackageApi = {
+  downloadPackage: async (projectId: string, projectName: string) => {
+    const url = `${API_BASE_URL}/api/v1/projects/${projectId}/package`;
+    const headers = await buildAuthenticatedHeaders();
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new ApiError(response.status, "Package export failed");
+    }
+
+    const blob = await response.blob();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const filename = `${projectName}_package_${timestamp}.zip`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
+
+  importPackage: async (file: File, newName?: string): Promise<ProjectImportResponse> => {
+    const url = `${API_BASE_URL}/api/v1/projects/import${newName ? `?new_name=${encodeURIComponent(newName)}` : ""}`;
+    const headers = await buildAuthenticatedHeaders();
+    delete headers["Content-Type"];
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        response.status,
+        errorData?.detail || "Package import failed"
+      );
+    }
+
+    return response.json();
+  },
+};

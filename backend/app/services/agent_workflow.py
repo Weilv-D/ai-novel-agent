@@ -13,7 +13,7 @@ from textwrap import dedent
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, NotFoundException
@@ -1433,6 +1433,12 @@ class AgentWorkflowService:
         prior_run: AgentRun | None,
         skill_bundle: AgentSkillBundle,
     ) -> PlannerOutput:
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        if settings.agent_e2e_mode == "fixture":
+            return await self._plan_with_fixture(user_message=user_message)
+
         if not self.llm.api_key:
             raise BadRequestException("LLM API key not configured for agent planning")
 
@@ -1518,6 +1524,41 @@ class AgentWorkflowService:
 
         return planner_output
 
+    async def _plan_with_fixture(self, *, user_message: str) -> PlannerOutput:
+        from pathlib import Path
+
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        fixture_path = settings.agent_e2e_fixture_path
+        if not fixture_path:
+            raise BadRequestException("AGENT_E2E_FIXTURE_PATH not configured for fixture mode")
+
+        fixture_file = Path(fixture_path) / "planner-responses.json"
+        if not fixture_file.exists():
+            raise BadRequestException(f"Fixture file not found: {fixture_file}")
+
+        fixture_data = json.loads(fixture_file.read_text(encoding="utf-8"))
+
+        normalized_message = user_message.strip()
+        if normalized_message not in fixture_data:
+            raise BadRequestException(
+                f"No fixture found for message: '{normalized_message}'. "
+                f"Available fixtures: {list(fixture_data.keys())}"
+            )
+
+        fixture_response = fixture_data[normalized_message]
+        try:
+            planner_output = PlannerOutput.model_validate(fixture_response)
+        except ValidationError as exc:
+            raise BadRequestException(f"Invalid fixture response: {exc}") from exc
+
+        for operation in planner_output.operations:
+            if operation.tool_name not in TOOL_NAMES:
+                raise BadRequestException(f"Fixture contains unsupported tool '{operation.tool_name}'")
+
+        return planner_output
+
     async def _prepare_operations(
         self,
         db: AsyncSession,
@@ -1588,7 +1629,7 @@ class AgentWorkflowService:
             preview = OperationPreview(
                 changed_fields=list(normalized_payload.keys()),
                 before_summary="将创建新设定",
-                after_summary=f"{normalized_payload['name']} / {normalized_payload['category']}",
+                after_summary=self._world_setting_summary_data(normalized_payload),
                 diff=_build_diff(None, cast(str | None, normalized_payload.get("content"))),
                 reason=operation.reason,
             )
@@ -3798,6 +3839,67 @@ class AgentWorkflowService:
         passed_checks: list[str] = []
         failed_checks: list[str] = []
 
+        if operation.tool_name in {"create_character", "update_character"} and isinstance(target, Character):
+            trimmed_name = (target.name or "").strip()
+            if not trimmed_name:
+                failed_checks.append("character_name_empty")
+            else:
+                passed_checks.append("character_name_not_empty")
+
+            duplicate_character_stmt = (
+                select(Character.id)
+                .where(
+                    Character.project_id == project_id,
+                    func.lower(func.trim(Character.name)) == trimmed_name.lower(),
+                    Character.id != target.id,
+                )
+                .limit(1)
+            )
+            duplicate_character = (await db.execute(duplicate_character_stmt)).scalar_one_or_none()
+            if duplicate_character is not None:
+                failed_checks.append("character_name_duplicate")
+            else:
+                passed_checks.append("character_name_unique")
+
+            profile = target.profile or {}
+            if isinstance(profile, dict):
+                age = profile.get("age")
+                if age is not None:
+                    if not isinstance(age, int) or age < 0:
+                        failed_checks.append("character_age_invalid")
+                    else:
+                        passed_checks.append("character_age_valid")
+
+        if operation.tool_name in {"create_world_setting", "update_world_setting"} and isinstance(target, WorldSetting):
+            trimmed_name = (target.name or "").strip()
+            if not trimmed_name:
+                failed_checks.append("world_setting_name_empty")
+            else:
+                passed_checks.append("world_setting_name_not_empty")
+
+            trimmed_content = (target.content or "").strip()
+            if not trimmed_content:
+                failed_checks.append("world_setting_content_empty")
+            else:
+                passed_checks.append("world_setting_content_not_empty")
+
+            normalized_name = trimmed_name.lower()
+            duplicate_setting_stmt = (
+                select(WorldSetting.id)
+                .where(
+                    WorldSetting.project_id == project_id,
+                    func.lower(func.trim(WorldSetting.name)) == normalized_name,
+                    WorldSetting.category == target.category,
+                    WorldSetting.id != target.id,
+                )
+                .limit(1)
+            )
+            duplicate_setting = (await db.execute(duplicate_setting_stmt)).scalar_one_or_none()
+            if duplicate_setting is not None:
+                failed_checks.append("world_setting_name_duplicate")
+            else:
+                passed_checks.append("world_setting_name_unique")
+
         if operation.tool_name in {"create_chapter", "update_chapter"} and isinstance(target, Chapter):
             if target.volume_id is not None:
                 try:
@@ -3879,6 +3981,12 @@ class AgentWorkflowService:
 
         if failed_checks:
             reason_labels = {
+                "character_name_empty": "人物名称不能为空",
+                "character_name_duplicate": "人物名称重复",
+                "character_age_invalid": "人物年龄必须为非负整数",
+                "world_setting_name_empty": "设定名称不能为空",
+                "world_setting_content_empty": "设定内容不能为空",
+                "world_setting_name_duplicate": "同分类下设定名称重复",
                 "volume_missing": "卷不存在",
                 "volume_project_mismatch": "章节卷归属错误",
                 "chapter_number_duplicate": "章节序号重复",
@@ -3888,7 +3996,7 @@ class AgentWorkflowService:
                 "pov_character_missing": "POV 人物不存在",
                 "pov_character_project_mismatch": "POV 人物不属于当前项目",
             }
-            rendered = ", ".join(reason_labels[reason] for reason in failed_checks)
+            rendered = ", ".join(reason_labels.get(reason, reason) for reason in failed_checks)
             return False, f"领域语义不一致：{rendered}"
 
         return True, f"领域语义已校验：{', '.join(passed_checks)}"

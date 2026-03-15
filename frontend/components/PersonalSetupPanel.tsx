@@ -109,13 +109,14 @@ export function PersonalSetupPanel() {
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
                 placeholder="若后阁设下门阀，请将于此落印..."
+                testId="api-key-input"
               />
 
               <div className="flex flex-col gap-4 sm:flex-row pt-2">
-                <Button type="button" onClick={saveApiKey} className="font-serif tracking-widest min-w-[120px]">
+                <Button type="button" onClick={saveApiKey} className="font-serif tracking-widest min-w-[120px]" testId="save-api-key-btn">
                   落印
                 </Button>
-                <Button type="button" variant="ghost" onClick={clearApiKey} className="font-serif tracking-widest min-w-[120px]">
+                <Button type="button" variant="ghost" onClick={clearApiKey} className="font-serif tracking-widest min-w-[120px]" testId="clear-api-key-btn">
                   拂尘
                 </Button>
               </div>

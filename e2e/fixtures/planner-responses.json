@@ -1,0 +1,184 @@
+{
+  "创建一个测试人物": {
+    "assistant_message": "好的，我将创建一个名为「林逸风」的测试人物。",
+    "summary": "创建测试人物林逸风",
+    "operations": [
+      {
+        "tool_name": "create_character",
+        "description": "创建新人物林逸风",
+        "reason": "用户请求创建测试人物",
+        "payload": {
+          "name": "林逸风",
+          "role": "protagonist",
+          "profile": {
+            "age": 25,
+            "appearance": "身材修长，眉目清朗",
+            "personality": "冷静沉稳，心思缜密"
+          },
+          "notes": "E2E 测试人物"
+        }
+      }
+    ]
+  },
+  "修改世界观设定": {
+    "assistant_message": "好的，我将创建一个新的世界观设定「灵气体系」。",
+    "summary": "创建世界观设定灵气体系",
+    "operations": [
+      {
+        "tool_name": "create_world_setting",
+        "description": "创建世界观设定灵气体系",
+        "reason": "用户请求添加世界观设定",
+        "payload": {
+          "category": "magic_system",
+          "name": "灵气体系",
+          "content": "天地间存在灵气，修士可通过修炼吸收灵气强化自身。灵气分为五行属性，不同属性的灵气可修炼不同的功法。"
+        }
+      }
+    ]
+  },
+  "创建章节并写入正文": {
+    "assistant_message": "好的，我将创建第一章并写入测试正文。",
+    "summary": "创建第一章并写入正文",
+    "operations": [
+      {
+        "tool_name": "create_chapter",
+        "description": "创建第一章",
+        "reason": "用户请求创建章节",
+        "payload": {
+          "chapter_number": 1,
+          "title": "初入江湖",
+          "outline": "主角初次踏入江湖，遭遇第一个挑战"
+        }
+      }
+    ]
+  },
+  "高风险正文覆盖": {
+    "assistant_message": "好的，我将执行高风险的章节正文覆盖操作。",
+    "summary": "覆盖章节正文（高风险）",
+    "warning_message": "此操作将完全替换现有章节正文，请确认后执行。",
+    "operations": [
+      {
+        "tool_name": "write_chapter_content",
+        "description": "覆盖章节正文",
+        "reason": "用户请求重写章节正文",
+        "payload": {
+          "mode": "replace",
+          "content": "这是新的章节正文内容，用于测试高风险操作的二次确认流程。\n\n林逸风站在山巅，望着远处的云海翻涌。初入江湖的他，心中既有期待，也有忐忑。"
+        }
+      }
+    ]
+  },
+  "创建人物和设定": {
+    "assistant_message": "好的，我将同时创建一个人物和一个世界观设定。",
+    "summary": "创建人物和设定",
+    "operations": [
+      {
+        "tool_name": "create_character",
+        "description": "创建新人物苏婉清",
+        "reason": "用户请求创建人物",
+        "payload": {
+          "name": "苏婉清",
+          "role": "supporting",
+          "profile": {
+            "age": 22,
+            "appearance": "容貌秀丽，气质温婉",
+            "personality": "温柔善良，心思细腻"
+          }
+        }
+      },
+      {
+        "tool_name": "create_world_setting",
+        "description": "创建世界观设定门派体系",
+        "reason": "用户请求添加设定",
+        "payload": {
+          "category": "organization",
+          "name": "门派体系",
+          "content": "江湖中存在多个门派，以青云门、玄天宗、落霞山庄为三大正道门派。"
+        }
+      }
+    ]
+  },
+  "创建重复名称人物": {
+    "assistant_message": "我将尝试创建一个与现有人物同名的人物。",
+    "summary": "创建重复名称人物（预期失败）",
+    "operations": [
+      {
+        "tool_name": "create_character",
+        "description": "创建重复名称人物",
+        "reason": "测试重复名称校验",
+        "payload": {
+          "name": "林逸风",
+          "role": "supporting",
+          "profile": {
+            "age": 30
+          }
+        }
+      }
+    ]
+  },
+  "创建非法年龄人物": {
+    "assistant_message": "我将尝试创建一个年龄为负数的人物。",
+    "summary": "创建非法年龄人物（预期失败）",
+    "operations": [
+      {
+        "tool_name": "create_character",
+        "description": "创建非法年龄人物",
+        "reason": "测试年龄校验",
+        "payload": {
+          "name": "测试人物",
+          "role": "supporting",
+          "profile": {
+            "age": -5
+          }
+        }
+      }
+    ]
+  },
+  "创建空名称人物": {
+    "assistant_message": "我将尝试创建一个名称为空的人物。",
+    "summary": "创建空名称人物（预期失败）",
+    "operations": [
+      {
+        "tool_name": "create_character",
+        "description": "创建空名称人物",
+        "reason": "测试名称校验",
+        "payload": {
+          "name": "   ",
+          "role": "supporting"
+        }
+      }
+    ]
+  },
+  "创建重复名称设定": {
+    "assistant_message": "我将尝试创建一个与现有设定同名同分类的设定。",
+    "summary": "创建重复名称设定（预期失败）",
+    "operations": [
+      {
+        "tool_name": "create_world_setting",
+        "description": "创建重复名称设定",
+        "reason": "测试重复名称校验",
+        "payload": {
+          "category": "magic_system",
+          "name": "灵气体系",
+          "content": "重复的设定内容"
+        }
+      }
+    ]
+  },
+  "创建空内容设定": {
+    "assistant_message": "我将尝试创建一个内容为空的设定。",
+    "summary": "创建空内容设定（预期失败）",
+    "operations": [
+      {
+        "tool_name": "create_world_setting",
+        "description": "创建空内容设定",
+        "reason": "测试内容校验",
+        "payload": {
+          "category": "other",
+          "name": "空设定",
+          "content": "   "
+        }
+      }
+    ]
+  }
+}

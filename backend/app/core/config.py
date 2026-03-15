@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_dimension: int = 1536
 
+    # E2E Test Mode
+    agent_e2e_mode: str = ""
+    agent_e2e_fixture_path: str = ""
+
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"

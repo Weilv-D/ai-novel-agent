@@ -100,6 +100,7 @@ export default function NewProjectPage() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
+                testId="project-name-input"
               />
 
               <Input
@@ -150,10 +151,10 @@ export default function NewProjectPage() {
               {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 
               <div className="flex gap-4 pt-4">
-                <Button type="button" variant="outline" href="/projects" fullWidth>
+                <Button type="button" variant="outline" href="/projects" fullWidth testId="cancel-new-project-btn">
                   取消
                 </Button>
-                <Button type="submit" disabled={loading} fullWidth>
+                <Button type="submit" disabled={loading} fullWidth testId="create-project-btn">
                   {loading ? "创建中..." : "创建项目"}
                 </Button>
               </div>

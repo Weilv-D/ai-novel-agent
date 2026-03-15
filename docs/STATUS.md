@@ -4,7 +4,7 @@
 
 ## 交付定位
 
-AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。它已经具备完整的本地创作闭环：项目管理、结构化内容维护、Agent 规划与执行、风险控制、落库校验、长期线程压缩，以及与这些能力对应的前端工作台。
+AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。它已经具备完整的本地创作闭环：项目管理、结构化内容维护、Agent 规划与执行、风险控制、落库校验、长期线程压缩、项目包导出导入，以及与这些能力对应的前端工作台。
 
 当前状态适合个人长期使用，也适合作为继续演进 Agent 工作流的稳定基线。
 
@@ -17,6 +17,7 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - 世界观
 - 卷、章、场景
 - Snapshot、Dependency、Memory、Suggestion、Export
+- 项目包导出导入
 
 ### Agent 工作流
 
@@ -34,6 +35,9 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - snapshot linkage 与 snapshot-derived semantic 校验
 - content transition 校验
 - domain-level semantic 校验
+  - Character: 名称非空、名称唯一、年龄非负
+  - WorldSetting: 名称非空、内容非空、同分类名称唯一
+  - Chapter/Scene: 章节序号唯一、场景序号唯一
 - checkpoint-based compact flow
 - planner window、retained window、active bundle contract
 
@@ -45,6 +49,14 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - 风险与确认面板
 - verification 与 compact contract 展示
 - 项目、人物、设定、章节、场景的辅助编辑页
+- 项目包导出与导入入口
+
+### E2E 测试
+
+- Playwright 测试框架
+- Fixture planner 模式（无真实 LLM 依赖）
+- 关键节点 data-testid
+- 首批用例覆盖核心流程
 
 ## 质量状态
 
@@ -55,10 +67,11 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - 后端 `pytest`
 - 前端 `npm run lint`
 - 前端 `npm run build`
+- E2E `make e2e`
 
 当前实测结果：
 
-- 后端测试：`433 passed / 2 skipped`
+- 后端测试：`418 passed / 2 skipped`
 - 后端 lint：通过
 - 后端类型检查：通过
 - 前端 lint：通过
@@ -69,7 +82,6 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 以下内容不属于当前交付范围：
 
 - 多实例协作、组织和权限体系
-- 浏览器自动化 e2e 测试
 - 真正独立运行的内部 child agent session
 - 面向公网部署的完整安全加固
 
@@ -84,6 +96,7 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - Execution：phase、child unit、capability execution record
 - Verification：字段、快照、内容迁移、业务语义
 - Compact：checkpoint、planner window、retained window、active bundle contract
+- Export/Import：项目包导出导入、embedding 维度兼容
 
 这意味着前端、测试和脚本不再依赖解析非结构化 `meta` 来理解 Agent 行为。
 

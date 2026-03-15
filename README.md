@@ -21,9 +21,11 @@ AI Novel Agent 由三部分组成：
 - Preview-first 流程：Agent 先生成计划和预览，再确认执行
 - 风险控制：高风险正文覆盖需要二次确认
 - Verification Gate：落库结果经过字段、快照、内容迁移和业务语义校验
+- Domain Verification：人物名称唯一性、年龄合法性；设定内容完整性、分类唯一性
 - 长线程压缩：使用 checkpoint、planner window、retained window 和 active bundle contract 管理长期上下文
 - Profile / Skill 体系：项目可绑定不同写作 profile，并用文件化 skill 规范 planner 和 operation
 - 记忆检索与导出：支持 embedding、相似检索、TXT / Markdown 导出
+- 项目包导出导入：完整项目数据打包、迁移与恢复
 
 ## 运行方式
 

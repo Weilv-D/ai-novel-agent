@@ -10,6 +10,7 @@ interface BaseButtonProps {
   variant?: Variant;
   size?: Size;
   fullWidth?: boolean;
+  testId?: string;
 }
 
 interface ButtonAsButton extends BaseButtonProps, Omit<ButtonHTMLAttributes<HTMLButtonElement>, "size"> {
@@ -52,6 +53,7 @@ const ButtonInner = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProp
       size = "md",
       fullWidth = false,
       className = "",
+      testId,
       children,
       ...props
     },
@@ -73,6 +75,7 @@ const ButtonInner = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProp
           scroll={scroll}
           ref={ref as React.Ref<HTMLAnchorElement>}
           className={combinedClassName}
+          data-testid={testId}
           {...anchorProps}
         >
           {children}
@@ -86,6 +89,7 @@ const ButtonInner = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProp
         ref={ref as React.Ref<HTMLButtonElement>}
         className={combinedClassName}
         disabled={disabled}
+        data-testid={testId}
         {...buttonProps}
       >
         {children}

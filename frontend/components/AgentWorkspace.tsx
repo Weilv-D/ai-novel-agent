@@ -514,12 +514,13 @@ export function AgentWorkspace({
               placeholder="例如：创建一个在第 3 章登场的反派人物，身份是皇城密探，性格冷静，顺便把第三章标题改得更紧张一些。"
               className="min-h-[140px]"
               disabled={isPending}
+              testId="agent-input"
             />
             <div className="mt-4 flex items-center justify-between gap-3">
               <p className="text-sm text-[rgb(var(--ink-600))]">
                 Agent 会先生成完整计划和预览，确认后才真正写入数据。
               </p>
-              <Button onClick={handleSend} disabled={!input.trim() || isPending}>
+              <Button onClick={handleSend} disabled={!input.trim() || isPending} testId="agent-send-btn">
                 {isPending ? "处理中..." : "生成计划"}
               </Button>
             </div>
@@ -790,10 +791,10 @@ export function AgentWorkspace({
                 </div>
                 {currentRun.status === "awaiting_confirmation" && (
                   <div className="flex gap-3 pt-2">
-                    <Button onClick={() => handleRunAction("confirm")} disabled={isPending}>
+                    <Button onClick={() => handleRunAction("confirm")} disabled={isPending} testId="confirm-run-btn">
                       确认执行
                     </Button>
-                    <Button variant="outline" onClick={() => handleRunAction("cancel")} disabled={isPending}>
+                    <Button variant="outline" onClick={() => handleRunAction("cancel")} disabled={isPending} testId="cancel-run-btn">
                       取消计划
                     </Button>
                   </div>
@@ -804,10 +805,10 @@ export function AgentWorkspace({
                       当前计划包含高风险正文覆盖。请复核预览 diff 后再次确认。
                     </div>
                     <div className="flex gap-3">
-                      <Button onClick={() => handleRunAction("confirm_high_risk")} disabled={isPending}>
+                      <Button onClick={() => handleRunAction("confirm_high_risk")} disabled={isPending} testId="confirm-high-risk-btn">
                         二次确认并执行
                       </Button>
-                      <Button variant="outline" onClick={() => handleRunAction("cancel")} disabled={isPending}>
+                      <Button variant="outline" onClick={() => handleRunAction("cancel")} disabled={isPending} testId="cancel-run-btn">
                         取消计划
                       </Button>
                     </div>

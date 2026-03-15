@@ -11,6 +11,7 @@ from app.api.v1.dependencies import router as dependencies_router
 from app.api.v1.export import router as export_router
 from app.api.v1.health import router as health_router
 from app.api.v1.memories import router as memories_router
+from app.api.v1.project_package import router as project_package_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.snapshots import router as snapshots_router
 from app.api.v1.suggestions import router as suggestions_router
@@ -32,3 +33,4 @@ router.include_router(snapshots_router, dependencies=[Depends(require_api_access
 router.include_router(memories_router, dependencies=[Depends(require_api_access)])
 router.include_router(agent_router, dependencies=[Depends(require_api_access)])
 router.include_router(export_router, dependencies=[Depends(require_api_access)])
+router.include_router(project_package_router, dependencies=[Depends(require_api_access)])

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
-import { ApiError, exportApi } from "@/lib/api-client";
+import { ApiError, exportApi, projectPackageApi } from "@/lib/api-client";
 import { getProjectStatusMeta } from "@/lib/presentation";
 import { useProjectStore } from "@/lib/stores/projectStore";
 
@@ -170,11 +170,14 @@ export default function ProjectDetailPage() {
               <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">
                 <div className="mb-2 text-[rgb(var(--ink-700))]">导出</div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => exportApi.download(project.id, "txt")} size="sm">
+                  <Button variant="outline" onClick={() => exportApi.download(project.id, "txt")} size="sm" testId="export-txt-btn">
                     TXT
                   </Button>
-                  <Button variant="outline" onClick={() => exportApi.download(project.id, "markdown")} size="sm">
+                  <Button variant="outline" onClick={() => exportApi.download(project.id, "markdown")} size="sm" testId="export-markdown-btn">
                     Markdown
+                  </Button>
+                  <Button variant="outline" onClick={() => projectPackageApi.downloadPackage(project.id, project.name)} size="sm" testId="export-package-btn">
+                    项目包
                   </Button>
                 </div>
               </div>
