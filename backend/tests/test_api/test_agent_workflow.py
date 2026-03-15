@@ -8,10 +8,17 @@ import pytest
 from httpx import AsyncClient
 
 import app.services.agent_workflow as agent_workflow_module
-from app.services.agent_workflow import agent_workflow_service
+from app.services.agent_workflow import PlannedSubtaskSpec, agent_workflow_service
 
 
-def planner_response(*, assistant_message: str, summary: str, operations: list[dict[str, object]], warning_message: str | None = None) -> dict[str, object]:
+def planner_response(
+    *,
+    assistant_message: str,
+    summary: str,
+    operations: list[dict[str, object]],
+    warning_message: str | None = None,
+    subtasks: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     """Build a fake planner response payload."""
     return {
         "content": json.dumps(
@@ -20,6 +27,7 @@ def planner_response(*, assistant_message: str, summary: str, operations: list[d
                 "summary": summary,
                 "warning_message": warning_message,
                 "operations": operations,
+                "subtasks": subtasks or [],
             },
             ensure_ascii=False,
         )
@@ -345,6 +353,117 @@ async def test_invalid_planner_tool_is_rejected(client: AsyncClient, monkeypatch
         json={"content": "做点危险的事"},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_invalid_planner_subtask_recovers_to_service_unit(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planner-provided subtask metadata should recover to the service fallback when invalid."""
+    project_id = await create_project(client, name="Recovery Test")
+    thread_id = await create_thread(client, project_id)
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会先创建人物卡。",
+                summary="创建人物 周槐",
+                operations=[
+                    {
+                        "tool_name": "create_character",
+                        "description": "创建人物周槐",
+                        "reason": "补充新角色",
+                        "payload": {"name": "周槐", "role": "谋士"},
+                    }
+                ],
+                subtasks=[
+                    {
+                        "role": "researcher",
+                        "title": "Context bundle",
+                        "summary": "",
+                        "status": "completed",
+                    }
+                ],
+            )
+        ),
+    )
+
+    response = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "创建一个谋士周槐"},
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+
+    researcher = next(subtask for subtask in run["subtasks"] if subtask["role"] == "researcher")
+    assert researcher["meta"]["source"] == "service_recovery"
+    assert researcher["meta"]["attempt_count"] == 2
+    assert researcher["meta"]["validation_status"] == "recovered"
+    assert run["meta"]["hook_trace"][-1]["meta"]["recovered_roles"] == ["researcher"]
+
+
+@pytest.mark.asyncio
+async def test_failed_service_subtask_rejects_blueprint(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unrecoverable internal subtask failure should reject the run before persistence."""
+    project_id = await create_project(client, name="Subtask Failure")
+    thread_id = await create_thread(client, project_id)
+
+    chapter_response = await client.post(
+        "/api/v1/chapters",
+        json={
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "夜潮",
+            "content": "旧内容",
+        },
+    )
+    assert chapter_response.status_code == 201
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会重写第一章。",
+                summary="重写第一章正文",
+                operations=[
+                    {
+                        "tool_name": "write_chapter_content",
+                        "description": "重写第一章正文",
+                        "reason": "测试 writer 单元失败",
+                        "payload": {
+                            "chapter_number": 1,
+                            "mode": "replace",
+                            "content": "新正文候选",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        agent_workflow_service,
+        "_execute_writer_unit",
+        lambda *, operations: PlannedSubtaskSpec(
+            role="writer",
+            title="Writer candidate",
+            status="skipped",
+            summary="错误的 writer 单元",
+        ),
+    )
+
+    response = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "重写第一章"},
+    )
+    assert response.status_code == 400
+    assert "failed subtask units: writer" in response.text
 
 
 @pytest.mark.asyncio

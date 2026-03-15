@@ -102,6 +102,10 @@ function MessageBubble({ message }: { message: AgentThreadMessage }) {
 
 function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
   const verificationMeta = VERIFICATION_META[subtask.status === "failed" ? "failed" : subtask.status === "completed" ? "passed" : subtask.status === "skipped" ? "skipped" : "pending"];
+  const validationStatus = typeof subtask.meta.validation_status === "string" ? subtask.meta.validation_status : null;
+  const source = typeof subtask.meta.source === "string" ? subtask.meta.source : null;
+  const attemptCount = typeof subtask.meta.attempt_count === "number" ? subtask.meta.attempt_count : null;
+  const maxAttempts = typeof subtask.meta.max_attempts === "number" ? subtask.meta.max_attempts : null;
   return (
     <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.46)] px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -113,6 +117,25 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
       </div>
       {subtask.summary && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{subtask.summary}</p>
+      )}
+      {(source || validationStatus || attemptCount !== null) && (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+          {source && (
+            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+              source:{source}
+            </span>
+          )}
+          {validationStatus && (
+            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+              validation:{validationStatus}
+            </span>
+          )}
+          {attemptCount !== null && (
+            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+              attempts:{attemptCount}/{maxAttempts ?? attemptCount}
+            </span>
+          )}
+        </div>
       )}
       {subtask.error_message && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--danger))]">{subtask.error_message}</p>

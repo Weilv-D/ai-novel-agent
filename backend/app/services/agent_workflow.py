@@ -140,6 +140,17 @@ class RunBlueprint(BaseModel):
     hook_trace: list[HookTraceEntry] = Field(default_factory=list)
 
 
+class SubtaskExecutionResult(BaseModel):
+    """Normalized internal execution result for one subtask unit."""
+
+    role: Literal["planner", "researcher", "writer", "editor", "continuity"]
+    title: str
+    status: Literal["planned", "completed", "failed", "skipped"]
+    summary: str | None = None
+    error_message: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class CRUDAgentThread:
     """Persistence helpers for project threads."""
 
@@ -2104,97 +2115,260 @@ class AgentWorkflowService:
         context_data: dict[str, Any],
         latest_checkpoint: AgentThreadCheckpoint | None,
     ) -> list[dict[str, Any]]:
-        """Build internal subtasks that mirror planner/researcher/writer/editor/continuity roles."""
-        provided_by_role = {
-            subtask.role: subtask
-            for subtask in planner_output.subtasks
+        """Build validated internal subtask units with per-role recovery boundaries."""
+        provided_by_role: dict[str, PlannedSubtaskSpec] = {
+            str(subtask.role): subtask for subtask in planner_output.subtasks
         }
 
+        synthesized_by_role: dict[str, PlannedSubtaskSpec] = {
+            AgentSubtaskRole.PLANNER.value: self._execute_planner_unit(planner_output=planner_output),
+            AgentSubtaskRole.RESEARCHER.value: self._execute_researcher_unit(
+                context_data=context_data,
+                latest_checkpoint=latest_checkpoint,
+            ),
+            AgentSubtaskRole.WRITER.value: self._execute_writer_unit(operations=operations),
+            AgentSubtaskRole.EDITOR.value: self._execute_editor_unit(operations=operations),
+            AgentSubtaskRole.CONTINUITY.value: self._execute_continuity_unit(operations=operations),
+        }
+
+        return [
+            self._materialize_subtask_unit(
+                role=role,
+                provided=provided_by_role.get(role),
+                synthesized=synthesized_by_role[role],
+                operations=operations,
+            ).model_dump()
+            for role in (
+                AgentSubtaskRole.PLANNER.value,
+                AgentSubtaskRole.RESEARCHER.value,
+                AgentSubtaskRole.WRITER.value,
+                AgentSubtaskRole.EDITOR.value,
+                AgentSubtaskRole.CONTINUITY.value,
+            )
+        ]
+
+    def _execute_planner_unit(
+        self,
+        *,
+        planner_output: PlannerOutput,
+    ) -> PlannedSubtaskSpec:
+        """Build the planner unit from the final user-visible plan."""
+        return PlannedSubtaskSpec(
+            role="planner",
+            title="Planner blueprint",
+            status="completed",
+            summary=_excerpt(planner_output.summary or planner_output.assistant_message, length=SUBTASK_SUMMARY_LIMIT),
+            meta={"depends_on": []},
+        )
+
+    def _execute_researcher_unit(
+        self,
+        *,
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+    ) -> PlannedSubtaskSpec:
+        """Build the researcher unit from resolved project context."""
         current_objects = [
             f"{key}:{value['id']}"
             for key, value in context_data.items()
             if key.startswith("current_") and isinstance(value, dict) and value.get("id")
         ]
-        researcher_summary = (
+        summary = (
             f"已装配项目上下文，人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
             f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
             f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
         )
         if current_objects:
-            researcher_summary += f" 当前聚焦：{', '.join(current_objects)}。"
+            summary += f" 当前聚焦：{', '.join(current_objects)}。"
         if latest_checkpoint is not None:
-            researcher_summary += f" 已参考 checkpoint {latest_checkpoint.id}。"
+            summary += f" 已参考 checkpoint {latest_checkpoint.id}。"
+        return PlannedSubtaskSpec(
+            role="researcher",
+            title="Context bundle",
+            status="completed",
+            summary=_excerpt(summary, length=SUBTASK_SUMMARY_LIMIT),
+            meta={"depends_on": ["planner"]},
+        )
 
+    def _execute_writer_unit(
+        self,
+        *,
+        operations: list[dict[str, Any]],
+    ) -> PlannedSubtaskSpec:
+        """Build the writer unit for prose-candidate generation."""
         writer_tools = {
             "write_chapter_content",
             "write_scene_content",
             "create_chapter",
             "create_scene",
         }
-        writer_ops = [operation for operation in operations if operation["tool_name"] in writer_tools and self._operation_content_candidate(operation)]
+        writer_ops = [
+            operation
+            for operation in operations
+            if operation["tool_name"] in writer_tools and self._operation_content_candidate(operation)
+        ]
+        return PlannedSubtaskSpec(
+            role="writer",
+            title="Writer candidate",
+            status="completed" if writer_ops else "skipped",
+            summary=_excerpt(
+                f"生成 {len(writer_ops)} 个正文候选，全部在 planning 阶段完成。"
+                if writer_ops
+                else "本轮无需生成正文候选。",
+                length=SUBTASK_SUMMARY_LIMIT,
+            ),
+            meta={
+                "depends_on": ["planner", "researcher"],
+                "operation_positions": [int(operation["position"]) for operation in writer_ops if "position" in operation],
+            },
+        )
+
+    def _execute_editor_unit(
+        self,
+        *,
+        operations: list[dict[str, Any]],
+    ) -> PlannedSubtaskSpec:
+        """Build the editor unit for structured metadata and patch edits."""
         editor_ops = [
             operation
             for operation in operations
             if operation["tool_name"] in {"update_character", "update_world_setting", "update_chapter", "update_scene"}
         ]
+        return PlannedSubtaskSpec(
+            role="editor",
+            title="Editor diff",
+            status="completed" if editor_ops else "skipped",
+            summary=_excerpt(
+                f"整理 {len(editor_ops)} 个结构化修改步骤。"
+                if editor_ops
+                else "本轮无需结构化 patch/diff。",
+                length=SUBTASK_SUMMARY_LIMIT,
+            ),
+            meta={
+                "depends_on": ["planner", "researcher"],
+                "operation_positions": [int(operation["position"]) for operation in editor_ops if "position" in operation],
+            },
+        )
 
-        synthesized: list[PlannedSubtaskSpec] = [
-            PlannedSubtaskSpec(
-                role="planner",
-                title="Planner blueprint",
-                status="completed",
-                summary=_excerpt(planner_output.summary or planner_output.assistant_message, length=SUBTASK_SUMMARY_LIMIT),
-            ),
-            PlannedSubtaskSpec(
-                role="researcher",
-                title="Context bundle",
-                status="completed",
-                summary=_excerpt(researcher_summary, length=SUBTASK_SUMMARY_LIMIT),
-            ),
-            PlannedSubtaskSpec(
-                role="writer",
-                title="Writer candidate",
-                status="completed" if writer_ops else "skipped",
-                summary=_excerpt(
-                    f"生成 {len(writer_ops)} 个正文候选，全部在 planning 阶段完成。"
-                    if writer_ops
-                    else "本轮无需生成正文候选。",
-                    length=SUBTASK_SUMMARY_LIMIT,
-                ),
-            ),
-            PlannedSubtaskSpec(
-                role="editor",
-                title="Editor diff",
-                status="completed" if editor_ops else "skipped",
-                summary=_excerpt(
-                    f"整理 {len(editor_ops)} 个结构化修改步骤。"
-                    if editor_ops
-                    else "本轮无需结构化 patch/diff。",
-                    length=SUBTASK_SUMMARY_LIMIT,
-                ),
-            ),
-            PlannedSubtaskSpec(
-                role="continuity",
-                title="Continuity gate",
-                status="planned",
-                summary="执行前将验证目标对象、写入一致性与多步修改冲突。",
-            ),
+    def _execute_continuity_unit(
+        self,
+        *,
+        operations: list[dict[str, Any]],
+    ) -> PlannedSubtaskSpec:
+        """Build the continuity unit before the execution-time gate runs."""
+        relevant_targets = [
+            f"{operation.get('target_type') or 'unknown'}:{operation.get('target_display') or operation.get('target_id') or operation['tool_name']}"
+            for operation in operations
         ]
+        return PlannedSubtaskSpec(
+            role="continuity",
+            title="Continuity gate",
+            status="planned",
+            summary=_excerpt(
+                "执行前将验证目标对象、写入一致性与多步修改冲突。"
+                + (f" 本轮涉及：{', '.join(relevant_targets[:4])}。" if relevant_targets else ""),
+                length=SUBTASK_SUMMARY_LIMIT,
+            ),
+            meta={"depends_on": ["planner", "researcher", "writer", "editor"]},
+        )
 
-        merged: list[dict[str, Any]] = []
-        for synthesized_subtask in synthesized:
-            chosen = provided_by_role.get(synthesized_subtask.role, synthesized_subtask)
-            merged.append(
-                {
-                    "role": chosen.role,
-                    "title": chosen.title,
-                    "status": chosen.status,
-                    "summary": _excerpt(chosen.summary, length=SUBTASK_SUMMARY_LIMIT),
-                    "error_message": chosen.error_message,
-                    "meta": chosen.meta,
-                }
+    def _materialize_subtask_unit(
+        self,
+        *,
+        role: str,
+        provided: PlannedSubtaskSpec | None,
+        synthesized: PlannedSubtaskSpec,
+        operations: list[dict[str, Any]],
+    ) -> SubtaskExecutionResult:
+        """Validate one subtask unit and recover to the service-generated fallback when needed."""
+        max_attempts = 2 if provided is not None else 1
+        retryable = provided is not None
+        chosen = provided or synthesized
+        attempt_count = 1
+        source = "planner" if provided is not None else "service"
+        validation_error = self._validate_subtask_candidate(
+            role=role,
+            candidate=chosen,
+            operations=operations,
+        )
+
+        if validation_error is not None and provided is not None:
+            chosen = synthesized
+            attempt_count = 2
+            source = "service_recovery"
+            validation_error = self._validate_subtask_candidate(
+                role=role,
+                candidate=chosen,
+                operations=operations,
             )
-        return merged
+
+        validation_status = "passed"
+        validation_summary = "Subtask passed validation."
+        status = chosen.status
+        error_message = chosen.error_message
+        summary = _excerpt(chosen.summary, length=SUBTASK_SUMMARY_LIMIT)
+        if source == "service_recovery":
+            validation_status = "recovered"
+            validation_summary = "Planner-provided subtask was invalid; recovered to service-generated fallback."
+        if validation_error is not None:
+            validation_status = "failed"
+            validation_summary = validation_error
+            status = "failed"
+            error_message = validation_error
+            summary = summary or validation_error
+
+        next_meta = dict(chosen.meta or {})
+        next_meta.update(
+            {
+                "unit": role,
+                "source": source,
+                "attempt_count": attempt_count,
+                "max_attempts": max_attempts,
+                "retryable": retryable,
+                "validation_status": validation_status,
+                "validation_summary": validation_summary,
+            }
+        )
+
+        return SubtaskExecutionResult(
+            role=cast(Any, role),
+            title=chosen.title,
+            status=cast(Any, status),
+            summary=summary,
+            error_message=error_message,
+            meta=next_meta,
+        )
+
+    def _validate_subtask_candidate(
+        self,
+        *,
+        role: str,
+        candidate: PlannedSubtaskSpec,
+        operations: list[dict[str, Any]],
+    ) -> str | None:
+        """Validate a single role-specific subtask candidate."""
+        if not candidate.title.strip():
+            return f"{role} subtask is missing title"
+
+        writer_required_tools = {"write_chapter_content", "write_scene_content", "create_chapter", "create_scene"}
+        writer_required = any(
+            operation["tool_name"] in writer_required_tools and self._operation_content_candidate(operation)
+            for operation in operations
+        )
+        editor_required = any(
+            operation["tool_name"] in {"update_character", "update_world_setting", "update_chapter", "update_scene"}
+            for operation in operations
+        )
+
+        if role in {AgentSubtaskRole.PLANNER.value, AgentSubtaskRole.RESEARCHER.value} and not (candidate.summary or "").strip():
+            return f"{role} subtask requires a non-empty summary"
+        if role == AgentSubtaskRole.WRITER.value and writer_required and candidate.status == "skipped":
+            return "writer subtask cannot be skipped when prose candidates exist"
+        if role == AgentSubtaskRole.EDITOR.value and editor_required and candidate.status == "skipped":
+            return "editor subtask cannot be skipped when structured edits exist"
+        if role == AgentSubtaskRole.CONTINUITY.value and candidate.status == "failed" and not (candidate.error_message or "").strip():
+            return "continuity subtask must explain blocking failures"
+        return None
 
     def _build_pre_plan_hook(
         self,
@@ -2247,6 +2421,15 @@ class AgentWorkflowService:
             raise BadRequestException("Blueprint is missing researcher subtask")
         if AgentSubtaskRole.CONTINUITY.value not in roles:
             raise BadRequestException("Blueprint is missing continuity subtask")
+        failed_roles = [
+            str(subtask["role"])
+            for subtask in subtasks
+            if str(subtask.get("status")) == AgentSubtaskStatus.FAILED.value
+        ]
+        if failed_roles:
+            raise BadRequestException(
+                f"Blueprint contains failed subtask units: {', '.join(sorted(failed_roles))}"
+            )
 
         writer_required_tools = {"write_chapter_content", "write_scene_content", "create_chapter", "create_scene"}
         writer_required = any(
@@ -2258,19 +2441,36 @@ class AgentWorkflowService:
             for operation in operations
         )
         subtask_by_role = {str(subtask["role"]): subtask for subtask in subtasks}
+        recovered_roles = [
+            str(subtask["role"])
+            for subtask in subtasks
+            if str(cast(dict[str, Any], subtask.get("meta", {})).get("validation_status")) == "recovered"
+        ]
+        validation_status_by_role = {
+            str(subtask["role"]): str(
+                cast(dict[str, Any], subtask.get("meta", {})).get("validation_status", "unknown")
+            )
+            for subtask in subtasks
+        }
         if writer_required and subtask_by_role.get(AgentSubtaskRole.WRITER.value, {}).get("status") == "skipped":
             raise BadRequestException("Writer subtask cannot be skipped when content candidates exist")
         if editor_required and subtask_by_role.get(AgentSubtaskRole.EDITOR.value, {}).get("status") == "skipped":
             raise BadRequestException("Editor subtask cannot be skipped when structured edits exist")
 
+        summary = f"Blueprint 校验通过：{len(operations)} 个 operation，角色 {', '.join(sorted(roles))}。"
+        if recovered_roles:
+            summary += f" 已回退角色：{', '.join(sorted(recovered_roles))}。"
+
         return HookTraceEntry(
             hook_name="SubagentStop",
             status="completed",
-            summary=_excerpt(
-                f"Blueprint 校验通过：{len(operations)} 个 operation，角色 {', '.join(sorted(roles))}。",
-                length=SUBTASK_SUMMARY_LIMIT,
-            ),
-            meta={"operation_count": len(operations), "roles": sorted(roles)},
+            summary=_excerpt(summary, length=SUBTASK_SUMMARY_LIMIT),
+            meta={
+                "operation_count": len(operations),
+                "roles": sorted(roles),
+                "recovered_roles": sorted(recovered_roles),
+                "validation_status_by_role": validation_status_by_role,
+            },
         )
 
     def _operation_content_candidate(self, operation: dict[str, Any]) -> str | None:

@@ -70,6 +70,7 @@ make verify
 - `AgentRun` 会先给出待确认的多步操作预览，再进入执行
 - 项目可绑定 `agent_profile_id`；当前内置 `default` 与 `xianxia_intrigue`
 - run 会带出内部 `subtask` 摘要，展示 planner / researcher / writer / editor / continuity
+- 每个 `subtask` 都记录来源、尝试次数与校验结果；planner 给出的坏 subtask 会按角色回退到服务端安全版本
 - run metadata 会记录 `PreCompact / PrePlan / SubagentStop / RunStop` hook trace
 - 高风险正文覆盖会进入二次确认，而不是直接执行
 - 长线程达到阈值后会生成 `AgentThreadCheckpoint`，并通过线程状态接口返回最近一条压缩摘要

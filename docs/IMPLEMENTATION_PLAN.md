@@ -73,6 +73,9 @@
 
 - `AgentSubtask` 已持久化
 - 工作台已展示 planner / researcher / writer / editor / continuity 摘要
+- 每个角色的 subtask unit 已有独立的服务端合成逻辑
+- planner 如果提供了不合法的 subtask，系统会按角色回退到服务端安全版本
+- unrecoverable 的 subtask unit 会在 blueprint 阶段直接拒绝，不会生成可执行 run
 - `PrePlan` 等价能力已经存在于 workflow service：
   - profile 选择
   - context bundle 装配
@@ -83,8 +86,8 @@
 
 后续收口：
 
-- 把 planner、writer、editor、continuity 从“带 hook trace 的结构化内部层”升级为真正独立的执行单元
-- 给每个 subtask 建立独立 schema 和失败重试边界
+- 把 planner、writer、editor、continuity 从“服务端合成 + recovery 边界”的内部层升级为真正独立的 child execution unit
+- 给每个 subtask 建立更完整的输入/输出 schema、重试策略和可观测 trace
 - 明确 hook 生命周期：
   - `PrePlan`
   - `SubagentStop`
@@ -208,6 +211,7 @@
 - 项目级 profile round-trip
 - skill catalog 按项目返回有效 profile
 - 高风险二次确认链路
+- subtask recovery / unrecoverable failure 边界
 - subtask 与 verification 字段的 API 暴露
 
 ## 兼容与迁移策略
