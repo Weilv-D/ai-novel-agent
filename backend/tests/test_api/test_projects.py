@@ -91,6 +91,38 @@ class TestCreateProject:
             assert data["name"] == "My Novel"
             assert mock_create.await_args.kwargs["user_id"] == PERSONAL_USER_ID
 
+    def test_create_project_accepts_agent_profile_id(self):
+        """Project creation should carry the selected agent profile."""
+        client = TestClient(app)
+
+        project_data = {
+            "name": "My Novel",
+            "genre": "Fantasy",
+            "agent_profile_id": "xianxia_intrigue",
+        }
+
+        mock_response = ProjectResponse(
+            id=uuid.uuid4(),
+            user_id=uuid.uuid4(),
+            name="My Novel",
+            genre="Fantasy",
+            agent_profile_id="xianxia_intrigue",
+            status="drafting",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch(
+            "app.api.v1.projects.project_service.create_with_user", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = client.post("/api/v1/projects", json=project_data)
+
+            assert response.status_code == status.HTTP_201_CREATED
+            assert response.json()["agent_profile_id"] == "xianxia_intrigue"
+            assert mock_create.await_args.kwargs["obj_in"].agent_profile_id == "xianxia_intrigue"
+
     def test_create_project_invalid_schema(self):
         """Test creating a project with invalid schema."""
         client = TestClient(app)
@@ -205,6 +237,36 @@ class TestUpdateProject:
                 )
 
                 assert response.status_code == status.HTTP_200_OK
+
+    def test_update_project_agent_profile_id(self):
+        """Project update should expose the selected profile id."""
+        client = TestClient(app)
+        project_id = uuid.uuid4()
+
+        mock_response = ProjectResponse(
+            id=project_id,
+            user_id=uuid.uuid4(),
+            name="Updated Name",
+            genre="Fantasy",
+            agent_profile_id="xianxia_intrigue",
+            status="drafting",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch("app.api.v1.projects.project_service.get", new_callable=AsyncMock) as mock_get:
+            with patch(
+                "app.api.v1.projects.project_service.update", new_callable=AsyncMock
+            ) as mock_update:
+                mock_get.return_value = mock_response
+                mock_update.return_value = mock_response
+
+                response = client.patch(
+                    f"/api/v1/projects/{project_id}", json={"agent_profile_id": "xianxia_intrigue"}
+                )
+
+                assert response.status_code == status.HTTP_200_OK
+                assert response.json()["agent_profile_id"] == "xianxia_intrigue"
 
 
 class TestDeleteProject:

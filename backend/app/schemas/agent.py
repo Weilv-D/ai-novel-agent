@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 RunStatusLiteral = Literal[
     "draft",
     "awaiting_confirmation",
+    "awaiting_high_risk_confirmation",
     "executing",
     "completed",
     "failed",
@@ -17,6 +18,11 @@ RunStatusLiteral = Literal[
 ]
 OperationStatusLiteral = Literal["planned", "executed", "failed", "cancelled"]
 MessageRoleLiteral = Literal["user", "assistant", "system"]
+SubtaskRoleLiteral = Literal["planner", "researcher", "writer", "editor", "continuity"]
+SubtaskStatusLiteral = Literal["planned", "completed", "failed", "skipped"]
+PermissionLevelLiteral = Literal["read_search", "standard_write", "high_risk_write"]
+RiskLevelLiteral = Literal["low", "medium", "high"]
+VerificationStatusLiteral = Literal["pending", "passed", "failed", "skipped"]
 
 
 class OperationPreview(BaseModel):
@@ -77,9 +83,32 @@ class AgentOperationResponse(BaseModel):
     reason: str | None = None
     payload: dict[str, Any]
     preview: OperationPreview
+    permission_level: PermissionLevelLiteral
+    risk_level: RiskLevelLiteral
+    requires_secondary_confirmation: bool
     status: OperationStatusLiteral
+    verification_status: VerificationStatusLiteral
+    verification_summary: str | None = None
     execution_result: dict[str, Any] | None = None
     error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AgentSubtaskResponse(BaseModel):
+    """Internal subtask summary exposed with a run."""
+
+    id: UUID
+    run_id: UUID
+    position: int
+    role: SubtaskRoleLiteral
+    title: str
+    status: SubtaskStatusLiteral
+    summary: str | None = None
+    error_message: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -99,13 +128,17 @@ class AgentRunResponse(BaseModel):
     summary: str | None = None
     error_message: str | None = None
     warning_message: str | None = None
+    verification_status: VerificationStatusLiteral
+    verification_summary: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
     confirmed_at: datetime | None = None
+    secondary_confirmed_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     operations: list[AgentOperationResponse] = Field(default_factory=list)
+    subtasks: list[AgentSubtaskResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 
@@ -157,9 +190,22 @@ class AgentSkillSummaryResponse(BaseModel):
 class AgentSkillCatalogResponse(BaseModel):
     """Active planner and operation skill catalog."""
 
+    profile_id: str
+    profile_name: str
+    builtin: bool
     source_roots: list[str] = Field(default_factory=list)
     planner: AgentSkillSummaryResponse
     operations: list[AgentSkillSummaryResponse] = Field(default_factory=list)
+
+
+class AgentProfileResponse(BaseModel):
+    """Available project-level agent profile."""
+
+    id: str
+    name: str
+    description: str
+    builtin: bool
+    root: str
 
 
 class AgentChatRequest(BaseModel):

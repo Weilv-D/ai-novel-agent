@@ -424,7 +424,9 @@ export const dependencyApi = {
 import type {
   AgentChatRequest,
   AgentChatResponse,
+  AgentProfile,
   AgentRun,
+  AgentSkillCatalog,
   AgentThread,
   AgentThreadMessageRequest,
   AgentThreadMessageResponse,
@@ -513,6 +515,12 @@ export const agentApi = {
 };
 
 export const agentWorkflowApi = {
+  listProfiles: () =>
+    fetchApi<AgentProfile[]>("/api/v1/agent/profiles"),
+
+  getSkills: (projectId?: string) =>
+    fetchApi<AgentSkillCatalog>(`/api/v1/agent/skills${buildQueryString({ project_id: projectId })}`),
+
   createThread: (projectId: string) =>
     fetchApi<AgentThread>("/api/v1/agent/threads", {
       method: "POST",
@@ -533,6 +541,11 @@ export const agentWorkflowApi = {
 
   confirmRun: (runId: string) =>
     fetchApi<{ run: AgentRun }>(`/api/v1/agent/runs/${runId}/confirm`, {
+      method: "POST",
+    }),
+
+  confirmHighRiskRun: (runId: string) =>
+    fetchApi<{ run: AgentRun }>(`/api/v1/agent/runs/${runId}/confirm-high-risk`, {
       method: "POST",
     }),
 

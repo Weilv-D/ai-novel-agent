@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 
 import { agentWorkflowApi, ApiError } from "@/lib/api-client";
-import type { AgentOperation, AgentRun, AgentThread, AgentThreadMessage } from "@/lib/types";
+import type { AgentOperation, AgentRun, AgentSubtask, AgentThread, AgentThreadMessage } from "@/lib/types";
 import { getRunStatusMeta } from "@/lib/presentation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -14,6 +14,7 @@ import { DiffPreview } from "@/components/DiffPreview";
 interface AgentWorkspaceProps {
   projectId: string;
   projectName: string;
+  agentProfileId?: string;
   className?: string;
   onProjectRefresh?: () => Promise<void> | void;
 }
@@ -29,6 +30,19 @@ const TOOL_LABELS: Record<string, string> = {
   create_scene: "创建场景",
   update_scene: "修改场景",
   write_scene_content: "写场景正文",
+};
+
+const RISK_META: Record<string, { label: string; className: string }> = {
+  low: { label: "低风险", className: "ink-badge ink-badge-jade" },
+  medium: { label: "标准写入", className: "ink-badge ink-badge-amber" },
+  high: { label: "高风险", className: "ink-badge ink-badge-rust" },
+};
+
+const VERIFICATION_META: Record<string, { label: string; className: string }> = {
+  pending: { label: "待校验", className: "ink-badge ink-badge-ash" },
+  passed: { label: "已校验", className: "ink-badge ink-badge-jade" },
+  failed: { label: "校验失败", className: "ink-badge ink-badge-rust" },
+  skipped: { label: "已跳过", className: "ink-badge ink-badge-smoke" },
 };
 
 function formatTimestamp(value: string): string {
@@ -60,9 +74,32 @@ function MessageBubble({ message }: { message: AgentThreadMessage }) {
   );
 }
 
+function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
+  const verificationMeta = VERIFICATION_META[subtask.status === "failed" ? "failed" : subtask.status === "completed" ? "passed" : subtask.status === "skipped" ? "skipped" : "pending"];
+  return (
+    <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.46)] px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">{subtask.role}</div>
+          <div className="mt-1 text-sm font-medium text-[rgb(var(--ink-900))]">{subtask.title}</div>
+        </div>
+        <span className={verificationMeta.className}>{verificationMeta.label}</span>
+      </div>
+      {subtask.summary && (
+        <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{subtask.summary}</p>
+      )}
+      {subtask.error_message && (
+        <p className="mt-2 text-sm leading-7 text-[rgb(var(--danger))]">{subtask.error_message}</p>
+      )}
+    </div>
+  );
+}
+
 function OperationCard({ operation }: { operation: AgentOperation }) {
   const toolLabel = TOOL_LABELS[operation.tool_name] || operation.tool_name;
   const preview = operation.preview;
+  const riskMeta = RISK_META[operation.risk_level] || RISK_META.medium;
+  const verificationMeta = VERIFICATION_META[operation.verification_status] || VERIFICATION_META.pending;
   return (
     <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.14)] bg-[rgba(255,255,255,0.58)] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -72,15 +109,22 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
           </div>
           <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">{toolLabel}</div>
         </div>
-        {operation.target_display && (
-          <span className="rounded-full border border-[rgba(var(--line),0.18)] px-3 py-1 text-xs text-[rgb(var(--ink-700))]">
-            {operation.target_display}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className={riskMeta.className}>{riskMeta.label}</span>
+          <span className={verificationMeta.className}>{verificationMeta.label}</span>
+          {operation.target_display && (
+            <span className="rounded-full border border-[rgba(var(--line),0.18)] px-3 py-1 text-xs text-[rgb(var(--ink-700))]">
+              {operation.target_display}
+            </span>
+          )}
+        </div>
       </div>
       <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{operation.description}</p>
       {operation.reason && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-600))]">原因：{operation.reason}</p>
+      )}
+      {operation.requires_secondary_confirmation && (
+        <p className="mt-2 text-sm leading-7 text-[rgb(var(--danger))]">此步骤会触发二次确认，适用于高风险正文覆盖。</p>
       )}
       {preview.changed_fields.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -108,6 +152,9 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
           {preview.diff}
         </pre>
       )}
+      {operation.verification_summary && (
+        <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-600))]">校验：{operation.verification_summary}</p>
+      )}
       {operation.error_message && (
         <p className="mt-3 text-sm text-[rgb(var(--danger))]">{operation.error_message}</p>
       )}
@@ -118,6 +165,7 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
 export function AgentWorkspace({
   projectId,
   projectName,
+  agentProfileId,
   className = "",
   onProjectRefresh,
 }: AgentWorkspaceProps) {
@@ -197,7 +245,7 @@ export function AgentWorkspace({
     });
   }
 
-  async function handleRunAction(action: "confirm" | "cancel") {
+  async function handleRunAction(action: "confirm" | "confirm_high_risk" | "cancel") {
     if (!currentRun || isPending) {
       return;
     }
@@ -206,6 +254,8 @@ export function AgentWorkspace({
       try {
         if (action === "confirm") {
           await agentWorkflowApi.confirmRun(currentRun.id);
+        } else if (action === "confirm_high_risk") {
+          await agentWorkflowApi.confirmHighRiskRun(currentRun.id);
         } else {
           await agentWorkflowApi.cancelRun(currentRun.id);
         }
@@ -275,6 +325,11 @@ export function AgentWorkspace({
               <div>
                 <p className="ink-kicker">Current Run</p>
                 <CardTitle className="mt-3 text-2xl">当前待执行计划</CardTitle>
+                {agentProfileId && (
+                  <p className="mt-3 text-sm leading-6 text-[rgb(var(--ink-600))]">
+                    当前项目 profile：<span className="font-medium text-[rgb(var(--ink-900))]">{agentProfileId}</span>
+                  </p>
+                )}
               </div>
               {currentRun && <span className={getRunStatusMeta(currentRun.status).className}>{getRunStatusMeta(currentRun.status).label}</span>}
             </div>
@@ -290,9 +345,24 @@ export function AgentWorkspace({
                     {currentRun.warning_message}
                   </div>
                 )}
+                {currentRun.verification_summary && (
+                  <div className="rounded-[1.2rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
+                    校验状态：{currentRun.verification_summary}
+                  </div>
+                )}
                 {currentRun.error_message && (
                   <div className="rounded-[1.2rem] bg-[rgba(var(--danger),0.08)] px-4 py-3 text-sm leading-7 text-[rgb(var(--danger))]">
                     {currentRun.error_message}
+                  </div>
+                )}
+                {currentRun.subtasks.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">
+                      Internal Subtasks
+                    </div>
+                    {currentRun.subtasks.map((subtask) => (
+                      <SubtaskCard key={subtask.id} subtask={subtask} />
+                    ))}
                   </div>
                 )}
                 <div className="space-y-3">
@@ -308,6 +378,21 @@ export function AgentWorkspace({
                     <Button variant="outline" onClick={() => handleRunAction("cancel")} disabled={isPending}>
                       取消计划
                     </Button>
+                  </div>
+                )}
+                {currentRun.status === "awaiting_high_risk_confirmation" && (
+                  <div className="space-y-3 pt-2">
+                    <div className="rounded-[1.2rem] bg-[rgba(var(--danger),0.08)] px-4 py-3 text-sm leading-7 text-[rgb(var(--danger))]">
+                      当前计划包含高风险正文覆盖。请复核预览 diff 后再次确认。
+                    </div>
+                    <div className="flex gap-3">
+                      <Button onClick={() => handleRunAction("confirm_high_risk")} disabled={isPending}>
+                        二次确认并执行
+                      </Button>
+                      <Button variant="outline" onClick={() => handleRunAction("cancel")} disabled={isPending}>
+                        取消计划
+                      </Button>
+                    </div>
                   </div>
                 )}
               </>

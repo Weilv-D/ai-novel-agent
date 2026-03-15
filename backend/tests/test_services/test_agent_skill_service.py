@@ -38,3 +38,13 @@ Use the custom skill body.
 
     assert bundle.operations["create_character"].name == "custom-create-character"
     assert bundle.operations["update_character"].name == "update-character"
+
+
+def test_load_xianxia_profile_bundle() -> None:
+    """The builtin xianxia profile should overlay the default skills."""
+    bundle = agent_skill_service.load_bundle(profile_id="xianxia_intrigue")
+
+    assert bundle.profile.id == "xianxia_intrigue"
+    assert bundle.planner.name == "xianxia-intrigue-planner"
+    assert bundle.operations["write_chapter_content"].name == "xianxia-write-chapter-content"
+    assert any(reference.endswith("写作提示词.txt") for reference in bundle.operations["write_chapter_content"].references)

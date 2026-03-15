@@ -10,6 +10,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
+DEFAULT_AGENT_PROFILE_ID = "default"
+
 
 class ProjectStatus(str, Enum):
     """Project status values."""
@@ -47,6 +49,19 @@ class Project(Base, UUIDMixin, TimestampMixin):
 
     # JSONB for extensibility
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False, name="metadata")
+
+    @property
+    def agent_profile_id(self) -> str:
+        """Active agent profile for this project."""
+        return str((self.meta or {}).get("agent_profile_id") or DEFAULT_AGENT_PROFILE_ID)
+
+    @agent_profile_id.setter
+    def agent_profile_id(self, value: str | None) -> None:
+        """Persist the selected agent profile inside project metadata."""
+        normalized = (value or DEFAULT_AGENT_PROFILE_ID).strip() or DEFAULT_AGENT_PROFILE_ID
+        next_meta = dict(self.meta or {})
+        next_meta["agent_profile_id"] = normalized
+        self.meta = next_meta
 
     def __repr__(self) -> str:
         return f"Project(id={self.id!r}, name={self.name!r}, status={self.status!r})"

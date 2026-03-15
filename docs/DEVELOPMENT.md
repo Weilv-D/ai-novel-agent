@@ -42,8 +42,12 @@ cp .env.example .env
 - SQLite 仅用于测试与轻量验证；目标运行环境仍然是 PostgreSQL + pgvector
 - 单用户模式是当前明确边界：`PERSONAL_USER_EMAIL` 和 `PERSONAL_USER_NAME` 决定本地归属用户
 - Agent 主流程是同步 planner/executor：消息先生成待确认 run，再由确认操作触发真正写入
-- Agent 规划层由 `backend/app/agent_skills/` 下的文件化 skills 驱动；`AGENT_SKILLS_DIR` 可覆盖默认 planner 或 operation skill
-- 覆盖 skill 后，可通过 `GET /api/v1/agent/skills` 检查实际加载结果
+- Agent 规划层由 profile-aware 文件化 skills 驱动：
+  - 通用技能：`backend/app/agent_skills/`
+  - profile 覆盖：`backend/app/agent_profiles/`
+- 项目级 `agent_profile_id` 决定实际使用哪一套 planner / operation skills
+- `AGENT_SKILLS_DIR` 作为 profile 根目录覆盖入口，可新增或替换 profile
+- 覆盖后，可通过 `GET /api/v1/agent/profiles` 和 `GET /api/v1/agent/skills?project_id=...` 检查实际加载结果
 
 ## 前端开发
 

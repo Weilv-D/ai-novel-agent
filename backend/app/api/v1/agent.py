@@ -14,6 +14,7 @@ from app.api.deps import get_db
 from app.schemas.agent import (
     AgentChatRequest,
     AgentChatResponse,
+    AgentProfileResponse,
     AgentRunActionResponse,
     AgentRunResponse,
     AgentSkillCatalogResponse,
@@ -55,10 +56,20 @@ async def get_thread(
     return await agent_workflow_service.get_thread_state_response(db, thread_id=thread_id)
 
 
+@router.get("/profiles", response_model=list[AgentProfileResponse])
+async def list_agent_profiles() -> list[AgentProfileResponse]:
+    """List available project-level agent profiles."""
+    return await agent_workflow_service.get_profile_catalog_response()
+
+
 @router.get("/skills", response_model=AgentSkillCatalogResponse)
-async def get_agent_skills() -> AgentSkillCatalogResponse:
+async def get_agent_skills(
+    *,
+    db: AsyncSession = Depends(get_db),
+    project_id: UUID | None = None,
+) -> AgentSkillCatalogResponse:
     """Inspect the active planner and operation skills."""
-    return await agent_workflow_service.get_skill_catalog_response()
+    return await agent_workflow_service.get_skill_catalog_response(db, project_id=project_id)
 
 
 @router.post("/threads/{thread_id}/messages", response_model=AgentThreadMessageResponse)
@@ -121,6 +132,16 @@ async def confirm_run(
 ) -> AgentRunActionResponse:
     """Confirm and execute a planned run."""
     return await agent_workflow_service.confirm_run_response(db, run_id=run_id)
+
+
+@router.post("/runs/{run_id}/confirm-high-risk", response_model=AgentRunActionResponse)
+async def confirm_high_risk_run(
+    *,
+    db: AsyncSession = Depends(get_db),
+    run_id: UUID,
+) -> AgentRunActionResponse:
+    """Execute a run after the secondary confirmation for high-risk writes."""
+    return await agent_workflow_service.confirm_high_risk_run_response(db, run_id=run_id)
 
 
 @router.post("/runs/{run_id}/cancel", response_model=AgentRunActionResponse)

@@ -4,13 +4,30 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
-import { ApiError } from "@/lib/api-client";
+import { agentWorkflowApi, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { useProjectStore } from "@/lib/stores/projectStore";
-import type { ProjectStatus, ProjectUpdate } from "@/lib/types";
+import type { AgentProfile, ProjectStatus, ProjectUpdate } from "@/lib/types";
+
+const FALLBACK_PROFILES: AgentProfile[] = [
+  {
+    id: "default",
+    name: "Default",
+    description: "通用长篇写作 profile。",
+    builtin: true,
+    root: "builtin",
+  },
+  {
+    id: "xianxia_intrigue",
+    name: "仙侠权谋",
+    description: "严格遵照 others/ 下的大纲、章纲与写作规范。",
+    builtin: true,
+    root: "builtin",
+  },
+];
 
 export default function EditProjectPage() {
   const params = useParams();
@@ -33,10 +50,25 @@ export default function EditProjectPage() {
     genre: "",
     target_audience: "",
     target_word_count: undefined,
+    agent_profile_id: "default",
     status: undefined as ProjectStatus | undefined,
   });
+  const [profiles, setProfiles] = useState<AgentProfile[]>(FALLBACK_PROFILES);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const nextProfiles = await agentWorkflowApi.listProfiles();
+        if (nextProfiles.length > 0) {
+          setProfiles(nextProfiles);
+        }
+      } catch {
+        setProfiles(FALLBACK_PROFILES);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (id) {
@@ -59,6 +91,7 @@ export default function EditProjectPage() {
         genre: project.genre || "",
         target_audience: project.target_audience || "",
         target_word_count: project.target_word_count,
+        agent_profile_id: project.agent_profile_id || "default",
         status: project.status,
       });
     }
@@ -207,6 +240,24 @@ export default function EditProjectPage() {
                   <option value="revising">修订中</option>
                   <option value="completed">已完成</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="ink-label">Agent Profile</label>
+                <select
+                  value={formData.agent_profile_id || "default"}
+                  onChange={(e) => setFormData({ ...formData, agent_profile_id: e.target.value })}
+                  className="ink-select"
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-600))]">
+                  {(profiles.find((profile) => profile.id === (formData.agent_profile_id || "default")) || profiles[0])?.description}
+                </p>
               </div>
 
               {submitError && <div className="ink-alert ink-alert-danger">{submitError}</div>}

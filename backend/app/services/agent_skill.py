@@ -1,4 +1,4 @@
-"""File-backed skill registry for the planner/executor agent workflow."""
+"""Profile-aware skill registry for the planner/executor agent workflow."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException
+from app.models.project import DEFAULT_AGENT_PROFILE_ID
+
+XIANXIA_INTRIGUE_PROFILE_ID = "xianxia_intrigue"
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,17 @@ class AgentSkill:
 
 
 @dataclass(frozen=True)
+class AgentProfile:
+    """Profile metadata for project-level agent behavior."""
+
+    id: str
+    name: str
+    description: str
+    builtin: bool
+    root: Path
+
+
+@dataclass(frozen=True)
 class AgentSkillSummary:
     """Small serializable view of a skill."""
 
@@ -58,8 +72,9 @@ class AgentSkillSummary:
 
 @dataclass(frozen=True)
 class AgentSkillBundle:
-    """Loaded planner and operation skills."""
+    """Loaded planner and operation skills for one profile."""
 
+    profile: AgentProfile
     planner: AgentSkill
     operations: dict[str, AgentSkill]
     roots: tuple[Path, ...]
@@ -137,33 +152,132 @@ class AgentSkillBundle:
 
 
 class AgentSkillService:
-    """Load packaged skills and optionally overlay custom replacements."""
+    """Load packaged profile-aware skills and optional local overrides."""
 
     def __init__(self) -> None:
-        self.default_root = Path(__file__).resolve().parent.parent / "agent_skills"
+        service_root = Path(__file__).resolve().parent.parent
+        self.default_profile_root = service_root / "agent_skills"
+        self.profile_root = service_root / "agent_profiles"
+        self.builtin_profiles: dict[str, AgentProfile] = {
+            DEFAULT_AGENT_PROFILE_ID: AgentProfile(
+                id=DEFAULT_AGENT_PROFILE_ID,
+                name="Default",
+                description="General-purpose long-form novel planning profile.",
+                builtin=True,
+                root=self.default_profile_root,
+            ),
+            XIANXIA_INTRIGUE_PROFILE_ID: AgentProfile(
+                id=XIANXIA_INTRIGUE_PROFILE_ID,
+                name="仙侠权谋",
+                description="Grounded in the canonical prompts under others/ for outline, chapter design, and prose.",
+                builtin=True,
+                root=self.profile_root / XIANXIA_INTRIGUE_PROFILE_ID,
+            ),
+        }
 
-    def load_bundle(self, *, override_root: Path | None = None) -> AgentSkillBundle:
-        """Load default skills and overlay custom ones if configured."""
+    def list_profiles(self, *, override_root: Path | None = None) -> list[AgentProfile]:
+        """List builtin profiles and any custom profiles from the override root."""
+        configured_root = self._resolve_override_root(override_root)
+        profiles = dict(self.builtin_profiles)
+        if configured_root is not None:
+            for candidate in configured_root.iterdir():
+                if not candidate.is_dir():
+                    continue
+                planner_path = candidate / "planner" / "SKILL.md"
+                if not planner_path.exists():
+                    continue
+                profile_id = candidate.name
+                if profile_id in profiles:
+                    continue
+                planner_skill = self._load_skill(planner_path)
+                profiles[profile_id] = AgentProfile(
+                    id=profile_id,
+                    name=planner_skill.name,
+                    description=planner_skill.description,
+                    builtin=False,
+                    root=candidate.resolve(),
+                )
+        return [profiles[key] for key in sorted(profiles)]
+
+    def load_bundle(
+        self,
+        *,
+        profile_id: str = DEFAULT_AGENT_PROFILE_ID,
+        override_root: Path | None = None,
+    ) -> AgentSkillBundle:
+        """Load the default profile and overlay a project-selected profile."""
+        configured_root = self._resolve_override_root(override_root)
+        profile = self._resolve_profile(profile_id, configured_root=configured_root)
+
+        roots: list[Path] = [self.default_profile_root]
+        planner = self._load_skill(self.default_profile_root / "planner" / "SKILL.md")
+        operations = self._load_operation_skills(self.default_profile_root)
+
+        if profile.id != DEFAULT_AGENT_PROFILE_ID:
+            profile_planner_path = profile.root / "planner" / "SKILL.md"
+            if profile_planner_path.exists():
+                planner = self._load_skill(profile_planner_path)
+            operations.update(self._load_operation_skills(profile.root))
+            roots.append(profile.root)
+
+        if configured_root is not None:
+            override_profile_root = self._resolve_override_profile_root(
+                profile_id=profile.id,
+                override_root=configured_root,
+            )
+            if override_profile_root is not None:
+                planner_override = override_profile_root / "planner" / "SKILL.md"
+                if planner_override.exists():
+                    planner = self._load_skill(planner_override)
+                operations.update(self._load_operation_skills(override_profile_root))
+                roots.append(override_profile_root)
+
+        return AgentSkillBundle(profile=profile, planner=planner, operations=operations, roots=tuple(roots))
+
+    def _resolve_override_root(self, override_root: Path | None) -> Path | None:
         configured_root = override_root
         if configured_root is None:
             configured_value = get_settings().agent_skills_dir.strip()
             configured_root = Path(configured_value).expanduser().resolve() if configured_value else None
+        if configured_root is None:
+            return None
+        if not configured_root.exists():
+            raise BadRequestException(f"Configured agent skills directory does not exist: {configured_root}")
+        return configured_root
 
-        planner = self._load_skill(self.default_root / "planner" / "SKILL.md")
-        operations = self._load_operation_skills(self.default_root)
-        roots = [self.default_root]
+    def _resolve_profile(self, profile_id: str, *, configured_root: Path | None) -> AgentProfile:
+        normalized = profile_id.strip() or DEFAULT_AGENT_PROFILE_ID
+        builtin = self.builtin_profiles.get(normalized)
+        if builtin is not None:
+            return builtin
+        if configured_root is None:
+            raise BadRequestException(f"Unknown agent profile '{normalized}'")
+        custom_root = self._resolve_override_profile_root(profile_id=normalized, override_root=configured_root)
+        if custom_root is None:
+            raise BadRequestException(f"Unknown agent profile '{normalized}'")
+        planner_skill = self._load_skill(custom_root / "planner" / "SKILL.md")
+        return AgentProfile(
+            id=normalized,
+            name=planner_skill.name,
+            description=planner_skill.description,
+            builtin=False,
+            root=custom_root,
+        )
 
-        if configured_root is not None:
-            if not configured_root.exists():
-                raise BadRequestException(f"Configured agent skills directory does not exist: {configured_root}")
-            roots.append(configured_root)
-            planner_override = configured_root / "planner" / "SKILL.md"
-            if planner_override.exists():
-                planner = self._load_skill(planner_override)
-            for tool_name, skill in self._load_operation_skills(configured_root).items():
-                operations[tool_name] = skill
-
-        return AgentSkillBundle(planner=planner, operations=operations, roots=tuple(roots))
+    def _resolve_override_profile_root(
+        self,
+        *,
+        profile_id: str,
+        override_root: Path,
+    ) -> Path | None:
+        direct_planner = override_root / "planner" / "SKILL.md"
+        direct_operations = override_root / "operations"
+        if profile_id == DEFAULT_AGENT_PROFILE_ID and (direct_planner.exists() or direct_operations.exists()):
+            return override_root
+        candidate = override_root / profile_id
+        if (candidate / "planner" / "SKILL.md").exists():
+            return candidate.resolve()
+        return None
 
     def _load_operation_skills(self, root: Path) -> dict[str, AgentSkill]:
         operation_root = root / "operations"

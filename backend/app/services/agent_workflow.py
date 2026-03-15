@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import logging
 import re
 import uuid
 from datetime import UTC, datetime
 from textwrap import dedent
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import desc, select
@@ -21,9 +22,16 @@ from app.models.agent_workflow import (
     AgentMessageRole,
     AgentOperation,
     AgentOperationStatus,
+    AgentPermissionLevel,
+    AgentRiskLevel,
     AgentRun,
     AgentRunStatus,
+    AgentSubtask,
+    AgentSubtaskRole,
+    AgentSubtaskStatus,
     AgentThread,
+    AgentThreadCheckpoint,
+    AgentVerificationStatus,
 )
 from app.models.chapter import Chapter, Scene
 from app.models.character import Character
@@ -32,10 +40,12 @@ from app.models.world_setting import WorldSetting
 from app.schemas.agent import (
     AgentMessageResponse,
     AgentOperationResponse,
+    AgentProfileResponse,
     AgentRunActionResponse,
     AgentRunResponse,
     AgentSkillCatalogResponse,
     AgentSkillSummaryResponse,
+    AgentSubtaskResponse,
     AgentThreadMessageResponse,
     AgentThreadResponse,
     AgentThreadStateResponse,
@@ -69,8 +79,13 @@ TOOL_NAMES = {
 RUN_PREVIEW_STATUSES = {
     AgentRunStatus.DRAFT.value,
     AgentRunStatus.AWAITING_CONFIRMATION.value,
+    AgentRunStatus.AWAITING_HIGH_RISK_CONFIRMATION.value,
     AgentRunStatus.EXECUTING.value,
 }
+SUBTASK_SUMMARY_LIMIT = 180
+COMPACTION_MESSAGE_THRESHOLD = 24
+COMPACTION_RUN_THRESHOLD = 10
+COMPACTION_CHAR_THRESHOLD = 9000
 
 
 class PlannedOperationSpec(BaseModel):
@@ -89,6 +104,18 @@ class PlannerOutput(BaseModel):
     summary: str | None = None
     warning_message: str | None = None
     operations: list[PlannedOperationSpec] = Field(default_factory=list)
+    subtasks: list[PlannedSubtaskSpec] = Field(default_factory=list)
+
+
+class PlannedSubtaskSpec(BaseModel):
+    """Internal subtask emitted by the planner or synthesized by the service."""
+
+    role: Literal["planner", "researcher", "writer", "editor", "continuity"]
+    title: str = Field(..., min_length=1)
+    summary: str | None = None
+    status: Literal["planned", "completed", "failed", "skipped"] = "planned"
+    error_message: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class CRUDAgentThread:
@@ -123,12 +150,21 @@ class CRUDAgentThread:
     ) -> AgentThread:
         existing = await self.get_default_by_project(db, project_id=project.id)
         if existing is not None:
+            next_meta = dict(existing.meta or {})
+            if next_meta.get("project_name") != project.name or next_meta.get("profile_id") != project.agent_profile_id:
+                next_meta["project_name"] = project.name
+                next_meta["profile_id"] = project.agent_profile_id
+                existing.meta = next_meta
+                await db.flush()
             return existing
         thread = AgentThread(
             project_id=project.id,
             title=f"{project.name} Agent Workspace",
             is_default=True,
-            meta={"project_name": project.name},
+            meta={
+                "project_name": project.name,
+                "profile_id": project.agent_profile_id,
+            },
         )
         db.add(thread)
         await db.flush()
@@ -253,6 +289,7 @@ class CRUDAgentRun:
                     [
                         AgentRunStatus.DRAFT.value,
                         AgentRunStatus.AWAITING_CONFIRMATION.value,
+                        AgentRunStatus.AWAITING_HIGH_RISK_CONFIRMATION.value,
                     ]
                 ),
             )
@@ -276,6 +313,7 @@ class CRUDAgentRun:
                     [
                         AgentRunStatus.DRAFT.value,
                         AgentRunStatus.AWAITING_CONFIRMATION.value,
+                        AgentRunStatus.AWAITING_HIGH_RISK_CONFIRMATION.value,
                     ]
                 ),
             )
@@ -316,7 +354,13 @@ class CRUDAgentOperation:
                 reason=operation.get("reason"),
                 payload=operation["payload"],
                 preview=operation["preview"],
+                permission_level=operation.get("permission_level", AgentPermissionLevel.STANDARD_WRITE.value),
+                risk_level=operation.get("risk_level", AgentRiskLevel.MEDIUM.value),
+                requires_secondary_confirmation=bool(operation.get("requires_secondary_confirmation", False)),
                 status=AgentOperationStatus.PLANNED.value,
+                verification_status=operation.get("verification_status", AgentVerificationStatus.PENDING.value),
+                verification_summary=operation.get("verification_summary"),
+                preview_content_hash=operation.get("preview_content_hash"),
             )
             db.add(op)
             created.append(op)
@@ -332,6 +376,104 @@ class CRUDAgentOperation:
             .order_by(AgentOperation.position.asc())
         )
         return list(result.scalars().all())
+
+
+class CRUDAgentSubtask:
+    """Persistence helpers for internal subtasks."""
+
+    async def create_many(
+        self,
+        db: AsyncSession,
+        *,
+        run_id: uuid.UUID,
+        subtasks: list[dict[str, Any]],
+    ) -> list[AgentSubtask]:
+        created: list[AgentSubtask] = []
+        for index, subtask in enumerate(subtasks, start=1):
+            record = AgentSubtask(
+                run_id=run_id,
+                position=index,
+                role=subtask["role"],
+                title=subtask["title"],
+                status=subtask["status"],
+                summary=subtask.get("summary"),
+                error_message=subtask.get("error_message"),
+                meta=subtask.get("meta", {}),
+            )
+            db.add(record)
+            created.append(record)
+        await db.flush()
+        for record in created:
+            await db.refresh(record)
+        return created
+
+    async def list_by_run(self, db: AsyncSession, *, run_id: uuid.UUID) -> list[AgentSubtask]:
+        result = await db.execute(
+            select(AgentSubtask)
+            .where(AgentSubtask.run_id == run_id)
+            .order_by(AgentSubtask.position.asc())
+        )
+        return list(result.scalars().all())
+
+    async def get_by_role(
+        self,
+        db: AsyncSession,
+        *,
+        run_id: uuid.UUID,
+        role: str,
+    ) -> AgentSubtask | None:
+        result = await db.execute(
+            select(AgentSubtask)
+            .where(AgentSubtask.run_id == run_id, AgentSubtask.role == role)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+class CRUDAgentThreadCheckpoint:
+    """Persistence helpers for compressed thread state."""
+
+    async def create(
+        self,
+        db: AsyncSession,
+        *,
+        thread_id: uuid.UUID,
+        profile_id: str,
+        thread_summary: str,
+        active_object_bundle: dict[str, Any],
+        recent_run_digest: dict[str, Any],
+        source_message_count: int,
+        source_run_count: int,
+        total_context_characters: int,
+    ) -> AgentThreadCheckpoint:
+        checkpoint = AgentThreadCheckpoint(
+            thread_id=thread_id,
+            profile_id=profile_id,
+            thread_summary=thread_summary,
+            active_object_bundle=active_object_bundle,
+            recent_run_digest=recent_run_digest,
+            source_message_count=source_message_count,
+            source_run_count=source_run_count,
+            total_context_characters=total_context_characters,
+        )
+        db.add(checkpoint)
+        await db.flush()
+        await db.refresh(checkpoint)
+        return checkpoint
+
+    async def latest_by_thread(
+        self,
+        db: AsyncSession,
+        *,
+        thread_id: uuid.UUID,
+    ) -> AgentThreadCheckpoint | None:
+        result = await db.execute(
+            select(AgentThreadCheckpoint)
+            .where(AgentThreadCheckpoint.thread_id == thread_id)
+            .order_by(desc(AgentThreadCheckpoint.created_at))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
 
 def _json_ready(value: Any) -> Any:
@@ -379,6 +521,12 @@ def _build_diff(before: str | None, after: str | None) -> str | None:
     return "\n".join(diff)
 
 
+def _hash_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def _extract_json_object(text: str) -> dict[str, Any]:
     match = re.search(r"```(?:json)?\s*\n?([\s\S]*?)\n?```", text)
     if match:
@@ -411,6 +559,8 @@ class AgentWorkflowService:
         self.message_store = CRUDAgentMessage()
         self.run_store = CRUDAgentRun()
         self.operation_store = CRUDAgentOperation()
+        self.subtask_store = CRUDAgentSubtask()
+        self.checkpoint_store = CRUDAgentThreadCheckpoint()
 
     async def get_or_create_thread_response(
         self,
@@ -445,13 +595,38 @@ class AgentWorkflowService:
             current_run=current_run,
         )
 
-    async def get_skill_catalog_response(self) -> AgentSkillCatalogResponse:
-        """Expose the currently active planner and operation skills."""
-        bundle = agent_skill_service.load_bundle()
+    async def get_profile_catalog_response(self) -> list[AgentProfileResponse]:
+        """Expose all available agent profiles."""
+        return [
+            AgentProfileResponse(
+                id=profile.id,
+                name=profile.name,
+                description=profile.description,
+                builtin=profile.builtin,
+                root=str(profile.root),
+            )
+            for profile in agent_skill_service.list_profiles()
+        ]
+
+    async def get_skill_catalog_response(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID | None = None,
+    ) -> AgentSkillCatalogResponse:
+        """Expose the active planner and operation skills for a project profile."""
+        profile_id = "default"
+        if project_id is not None:
+            project = await project_service.get(db, id=project_id)
+            profile_id = project.agent_profile_id
+        bundle = agent_skill_service.load_bundle(profile_id=profile_id)
         summaries = [AgentSkillSummaryResponse(**summary.__dict__) for summary in bundle.catalog()]
         planner = next(summary for summary in summaries if summary.kind == "planner")
         operations = [summary for summary in summaries if summary.kind == "operation"]
         return AgentSkillCatalogResponse(
+            profile_id=bundle.profile.id,
+            profile_name=bundle.profile.name,
+            builtin=bundle.profile.builtin,
             source_roots=[str(root) for root in bundle.roots],
             planner=planner,
             operations=operations,
@@ -466,10 +641,13 @@ class AgentWorkflowService:
         context: dict[str, Any] | None = None,
     ) -> AgentThreadMessageResponse:
         thread = await self.thread_store.get(db, thread_id)
+        project = await project_service.get(db, id=thread.project_id)
         request_context = context or {}
         prior_run = await self.run_store.get_latest_pending(db, thread_id=thread.id)
-        history = await self.message_store.list_recent_history(db, thread_id=thread.id, limit=12)
-        skill_bundle = agent_skill_service.load_bundle()
+        full_history = await self.message_store.list_by_thread(db, thread_id=thread.id, limit=60)
+        recent_runs = await self.run_store.list_recent_by_thread(db, thread_id=thread.id, limit=20)
+        profile_id = project.agent_profile_id
+        skill_bundle = agent_skill_service.load_bundle(profile_id=profile_id)
 
         user_message = await self.message_store.create(
             db,
@@ -479,10 +657,25 @@ class AgentWorkflowService:
             meta={"context": request_context},
         )
 
+        checkpoint = await self._maybe_compact_thread(
+            db,
+            thread=thread,
+            project=project,
+            profile_id=profile_id,
+            history=full_history,
+            recent_runs=recent_runs,
+            request_context=request_context,
+        )
+        history = await self._planner_history(
+            db,
+            thread_id=thread.id,
+            latest_checkpoint=checkpoint,
+        )
         context_data = await self._load_project_context(
             db,
-            project_id=thread.project_id,
+            project=project,
             request_context=request_context,
+            latest_checkpoint=checkpoint,
         )
         planner_output = await self._plan_with_llm(
             user_message=content,
@@ -506,6 +699,13 @@ class AgentWorkflowService:
             request_context=request_context,
             operations=planner_output.operations,
         )
+        classified_operations = self._classify_operations(planned_operations)
+        planned_subtasks = self._build_subtasks(
+            planner_output=planner_output,
+            operations=classified_operations,
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
+        )
 
         run = await self.run_store.create(
             db,
@@ -518,11 +718,14 @@ class AgentWorkflowService:
             warning_message=planner_output.warning_message,
             meta={
                 "request_context": request_context,
-                "raw_operation_count": len(planned_operations),
-                "skill_snapshot": self._build_skill_snapshot(skill_bundle, planned_operations),
+                "raw_operation_count": len(classified_operations),
+                "profile_id": profile_id,
+                "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
+                "skill_snapshot": self._build_skill_snapshot(skill_bundle, classified_operations),
             },
         )
-        await self.operation_store.create_many(db, run_id=run.id, operations=planned_operations)
+        await self.operation_store.create_many(db, run_id=run.id, operations=classified_operations)
+        await self.subtask_store.create_many(db, run_id=run.id, subtasks=planned_subtasks)
         await self.run_store.supersede_pending_runs(db, thread_id=thread.id, keep_run_id=run.id)
 
         return AgentThreadMessageResponse(
@@ -546,10 +749,18 @@ class AgentWorkflowService:
         if run.status not in {
             AgentRunStatus.DRAFT.value,
             AgentRunStatus.AWAITING_CONFIRMATION.value,
+            AgentRunStatus.AWAITING_HIGH_RISK_CONFIRMATION.value,
         }:
             raise BadRequestException("Only draft or awaiting-confirmation runs can be cancelled")
         run.status = AgentRunStatus.CANCELLED.value
         run.completed_at = datetime.now(UTC)
+        run.verification_status = AgentVerificationStatus.SKIPPED.value
+        run.verification_summary = "Run was cancelled before execution."
+        operations = await self.operation_store.list_by_run(db, run_id=run.id)
+        for operation in operations:
+            operation.status = AgentOperationStatus.CANCELLED.value
+            operation.verification_status = AgentVerificationStatus.SKIPPED.value
+            operation.verification_summary = "Run was cancelled before execution."
         await db.flush()
         return AgentRunActionResponse(run=await self._run_response(db, run))
 
@@ -563,26 +774,87 @@ class AgentWorkflowService:
         if run.status != AgentRunStatus.AWAITING_CONFIRMATION.value:
             raise BadRequestException("Run is not awaiting confirmation")
 
+        operations = await self.operation_store.list_by_run(db, run_id=run.id)
+        if any(operation.requires_secondary_confirmation for operation in operations):
+            run.status = AgentRunStatus.AWAITING_HIGH_RISK_CONFIRMATION.value
+            run.confirmed_at = datetime.now(UTC)
+            run.warning_message = "检测到高风险写入。请再次确认后才会真正执行。"
+            await db.flush()
+            return AgentRunActionResponse(run=await self._run_response(db, run))
+
+        return await self._execute_run(db, run=run, operations=operations)
+
+    async def confirm_high_risk_run_response(
+        self,
+        db: AsyncSession,
+        *,
+        run_id: uuid.UUID,
+    ) -> AgentRunActionResponse:
+        """Confirm and execute a high-risk run after the second approval."""
+        run = await self.run_store.get(db, run_id)
+        if run.status != AgentRunStatus.AWAITING_HIGH_RISK_CONFIRMATION.value:
+            raise BadRequestException("Run is not awaiting high-risk confirmation")
+        operations = await self.operation_store.list_by_run(db, run_id=run.id)
+        run.secondary_confirmed_at = datetime.now(UTC)
+        return await self._execute_run(db, run=run, operations=operations)
+
+    async def _execute_run(
+        self,
+        db: AsyncSession,
+        *,
+        run: AgentRun,
+        operations: list[AgentOperation],
+    ) -> AgentRunActionResponse:
+        """Execute a planned run and apply the verification gate."""
+        continuity_subtask = await self.subtask_store.get_by_role(
+            db,
+            run_id=run.id,
+            role=AgentSubtaskRole.CONTINUITY.value,
+        )
+
         run_id_value = run.id
         run.status = AgentRunStatus.EXECUTING.value
         now = datetime.now(UTC)
-        run.confirmed_at = now
+        run.confirmed_at = run.confirmed_at or now
         run.started_at = now
         await db.flush()
 
+        failing_operation_id: uuid.UUID | None = None
         try:
-            operations = await self.operation_store.list_by_run(db, run_id=run.id)
             request_context = cast(dict[str, Any], run.meta.get("request_context", {}))
+            continuity_summary = self._check_continuity_gate(operations)
+            if continuity_subtask is not None:
+                continuity_subtask.summary = continuity_summary
+            if continuity_summary != "通过":
+                if continuity_subtask is not None:
+                    continuity_subtask.status = AgentSubtaskStatus.FAILED.value
+                    continuity_subtask.error_message = continuity_summary
+                raise BadRequestException(f"Continuity check blocked execution: {continuity_summary}")
+            if continuity_subtask is not None:
+                continuity_subtask.status = AgentSubtaskStatus.COMPLETED.value
+
             for operation in operations:
+                failing_operation_id = operation.id
                 await self._execute_operation(
                     db,
                     project_id=run.project_id,
                     request_context=request_context,
                     operation=operation,
                 )
+                await self._verify_operation(
+                    db,
+                    project_id=run.project_id,
+                    operation=operation,
+                )
             run.status = AgentRunStatus.COMPLETED.value
             run.completed_at = datetime.now(UTC)
             run.warning_message = self._execution_warning(operations)
+            run.verification_status, run.verification_summary = self._aggregate_run_verification(
+                operations,
+                continuity_subtask=continuity_subtask,
+            )
+            if run.verification_status != AgentVerificationStatus.PASSED.value:
+                raise BadRequestException(run.verification_summary or "Run verification failed")
             await db.flush()
         except Exception as exc:
             logger.exception("Agent run %s failed", run_id_value)
@@ -591,6 +863,24 @@ class AgentWorkflowService:
             failed_run.status = AgentRunStatus.FAILED.value
             failed_run.error_message = str(exc)
             failed_run.completed_at = datetime.now(UTC)
+            failed_run.verification_status = AgentVerificationStatus.FAILED.value
+            failed_run.verification_summary = str(exc)
+            if failing_operation_id is not None:
+                failed_operation = await self._safe_get_operation(db, operation_id=failing_operation_id)
+                if failed_operation is not None:
+                    failed_operation.status = AgentOperationStatus.FAILED.value
+                    failed_operation.error_message = str(exc)
+                    failed_operation.verification_status = AgentVerificationStatus.FAILED.value
+                    failed_operation.verification_summary = str(exc)
+            if continuity_subtask is not None:
+                failed_continuity = await self.subtask_store.get_by_role(
+                    db,
+                    run_id=run_id_value,
+                    role=AgentSubtaskRole.CONTINUITY.value,
+                )
+                if failed_continuity is not None and failed_continuity.status != AgentSubtaskStatus.COMPLETED.value:
+                    failed_continuity.status = AgentSubtaskStatus.FAILED.value
+                    failed_continuity.error_message = str(exc)
             await db.flush()
             return AgentRunActionResponse(run=await self._run_response(db, failed_run))
 
@@ -600,10 +890,10 @@ class AgentWorkflowService:
         self,
         db: AsyncSession,
         *,
-        project_id: uuid.UUID,
+        project: Project,
         request_context: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None = None,
     ) -> dict[str, Any]:
-        project = await project_service.get(db, id=project_id)
         characters = await character_service.get_by_project(db, project_id=project.id, limit=20)
         world_settings = await world_setting_service.get_by_project(db, project_id=project.id, limit=20)
         chapters = await chapter_service.get_by_project(db, project_id=project.id, limit=40)
@@ -640,7 +930,16 @@ class AgentWorkflowService:
                 for chapter in chapters
             ],
             "request_context": request_context,
+            "agent_profile_id": project.agent_profile_id,
         }
+        if latest_checkpoint is not None:
+            context_data["latest_checkpoint"] = {
+                "id": str(latest_checkpoint.id),
+                "profile_id": latest_checkpoint.profile_id,
+                "thread_summary": latest_checkpoint.thread_summary,
+                "active_object_bundle": latest_checkpoint.active_object_bundle,
+                "recent_run_digest": latest_checkpoint.recent_run_digest,
+            }
 
         chapter_id = request_context.get("chapter_id")
         if chapter_id:
@@ -690,6 +989,73 @@ class AgentWorkflowService:
                 logger.debug("Failed to load character context for %s", character_id)
 
         return context_data
+
+    async def _planner_history(
+        self,
+        db: AsyncSession,
+        *,
+        thread_id: uuid.UUID,
+        latest_checkpoint: AgentThreadCheckpoint | None,
+    ) -> list[AgentMessage]:
+        limit = 6 if latest_checkpoint is not None else 12
+        return await self.message_store.list_recent_history(db, thread_id=thread_id, limit=limit)
+
+    async def _maybe_compact_thread(
+        self,
+        db: AsyncSession,
+        *,
+        thread: AgentThread,
+        project: Project,
+        profile_id: str,
+        history: list[AgentMessage],
+        recent_runs: list[AgentRun],
+        request_context: dict[str, Any],
+    ) -> AgentThreadCheckpoint | None:
+        latest_checkpoint = await self.checkpoint_store.latest_by_thread(db, thread_id=thread.id)
+        total_chars = sum(len(message.content) for message in history) + sum(len(run.summary or "") for run in recent_runs)
+        should_compact = (
+            len(history) >= COMPACTION_MESSAGE_THRESHOLD
+            or len(recent_runs) >= COMPACTION_RUN_THRESHOLD
+            or total_chars >= COMPACTION_CHAR_THRESHOLD
+        )
+        if not should_compact:
+            return latest_checkpoint
+
+        if latest_checkpoint is not None:
+            if (
+                latest_checkpoint.source_message_count >= len(history)
+                and latest_checkpoint.source_run_count >= len(recent_runs)
+                and latest_checkpoint.total_context_characters >= total_chars
+            ):
+                return latest_checkpoint
+
+        compact_context = {
+            "project": {"name": project.name, "genre": project.genre, "summary": project.summary},
+            "request_context": request_context,
+        }
+        thread_summary = self._summarize_thread(history=history, recent_runs=recent_runs)
+        recent_run_digest = {
+            "runs": [
+                {
+                    "id": str(run.id),
+                    "status": run.status,
+                    "summary": run.summary,
+                    "updated_at": run.updated_at.isoformat(),
+                }
+                for run in recent_runs[:6]
+            ]
+        }
+        return await self.checkpoint_store.create(
+            db,
+            thread_id=thread.id,
+            profile_id=profile_id,
+            thread_summary=thread_summary,
+            active_object_bundle=compact_context,
+            recent_run_digest=recent_run_digest,
+            source_message_count=len(history),
+            source_run_count=len(recent_runs),
+            total_context_characters=total_chars,
+        )
 
     async def _plan_with_llm(
         self,
@@ -817,6 +1183,7 @@ class AgentWorkflowService:
         target_type: str | None = None
         target_id: uuid.UUID | None = None
         target_display: str | None = None
+        preview_content_hash: str | None = None
         preview: OperationPreview
 
         if tool_name == "create_character":
@@ -850,6 +1217,7 @@ class AgentWorkflowService:
 
         elif tool_name == "create_world_setting":
             normalized_payload = self._filter_world_setting_create_payload(payload)
+            preview_content_hash = _hash_text(cast(str | None, normalized_payload.get("content")))
             preview = OperationPreview(
                 changed_fields=list(normalized_payload.keys()),
                 before_summary="将创建新设定",
@@ -871,6 +1239,7 @@ class AgentWorkflowService:
             if not updates:
                 raise BadRequestException("update_world_setting requires a non-empty updates object")
             merged = self._merge_preview_data(setting, updates)
+            preview_content_hash = _hash_text(cast(str | None, merged.get("content")))
             preview = OperationPreview(
                 changed_fields=list(updates.keys()),
                 before_summary=self._world_setting_summary(setting),
@@ -885,6 +1254,7 @@ class AgentWorkflowService:
 
         elif tool_name == "create_chapter":
             normalized_payload = await self._filter_chapter_create_payload(db, project_id=project_id, payload=payload)
+            preview_content_hash = _hash_text(cast(str | None, normalized_payload.get("content")))
             preview = OperationPreview(
                 changed_fields=list(normalized_payload.keys()),
                 before_summary="将创建新章节",
@@ -901,6 +1271,7 @@ class AgentWorkflowService:
             if not updates:
                 raise BadRequestException("update_chapter requires a non-empty updates object")
             merged = self._merge_preview_data(chapter, updates)
+            preview_content_hash = _hash_text(cast(str | None, merged.get("content")))
             preview = OperationPreview(
                 changed_fields=list(updates.keys()),
                 before_summary=self._chapter_summary(chapter),
@@ -923,6 +1294,7 @@ class AgentWorkflowService:
             if not normalized_payload["content"]:
                 raise BadRequestException("write_chapter_content requires content")
             next_content = self._apply_text_mode(chapter.content, normalized_payload["content"], normalized_payload["mode"])
+            preview_content_hash = _hash_text(next_content)
             preview = OperationPreview(
                 changed_fields=["content"],
                 before_summary=_excerpt(chapter.content),
@@ -942,6 +1314,7 @@ class AgentWorkflowService:
                 chapter=chapter,
                 payload=payload,
             )
+            preview_content_hash = _hash_text(cast(str | None, normalized_payload.get("content")))
             preview = OperationPreview(
                 changed_fields=list(normalized_payload.keys()),
                 before_summary=f"将在第{chapter.chapter_number}章创建新场景",
@@ -958,6 +1331,7 @@ class AgentWorkflowService:
             if not updates:
                 raise BadRequestException("update_scene requires a non-empty updates object")
             merged = self._merge_preview_data(scene, updates)
+            preview_content_hash = _hash_text(cast(str | None, merged.get("content")))
             preview = OperationPreview(
                 changed_fields=list(updates.keys()),
                 before_summary=self._scene_summary(scene),
@@ -980,6 +1354,7 @@ class AgentWorkflowService:
             if not normalized_payload["content"]:
                 raise BadRequestException("write_scene_content requires content")
             next_content = self._apply_text_mode(scene.content, normalized_payload["content"], normalized_payload["mode"])
+            preview_content_hash = _hash_text(next_content)
             preview = OperationPreview(
                 changed_fields=["content"],
                 before_summary=_excerpt(scene.content),
@@ -1003,6 +1378,7 @@ class AgentWorkflowService:
             "target_type": target_type,
             "target_id": target_id,
             "target_display": target_display,
+            "preview_content_hash": preview_content_hash,
         }
 
     async def _execute_operation(
@@ -1466,6 +1842,7 @@ class AgentWorkflowService:
     ) -> dict[str, Any]:
         tool_names = [str(operation["tool_name"]) for operation in operations]
         return {
+            "profile_id": bundle.profile.id,
             "planner": {
                 "name": bundle.planner.name,
                 "source": str(bundle.planner.source_path),
@@ -1489,6 +1866,7 @@ class AgentWorkflowService:
 
     async def _run_response(self, db: AsyncSession, run: AgentRun) -> AgentRunResponse:
         operations = await self.operation_store.list_by_run(db, run_id=run.id)
+        subtasks = await self.subtask_store.list_by_run(db, run_id=run.id)
         return AgentRunResponse(
             id=run.id,
             thread_id=run.thread_id,
@@ -1500,13 +1878,17 @@ class AgentWorkflowService:
             summary=run.summary,
             error_message=run.error_message,
             warning_message=run.warning_message,
+            verification_status=cast(Any, run.verification_status),
+            verification_summary=run.verification_summary,
             meta=run.meta or {},
             confirmed_at=run.confirmed_at,
+            secondary_confirmed_at=run.secondary_confirmed_at,
             started_at=run.started_at,
             completed_at=run.completed_at,
             created_at=run.created_at,
             updated_at=run.updated_at,
             operations=[self._operation_response(operation) for operation in operations],
+            subtasks=[self._subtask_response(subtask) for subtask in subtasks],
         )
 
     def _thread_response(self, thread: AgentThread) -> AgentThreadResponse:
@@ -1529,12 +1911,361 @@ class AgentWorkflowService:
             reason=operation.reason,
             payload=operation.payload,
             preview=preview,
+            permission_level=cast(Any, operation.permission_level),
+            risk_level=cast(Any, operation.risk_level),
+            requires_secondary_confirmation=operation.requires_secondary_confirmation,
             status=cast(Any, operation.status),
+            verification_status=cast(Any, operation.verification_status),
+            verification_summary=operation.verification_summary,
             execution_result=operation.execution_result,
             error_message=operation.error_message,
             created_at=operation.created_at,
             updated_at=operation.updated_at,
         )
+
+    def _subtask_response(self, subtask: AgentSubtask) -> AgentSubtaskResponse:
+        return AgentSubtaskResponse(
+            id=subtask.id,
+            run_id=subtask.run_id,
+            position=subtask.position,
+            role=cast(Any, subtask.role),
+            title=subtask.title,
+            status=cast(Any, subtask.status),
+            summary=subtask.summary,
+            error_message=subtask.error_message,
+            meta=subtask.meta or {},
+            created_at=subtask.created_at,
+            updated_at=subtask.updated_at,
+        )
+
+    def _classify_operations(self, operations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Attach permission and risk metadata to planner operations."""
+        classified: list[dict[str, Any]] = []
+        content_rewrite_indexes: list[int] = []
+
+        for index, operation in enumerate(operations):
+            enriched = dict(operation)
+            tool_name = str(enriched["tool_name"])
+            payload = cast(dict[str, Any], enriched.get("payload", {}))
+            permission_level = AgentPermissionLevel.STANDARD_WRITE.value
+            risk_level = AgentRiskLevel.MEDIUM.value
+            requires_secondary_confirmation = False
+
+            content_candidate = self._operation_content_candidate(enriched)
+            touches_content = content_candidate is not None
+
+            if tool_name in {"write_chapter_content", "write_scene_content"}:
+                mode = str(payload.get("mode", "replace"))
+                if mode == "append":
+                    risk_level = AgentRiskLevel.MEDIUM.value
+                else:
+                    risk_level = AgentRiskLevel.HIGH.value if len(content_candidate or "") >= 280 else AgentRiskLevel.MEDIUM.value
+                if mode == "replace" and len(content_candidate or "") >= 280:
+                    permission_level = AgentPermissionLevel.HIGH_RISK_WRITE.value
+                    requires_secondary_confirmation = True
+                    content_rewrite_indexes.append(index)
+            elif tool_name in {"update_chapter", "update_scene"} and touches_content:
+                if len(content_candidate or "") >= 280:
+                    permission_level = AgentPermissionLevel.HIGH_RISK_WRITE.value
+                    risk_level = AgentRiskLevel.HIGH.value
+                    requires_secondary_confirmation = True
+                    content_rewrite_indexes.append(index)
+                else:
+                    risk_level = AgentRiskLevel.MEDIUM.value
+            elif tool_name in {"create_chapter", "create_scene"} and touches_content:
+                risk_level = AgentRiskLevel.MEDIUM.value
+            elif tool_name in {"update_character", "update_world_setting"}:
+                risk_level = AgentRiskLevel.MEDIUM.value
+            else:
+                risk_level = AgentRiskLevel.LOW.value
+
+            enriched["permission_level"] = permission_level
+            enriched["risk_level"] = risk_level
+            enriched["requires_secondary_confirmation"] = requires_secondary_confirmation
+            enriched["verification_status"] = AgentVerificationStatus.PENDING.value
+            classified.append(enriched)
+
+        if len(content_rewrite_indexes) > 1:
+            for index in content_rewrite_indexes:
+                classified[index]["permission_level"] = AgentPermissionLevel.HIGH_RISK_WRITE.value
+                classified[index]["risk_level"] = AgentRiskLevel.HIGH.value
+                classified[index]["requires_secondary_confirmation"] = True
+
+        return classified
+
+    def _build_subtasks(
+        self,
+        *,
+        planner_output: PlannerOutput,
+        operations: list[dict[str, Any]],
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+    ) -> list[dict[str, Any]]:
+        """Build internal subtasks that mirror planner/researcher/writer/editor/continuity roles."""
+        provided_by_role = {
+            subtask.role: subtask
+            for subtask in planner_output.subtasks
+        }
+
+        current_objects = [
+            f"{key}:{value['id']}"
+            for key, value in context_data.items()
+            if key.startswith("current_") and isinstance(value, dict) and value.get("id")
+        ]
+        researcher_summary = (
+            f"已装配项目上下文，人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
+            f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
+            f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
+        )
+        if current_objects:
+            researcher_summary += f" 当前聚焦：{', '.join(current_objects)}。"
+        if latest_checkpoint is not None:
+            researcher_summary += f" 已参考 checkpoint {latest_checkpoint.id}。"
+
+        writer_tools = {
+            "write_chapter_content",
+            "write_scene_content",
+            "create_chapter",
+            "create_scene",
+        }
+        writer_ops = [operation for operation in operations if operation["tool_name"] in writer_tools and self._operation_content_candidate(operation)]
+        editor_ops = [
+            operation
+            for operation in operations
+            if operation["tool_name"] in {"update_character", "update_world_setting", "update_chapter", "update_scene"}
+        ]
+
+        synthesized: list[PlannedSubtaskSpec] = [
+            PlannedSubtaskSpec(
+                role="planner",
+                title="Planner blueprint",
+                status="completed",
+                summary=_excerpt(planner_output.summary or planner_output.assistant_message, length=SUBTASK_SUMMARY_LIMIT),
+            ),
+            PlannedSubtaskSpec(
+                role="researcher",
+                title="Context bundle",
+                status="completed",
+                summary=_excerpt(researcher_summary, length=SUBTASK_SUMMARY_LIMIT),
+            ),
+            PlannedSubtaskSpec(
+                role="writer",
+                title="Writer candidate",
+                status="completed" if writer_ops else "skipped",
+                summary=_excerpt(
+                    f"生成 {len(writer_ops)} 个正文候选，全部在 planning 阶段完成。"
+                    if writer_ops
+                    else "本轮无需生成正文候选。",
+                    length=SUBTASK_SUMMARY_LIMIT,
+                ),
+            ),
+            PlannedSubtaskSpec(
+                role="editor",
+                title="Editor diff",
+                status="completed" if editor_ops else "skipped",
+                summary=_excerpt(
+                    f"整理 {len(editor_ops)} 个结构化修改步骤。"
+                    if editor_ops
+                    else "本轮无需结构化 patch/diff。",
+                    length=SUBTASK_SUMMARY_LIMIT,
+                ),
+            ),
+            PlannedSubtaskSpec(
+                role="continuity",
+                title="Continuity gate",
+                status="planned",
+                summary="执行前将验证目标对象、写入一致性与多步修改冲突。",
+            ),
+        ]
+
+        merged: list[dict[str, Any]] = []
+        for synthesized_subtask in synthesized:
+            chosen = provided_by_role.get(synthesized_subtask.role, synthesized_subtask)
+            merged.append(
+                {
+                    "role": chosen.role,
+                    "title": chosen.title,
+                    "status": chosen.status,
+                    "summary": _excerpt(chosen.summary, length=SUBTASK_SUMMARY_LIMIT),
+                    "error_message": chosen.error_message,
+                    "meta": chosen.meta,
+                }
+            )
+        return merged
+
+    def _operation_content_candidate(self, operation: dict[str, Any]) -> str | None:
+        """Return the full candidate content represented by an operation, if any."""
+        tool_name = str(operation["tool_name"])
+        payload = cast(dict[str, Any], operation.get("payload", {}))
+        if tool_name in {"write_chapter_content", "write_scene_content"}:
+            return cast(str | None, payload.get("content"))
+        if tool_name in {"create_chapter", "create_scene", "create_world_setting"}:
+            return cast(str | None, payload.get("content"))
+        if tool_name in {"update_chapter", "update_scene", "update_world_setting"}:
+            updates = cast(dict[str, Any], payload.get("updates", {}))
+            return cast(str | None, updates.get("content"))
+        return None
+
+    def _summarize_thread(self, *, history: list[AgentMessage], recent_runs: list[AgentRun]) -> str:
+        """Produce a deterministic compact summary for long-running threads."""
+        history_bits = [
+            f"{message.role}:{_excerpt(message.content, length=90)}"
+            for message in history[-8:]
+        ]
+        run_bits = [
+            f"{run.status}:{_excerpt(run.summary, length=72)}"
+            for run in recent_runs[:5]
+        ]
+        pieces = []
+        if history_bits:
+            pieces.append("最近消息：" + " | ".join(bit for bit in history_bits if bit))
+        if run_bits:
+            pieces.append("最近 runs：" + " | ".join(bit for bit in run_bits if bit))
+        return _excerpt("；".join(pieces) or "线程内容较短，暂无压缩摘要。", length=900) or "线程内容较短，暂无压缩摘要。"
+
+    def _check_continuity_gate(self, operations: list[AgentOperation]) -> str:
+        """Block obviously conflicting multi-step plans before execution."""
+        content_targets: dict[tuple[str, str], list[str]] = {}
+        for operation in operations:
+            if operation.target_type and operation.target_id and operation.tool_name in {
+                "update_chapter",
+                "write_chapter_content",
+                "update_scene",
+                "write_scene_content",
+            }:
+                key = (operation.target_type, str(operation.target_id))
+                content_targets.setdefault(key, []).append(operation.tool_name)
+
+        for (target_type, target_id), tools in content_targets.items():
+            if len(tools) > 1:
+                return f"{target_type}:{target_id} 在同一 run 中存在多个正文修改步骤，需先合并计划。"
+        return "通过"
+
+    async def _verify_operation(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        operation: AgentOperation,
+    ) -> None:
+        """Verify that the persisted target matches the preview produced during planning."""
+        target = await self._load_operation_target(db, project_id=project_id, operation=operation)
+        preview = OperationPreview.model_validate(operation.preview)
+        actual_summary = self._target_summary(target, operation.tool_name)
+        actual_content = self._target_content(target)
+        operation.persisted_content_hash = _hash_text(actual_content)
+
+        content_match = (
+            operation.preview_content_hash is None
+            or operation.preview_content_hash == operation.persisted_content_hash
+        )
+        summary_match = preview.after_summary is None or preview.after_summary == actual_summary
+
+        if content_match and summary_match:
+            operation.verification_status = AgentVerificationStatus.PASSED.value
+            operation.verification_summary = "预览与落库结果一致。"
+            return
+
+        mismatches: list[str] = []
+        if not summary_match:
+            mismatches.append("摘要不一致")
+        if not content_match:
+            mismatches.append("内容 hash 不一致")
+        operation.verification_status = AgentVerificationStatus.FAILED.value
+        operation.verification_summary = "；".join(mismatches)
+        raise BadRequestException(f"Operation verification failed: {operation.verification_summary}")
+
+    async def _load_operation_target(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        operation: AgentOperation,
+    ) -> Character | WorldSetting | Chapter | Scene:
+        if operation.target_id is None:
+            raise BadRequestException("Executed operation is missing target_id")
+        payload = operation.payload
+        request_context: dict[str, Any] = {}
+        if operation.tool_name in {"create_character", "update_character"}:
+            return await self._resolve_character(
+                db,
+                project_id=project_id,
+                payload={**payload, "character_id": str(operation.target_id)},
+                request_context=request_context,
+            )
+        if operation.tool_name in {"create_world_setting", "update_world_setting"}:
+            return await self._resolve_world_setting(
+                db,
+                project_id=project_id,
+                payload={**payload, "setting_id": str(operation.target_id)},
+                request_context=request_context,
+            )
+        if operation.tool_name in {"create_chapter", "update_chapter", "write_chapter_content"}:
+            return await self._resolve_chapter(
+                db,
+                project_id=project_id,
+                payload={**payload, "chapter_id": str(operation.target_id)},
+                request_context=request_context,
+            )
+        if operation.tool_name in {"create_scene", "update_scene", "write_scene_content"}:
+            return await self._resolve_scene(
+                db,
+                project_id=project_id,
+                payload={**payload, "scene_id": str(operation.target_id)},
+                request_context=request_context,
+            )
+        raise BadRequestException(f"Unsupported tool '{operation.tool_name}' for verification")
+
+    def _target_summary(self, target: Character | WorldSetting | Chapter | Scene, tool_name: str) -> str:
+        if tool_name == "write_chapter_content" and isinstance(target, Chapter):
+            return _excerpt(target.content) or ""
+        if tool_name == "write_scene_content" and isinstance(target, Scene):
+            return _excerpt(target.content) or ""
+        if isinstance(target, Character):
+            return self._character_summary(target)
+        if isinstance(target, WorldSetting):
+            return self._world_setting_summary(target)
+        if isinstance(target, Chapter):
+            return self._chapter_summary(target)
+        if isinstance(target, Scene):
+            return self._scene_summary(target)
+        raise BadRequestException(f"Unsupported target for tool '{tool_name}'")
+
+    def _target_content(self, target: Character | WorldSetting | Chapter | Scene) -> str | None:
+        if isinstance(target, Character):
+            return target.notes
+        if isinstance(target, WorldSetting):
+            return target.content
+        if isinstance(target, Chapter):
+            return target.content
+        if isinstance(target, Scene):
+            return target.content
+        return None
+
+    def _aggregate_run_verification(
+        self,
+        operations: list[AgentOperation],
+        *,
+        continuity_subtask: AgentSubtask | None,
+    ) -> tuple[str, str]:
+        if continuity_subtask is not None and continuity_subtask.status == AgentSubtaskStatus.FAILED.value:
+            return AgentVerificationStatus.FAILED.value, continuity_subtask.error_message or "Continuity gate failed."
+        failed = [operation for operation in operations if operation.verification_status == AgentVerificationStatus.FAILED.value]
+        if failed:
+            labels = ", ".join(operation.description for operation in failed[:3])
+            return AgentVerificationStatus.FAILED.value, f"以下步骤未通过验证：{labels}"
+        if not operations:
+            return AgentVerificationStatus.SKIPPED.value, "No stateful operations to verify."
+        return AgentVerificationStatus.PASSED.value, "All operations were verified against persisted results."
+
+    async def _safe_get_operation(
+        self,
+        db: AsyncSession,
+        *,
+        operation_id: uuid.UUID,
+    ) -> AgentOperation | None:
+        result = await db.execute(select(AgentOperation).where(AgentOperation.id == operation_id))
+        return result.scalar_one_or_none()
 
 
 agent_workflow_service = AgentWorkflowService()

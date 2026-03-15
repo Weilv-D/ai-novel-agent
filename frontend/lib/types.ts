@@ -25,6 +25,7 @@ export interface Project {
   target_word_count?: number;
   summary?: string;
   notes?: string;
+  agent_profile_id: string;
   meta?: Record<string, unknown>;
   user_id: string;
   status: ProjectStatus;
@@ -39,6 +40,7 @@ export interface ProjectCreate {
   target_word_count?: number;
   summary?: string;
   notes?: string;
+  agent_profile_id?: string;
   meta?: Record<string, unknown>;
   status?: ProjectStatus;
 }
@@ -50,6 +52,7 @@ export interface ProjectUpdate {
   target_word_count?: number;
   summary?: string;
   notes?: string;
+  agent_profile_id?: string;
   meta?: Record<string, unknown>;
   status?: ProjectStatus;
 }
@@ -403,12 +406,18 @@ export type AgentMessageRole = "user" | "assistant" | "system";
 export type RunStatus =
   | "draft"
   | "awaiting_confirmation"
+  | "awaiting_high_risk_confirmation"
   | "executing"
   | "completed"
   | "failed"
   | "cancelled"
   | "superseded";
 export type OperationStatus = "planned" | "executed" | "failed" | "cancelled";
+export type AgentSubtaskRole = "planner" | "researcher" | "writer" | "editor" | "continuity";
+export type AgentSubtaskStatus = "planned" | "completed" | "failed" | "skipped";
+export type AgentPermissionLevel = "read_search" | "standard_write" | "high_risk_write";
+export type AgentRiskLevel = "low" | "medium" | "high";
+export type AgentVerificationStatus = "pending" | "passed" | "failed" | "skipped";
 
 export interface OperationPreview {
   changed_fields: string[];
@@ -450,9 +459,28 @@ export interface AgentOperation {
   reason?: string | null;
   payload: Record<string, unknown>;
   preview: OperationPreview;
+  permission_level: AgentPermissionLevel;
+  risk_level: AgentRiskLevel;
+  requires_secondary_confirmation: boolean;
   status: OperationStatus;
+  verification_status: AgentVerificationStatus;
+  verification_summary?: string | null;
   execution_result?: Record<string, unknown> | null;
   error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentSubtask {
+  id: string;
+  run_id: string;
+  position: number;
+  role: AgentSubtaskRole;
+  title: string;
+  status: AgentSubtaskStatus;
+  summary?: string | null;
+  error_message?: string | null;
+  meta: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -468,13 +496,17 @@ export interface AgentRun {
   summary?: string | null;
   error_message?: string | null;
   warning_message?: string | null;
+  verification_status: AgentVerificationStatus;
+  verification_summary?: string | null;
   meta: Record<string, unknown>;
   confirmed_at?: string | null;
+  secondary_confirmed_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
   created_at: string;
   updated_at: string;
   operations: AgentOperation[];
+  subtasks: AgentSubtask[];
 }
 
 export interface AgentThreadState {
@@ -495,6 +527,33 @@ export interface AgentThreadMessageResponse {
   user_message: AgentThreadMessage;
   assistant_message: AgentThreadMessage;
   run?: AgentRun | null;
+}
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  description: string;
+  builtin: boolean;
+  root: string;
+}
+
+export interface AgentSkillSummary {
+  name: string;
+  description: string;
+  kind: string;
+  tool_name?: string | null;
+  source: string;
+  payload_contract?: string | null;
+  references: string[];
+}
+
+export interface AgentSkillCatalog {
+  profile_id: string;
+  profile_name: string;
+  builtin: boolean;
+  source_roots: string[];
+  planner: AgentSkillSummary;
+  operations: AgentSkillSummary[];
 }
 
 // Chat types

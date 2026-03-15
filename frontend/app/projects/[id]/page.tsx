@@ -149,6 +149,10 @@ export default function ProjectDetailPage() {
                   {new Date(project.created_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
+              <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
+                <span className="text-[rgb(var(--ink-700))]">Agent Profile</span>
+                <span className="font-medium text-[rgb(var(--ink-950))]">{project.agent_profile_id}</span>
+              </div>
               <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">
                 <div className="mb-2 text-[rgb(var(--ink-700))]">辅助入口</div>
                 <div className="flex flex-wrap gap-2">
@@ -194,6 +198,7 @@ export default function ProjectDetailPage() {
             <AgentWorkspace
               projectId={project.id}
               projectName={project.name}
+              agentProfileId={project.agent_profile_id}
               onProjectRefresh={() => fetchProject(project.id)}
             />
           </div>

@@ -1,234 +1,234 @@
-# AI 超长篇小说写作 Agent - 实施计划
+# Agent Workflow 实施路线图
 
-## 文档信息
-- 项目名称：AI 超长篇小说写作 Agent 应用
-- 文档类型：实施计划（IMPLEMENTATION_PLAN）
-- 版本：v2.0
-- 状态：MVP 已完成
-- 创建日期：2026-03-12
-- 更新日期：2026-03-14
+最后更新：2026-03-15
 
----
+## 当前基线
 
-## 1. 总体规划
+当前仓库已经把 Agent 主流程稳定在 `thread / run / operation` 这一层，不再回到旧的“单一大 prompt + suggestion 状态机”。
 
-### 1.1 时间线概览
+当前已落地的公共工作流是：
 
-| 阶段 | 时长 | 目标 | 交付物 | 状态 |
-|------|------|------|--------|------|
-| **Phase 1** | 2 周 | 后端骨架 + 数据模型 | 可运行的后端 API | ✅ 已完成 |
-| **Phase 2** | 2 周 | 前端骨架 + 基础 UI | 可访问的前端页面 | ✅ 已完成 |
-| **Phase 3** | 2 周 | 核心对象 CRUD | 完整的对象管理功能 | ✅ 已完成 |
-| **Phase 4** | 2 周 | Agent 框架 + 对话 | 可用的 AI 写作助手 | ✅ 已完成 |
-| **Phase 5** | 2 周 | 三态机制 + 影响分析 | Suggestion 完整流程 | ✅ 已完成 |
-| **Phase 6** | 1 周 | 记忆 + 连续性检查 | 基础智能功能 | ✅ 已完成 |
-| **Phase 7** | 1 周 | 导出 + 测试 + 文档 | MVP 发布 | ✅ 已完成 |
+1. 项目级默认 `AgentThread`
+2. 用户消息生成一个 `AgentRun`
+3. `AgentRun` 先返回可见的 operation 预览
+4. 用户确认后再执行写入
+5. 执行前创建 snapshot
+6. 执行后经过 verification gate 才能进入 `completed`
 
----
+本轮已经补上的基础能力：
 
-## 2. Phase 1：后端骨架 ✅
+- 项目级 `agent_profile_id`
+- 内置 `default` 与 `xianxia_intrigue` 两个 profile
+- profile-aware skill registry
+- `AgentSubtask`
+- `AgentThreadCheckpoint`
+- operation 风险分级与二次确认
+- run / operation verification 字段
+- 长线程压缩的 checkpoint 基础设施
+- 前端项目创建、编辑、工作台对 profile / risk / verification / subtask 的可见支持
 
-### 已完成内容
-- [x] 后端项目结构（FastAPI + SQLAlchemy 2.0）
-- [x] 配置 requirements.txt
-- [x] Docker Compose 配置
-- [x] 全部 SQLAlchemy 模型：Project, Character, WorldSetting, Volume, Chapter, Scene, Suggestion, Snapshot, Memory, Dependency
-- [x] 数据库会话工厂（支持 PostgreSQL + SQLite）
-- [x] Pydantic Schemas（所有模型的 Create/Update/Response）
-- [x] 依赖注入（deps.py）
-- [x] 健康检查端点
-- [x] 全局异常处理
-- [x] 配置管理（config.py + pydantic-settings）
+## 目标工作流
 
----
+目标不是“聊天后给一段建议”，而是“项目内的可验证 Agent 执行系统”。
 
-## 3. Phase 2：前端骨架 ✅
+完整目标流程如下：
 
-### 已完成内容
-- [x] Next.js 15 项目（App Router）
-- [x] TypeScript + ESLint + Tailwind CSS
-- [x] 通用组件：Button, Input, Modal, Card, Loading
-- [x] Zustand 状态管理（projectStore）
-- [x] API 客户端封装（fetchApi + 错误处理）
-- [x] 21 个页面路由（项目/人物/世界观/章节/场景的 CRUD 页面）
+1. 用户在项目工作台提出自然语言指令
+2. 系统按项目级 profile 装配技能与上下文
+3. planner 生成用户可见 operations 与内部 subtasks
+4. 前端展示计划、风险等级、diff 预览与内部执行摘要
+5. 用户完成一次或两次确认
+6. executor 复用现有 CRUD service 落库
+7. verification gate 校验落库结果与预览一致
+8. 长线程在阈值到达后生成 checkpoint，后续规划改用压缩上下文
 
----
+## 分阶段计划
 
-## 4. Phase 3：核心对象 CRUD ✅
+### Phase 1: 项目级 Skill Profile
 
-### 已完成内容
-- [x] 后端 68 个 API 端点（全部 CRUD + 特殊操作）
-- [x] Service 层（CRUDBase + 各模型特化服务）
-- [x] 前端 20 个页面（列表/详情/新建/编辑）
-- [x] Suggestion 三态 API（confirm/discard/commit）
-- [x] Dependency 影响分析 API
-- [x] Memory 向量搜索 API
-- [x] Snapshot 快照与回滚 API
-- [x] LLM Service（OpenAI SDK 兼容，重试，流式）
+目标：把 skill 选择从“全局默认”提升到“项目级绑定”。
 
----
+当前实现：
 
-## 5. Phase 4：Agent 框架 + 对话 ✅
+- `Project.meta.agent_profile_id` 已启用
+- 新建/编辑项目可以选择 profile
+- 内置 profile：
+  - `default`
+  - `xianxia_intrigue`
+- `xianxia_intrigue` 的 planner 与 operation skills 已直接引用 `others/大纲设计提示词.txt`、`others/章纲细纲设计提示词.txt`、`others/写作提示词.txt`
+- `GET /api/v1/agent/profiles` 已可用
+- `GET /api/v1/agent/skills?project_id=...` 已按项目返回有效 profile
 
-### 已完成内容
+后续收口：
 
-**后端 Agent 层**
-- [x] `backend/app/agents/base.py` - AgentContext/AgentResult/BaseAgent 抽象类
-  - `_call_llm()` 普通调用
-  - `_call_llm_stream()` 流式调用
-  - `_parse_json_from_response()` JSON 提取
-- [x] `backend/app/agents/lore_agent.py` - 世界观助手（world_edit suggestions）
-- [x] `backend/app/agents/character_agent.py` - 人物助手（character_edit suggestions）
-- [x] `backend/app/agents/outline_agent.py` - 大纲助手（outline_gen/chapter_edit）
-- [x] `backend/app/agents/draft_agent.py` - 写作助手（content_gen/scene_edit）
-- [x] `backend/app/agents/continuity_agent.py` - 连续性检查（continuity_fix）
+- 为 profile 增加更细的 reference catalog，而不只是 skill 列表
+- 允许 `AGENT_SKILLS_DIR` 以 profile 根目录方式覆盖单个 profile
+- 增加更多风格 profile 前，先把 profile 选择和迁移约束写清楚
 
-**WritingOrchestrator**
-- [x] `backend/app/agents/orchestrator.py`
-  - LLM 意图分类路由
-  - 上下文加载（project, characters, world_settings, chapters, memories）
-  - Agent 调用 + Suggestion 自动创建
-  - SSE 流式输出
-  - auto_summarize()（LLM 摘要 + 事实抽取 + 向量嵌入）
-  - continuity_check()
+### Phase 2: 内部子代理与 Hook 编排
 
-**Agent API**
-- [x] `backend/app/schemas/agent.py` - AgentChatRequest/Response, AutoSummarize, ContinuityCheck
-- [x] `backend/app/api/v1/agent.py` - 4 个端点：
-  - `POST /api/v1/agent/chat` - 对话
-  - `POST /api/v1/agent/chat/stream` - SSE 流式对话
-  - `POST /api/v1/agent/auto-summarize` - 自动摘要
-  - `POST /api/v1/agent/continuity-check` - 连续性检查
+目标：从单个 planner 演进到内部可编排的多角色执行层。
 
-**前端 Chat**
-- [x] `frontend/lib/stores/chatStore.ts` - Zustand chat store（含流式）
-- [x] `frontend/components/AgentChatPanel.tsx` - 浮动聊天面板
-- [x] `frontend/components/SuggestionCard.tsx` - 建议卡片（接受/拒绝）
-- [x] `frontend/lib/api-client.ts` - agentApi, suggestionApi, exportApi
-- [x] `frontend/lib/types.ts` - Suggestion, ChatMessage, AgentChatRequest/Response
+当前实现：
 
----
+- `AgentSubtask` 已持久化
+- 工作台已展示 planner / researcher / writer / editor / continuity 摘要
+- `PrePlan` 等价能力已经存在于 workflow service：
+  - profile 选择
+  - context bundle 装配
+  - subtask 合成
+- `RunStop` 的基础语义已经落在 verification gate
+- `PreCompact` 的基础语义已经落在线程 checkpoint
 
-## 6. Phase 5：三态机制 + UI ✅
+后续收口：
 
-### 已完成内容
+- 把 planner、writer、editor、continuity 从“同一次 planning 的结构化摘要”升级为真正独立的内部执行单元
+- 给每个 subtask 建立独立 schema 和失败重试边界
+- 明确 hook 生命周期：
+  - `PrePlan`
+  - `SubagentStop`
+  - `RunStop`
+  - `PreCompact`
 
-**三态 UI 组件**
-- [x] `frontend/components/SuggestionList.tsx` - 待处理建议列表
-- [x] `frontend/components/DiffPreview.tsx` - 修改前后对比
-- [x] `frontend/components/ImpactAnalysis.tsx` - 影响范围展示
+### Phase 3: 权限分级与确认模型
 
-**页面集成**
-- [x] 项目详情页 - AgentChatPanel + SuggestionList
-- [x] 人物详情页 - AgentChatPanel（with character context）
-- [x] 章节详情页 - AgentChatPanel（with chapter context）
-- [x] 场景详情页 - AgentChatPanel（with scene context）
+目标：把所有写入从统一确认，升级为按风险分层确认。
 
----
+当前实现：
 
-## 7. Phase 6：记忆 + 连续性检查 ✅
+- operation 已带有：
+  - `permission_level`
+  - `risk_level`
+  - `requires_secondary_confirmation`
+- run 状态机已扩展出 `awaiting_high_risk_confirmation`
+- `POST /api/v1/agent/runs/{run_id}/confirm-high-risk` 已可用
+- 前端已展示高风险提示与二次确认入口
 
-### 已完成内容
-- [x] orchestrator.auto_summarize() - LLM 提取事实 + 向量嵌入存储
-- [x] orchestrator.continuity_check() - 加载全项目上下文 + ContinuityAgent 检查
-- [x] `POST /api/v1/agent/auto-summarize` API
-- [x] `POST /api/v1/agent/continuity-check` API
-- [x] 前端章节编辑页保存后自动触发 autoSummarize
+当前分级规则：
 
----
+- `standard_write`：普通创建、更新、续写
+- `high_risk_write`：长文本覆盖或多对象正文重写
 
-## 8. Phase 7：导出 + 文档 ✅
+后续收口：
 
-### 已完成内容
-- [x] `backend/app/services/export.py` - ExportService（TXT + Markdown）
-- [x] `backend/app/api/v1/export.py` - `GET /api/v1/projects/{id}/export?format=txt|markdown`
-- [x] 前端导出按钮（项目详情页 → 导出 TXT / 导出 Markdown）
-- [x] 实施计划文档更新
+- 增加真正的 `read_search` 内部工具层，并从用户可见 operation 中剥离
+- 把“高风险”从当前规则判断升级到更稳定的 classifier
+- 增加批量修改时的 run 级风险摘要
 
----
+### Phase 4: 完成校验与落库一致性
 
-## 9. 当前项目结构
+目标：不允许 run 在“实际没写对”的情况下标记为成功。
 
-### 后端 (`backend/app/`)
-```
-app/
-├── agents/                    # AI Agent 层
-│   ├── base.py               # AgentContext, AgentResult, BaseAgent
-│   ├── lore_agent.py         # 世界观助手
-│   ├── character_agent.py    # 人物助手
-│   ├── outline_agent.py      # 大纲助手
-│   ├── draft_agent.py        # 写作助手
-│   ├── continuity_agent.py   # 连续性检查
-│   └── orchestrator.py       # WritingOrchestrator（路由+上下文+建议）
-├── api/v1/                    # API 路由
-│   ├── agent.py              # Agent 对话/摘要/检查
-│   ├── export.py             # 导出
-│   ├── projects.py           # 项目 CRUD
-│   ├── characters.py         # 人物 CRUD
-│   ├── world_settings.py     # 世界观 CRUD
-│   ├── chapters.py           # 章节/卷/场景 CRUD
-│   ├── suggestions.py        # 建议三态
-│   ├── dependencies.py       # 依赖/影响分析
-│   ├── memories.py           # 记忆/向量搜索
-│   └── snapshots.py          # 快照/回滚
-├── models/                    # 10 个 SQLAlchemy 模型
-├── schemas/                   # Pydantic schemas
-├── services/                  # 业务逻辑层
-│   ├── llm.py                # OpenAI LLM 服务
-│   ├── export.py             # 导出服务
-│   └── ...                   # 各模型 CRUD 服务
-├── core/                      # 配置/异常
-└── db/                        # 数据库会话
-```
+当前实现：
 
-### 前端 (`frontend/`)
-```
-frontend/
-├── app/                       # 21 个页面路由
-│   ├── projects/[id]/        # 项目详情 + AI 建议 + 导出
-│   │   ├── characters/       # 人物管理 + AI Chat
-│   │   ├── chapters/         # 章节管理 + AI Chat
-│   │   │   └── scenes/       # 场景管理 + AI Chat
-│   │   └── worldsettings/    # 世界观管理
-│   └── ...
-├── components/
-│   ├── AgentChatPanel.tsx    # 浮动 AI 对话面板
-│   ├── SuggestionCard.tsx    # 建议卡片
-│   ├── SuggestionList.tsx    # 建议列表
-│   ├── DiffPreview.tsx       # Diff 对比
-│   ├── ImpactAnalysis.tsx    # 影响分析
-│   └── ui/                   # Button, Card, Input, Loading, Modal
-├── lib/
-│   ├── api-client.ts         # API 客户端（含 agentApi, suggestionApi, exportApi）
-│   ├── types.ts              # TypeScript 类型定义
-│   └── stores/
-│       ├── projectStore.ts   # 项目状态
-│       └── chatStore.ts      # 聊天状态（含流式）
-```
+- `AgentRun` / `AgentOperation` 已有：
+  - `verification_status`
+  - `verification_summary`
+- 内容型 operation 已记录：
+  - `preview_content_hash`
+  - `persisted_content_hash`
+- 执行完成后会验证：
+  - 目标对象存在
+  - 摘要与预览一致
+  - 内容 hash 与 planning 阶段一致
+  - continuity gate 未阻断
 
----
+后续收口：
 
-## 10. MVP 验证方式
+- 对非内容字段增加更细的 field-level verification
+- 对 snapshot 与 verification 建立明确联动关系
+- 在前端提供更清晰的“执行成功但建议人工复核”的分类展示
 
-1. **后端测试**: `cd backend && python3 -m pytest tests/` - 已有 35+ 测试文件
-2. **前端构建**: `cd frontend && next build` - 21 个页面全部编译通过
-3. **端到端流程**: 启动后端 → 前端 → 创建项目 → 打开聊天面板 → 发送消息 → 查看 AI 回复和建议
-4. **导出测试**: 创建项目+章节 → 点击导出按钮 → 验证下载文件内容
+### Phase 5: 上下文压缩与长期线程
 
----
+目标：让单项目长期工作线程可以持续运行，而不是历史越长越不可用。
 
-## 11. 后续规划
+当前实现：
 
-### V2 计划
-- GraphRAG 高级检索
-- TipTap 富文本编辑器集成
-- React Flow 知识图谱可视化
-- 复杂影响分析可视化
-- 人物弧光追踪器
-- 时间线视图
+- `AgentThreadCheckpoint` 已持久化
+- 压缩触发条件已存在：
+  - 消息数阈值
+  - run 数阈值
+  - 上下文字符总量阈值
+- checkpoint 当前保存：
+  - `thread_summary`
+  - `active_object_bundle`
+  - `recent_run_digest`
+  - `profile_id`
 
-### V3 计划
-- 多用户协作
-- 实时协同编辑（Y.js）
-- 文风克隆
-- 跨媒介资产转换
+后续收口：
+
+- 把当前确定性摘要升级为独立 compact step
+- 将 planner 输入正式切换为：
+  - 最新 checkpoint
+  - 当前关键对象 bundle
+  - 少量近期原始消息
+  - 当前待确认 run 摘要
+- 为 long-running thread 增加压缩后的可追踪性说明
+
+## 公共接口变更
+
+当前已纳入公共接口的新增内容：
+
+- `ProjectCreate / ProjectUpdate / ProjectResponse.agent_profile_id`
+- `GET /api/v1/agent/profiles`
+- `GET /api/v1/agent/skills?project_id=...`
+- `POST /api/v1/agent/runs/{run_id}/confirm-high-risk`
+- `AgentRunResponse.subtasks`
+- `AgentRunResponse.verification_status`
+- `AgentRunResponse.verification_summary`
+- `AgentOperationResponse.permission_level`
+- `AgentOperationResponse.risk_level`
+- `AgentOperationResponse.requires_secondary_confirmation`
+- `AgentOperationResponse.verification_status`
+- `AgentOperationResponse.verification_summary`
+
+以下接口继续保留为兼容层：
+
+- `/api/v1/agent/chat`
+- `/api/v1/agent/chat/stream`
+- `/api/v1/agent/auto-summarize`
+- `/api/v1/agent/continuity-check`
+
+## 测试门与验收标准
+
+当前最低质量门：
+
+- `ruff check app tests`
+- `mypy app`
+- `pytest`
+- `npm run lint`
+- `npm run build`
+
+本轮新增的重点覆盖：
+
+- profile registry 加载与覆盖
+- `xianxia_intrigue` profile 的 canonical source 引用
+- 项目级 profile round-trip
+- skill catalog 按项目返回有效 profile
+- 高风险二次确认链路
+- subtask 与 verification 字段的 API 暴露
+
+## 兼容与迁移策略
+
+- `AgentThread / AgentRun / AgentOperation` 继续视为公共稳定接口，只增量扩展，不推翻重做
+- 项目级 profile 继续存储在 `Project.meta`，避免新增数据库列
+- legacy chat 与 suggestion 兼容路径继续保留，但不再作为主流程继续扩展
+- 新 profile 只影响新 run；历史 run 保留自己的 `profile_id` 与 skill snapshot
+
+## 参考模式
+
+- Claude Code：
+  - 子代理
+  - hooks
+  - 独立上下文与权限边界
+- OpenCode：
+  - Plan / Build 分层
+  - child sessions
+  - permission matrix
+- OpenClaw：
+  - 长线程隔离
+  - session pruning
+  - workflow / skills 思路
+
+本项目后续主要吸收 Claude Code 与 OpenCode 的编排方式，OpenClaw 主要借鉴长期会话和压缩策略，不照搬其聊天网关形态。

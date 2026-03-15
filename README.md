@@ -9,6 +9,7 @@ AI Novel Agent 是一个面向个人长期创作的 Agent 化长篇小说工作�
 - 角色与世界观：沉淀人物档案、设定条目与背景信息
 - 章节与场景：按创作结构推进内容，而不是散落在独立文档里
 - Agent Workspace：用自然语言下达创作与修改指令，先看完整计划与预览，再确认执行
+- Agent Profile：项目可绑定不同写作 profile；当前内置 `default` 与 `xianxia_intrigue`
 - 记忆与检索：支持 embedding 驱动的内容记忆
 - 内容导出：导出 TXT 与 Markdown
 
@@ -52,7 +53,7 @@ ADMIN_API_KEY=
 配置要点：
 
 - `LLM_*` 用于聊天与生成
-- `AGENT_SKILLS_DIR` 可选；留空时使用内置 skills，指向自定义目录后可覆盖 planner 与单个 operation skill
+- `AGENT_SKILLS_DIR` 可选；留空时使用内置 profiles，指向自定义目录后可新增或覆盖某个 profile
 - `EMBEDDING_*` 留空时，会复用聊天模型的 `API_KEY` 与 `BASE_URL`
 - `EMBEDDING_DIMENSION` 必须与 embedding 模型真实输出维度一致
 - `PERSONAL_USER_*` 定义本地单用户身份
@@ -92,30 +93,44 @@ docker-compose up -d
 5. 进入项目后的主入口是 Agent Workspace
 6. 直接输入自然语言指令，例如创建人物、修改设定、重写某一章节
 7. 先检查 Agent 生成的执行计划与预览，再确认执行
-8. 需要时再进入人物、世界观、章节、场景页面做手动复核或微调
+8. 如果计划包含高风险正文覆盖，系统会要求二次确认
+9. 需要时再进入人物、世界观、章节、场景页面做手动复核或微调
 
 ## Skill 配置
 
-Agent Workspace 默认使用后端内置的 planner skill 与 operation skills。它们位于 `backend/app/agent_skills/`，按 `planner / operations / references` 组织。
+Agent Workspace 默认使用后端内置的 profile-aware skills。
+
+- 通用 profile：`backend/app/agent_skills/`
+- 仙侠权谋 profile：`backend/app/agent_profiles/xianxia_intrigue/`
+
+项目级 profile 在创建项目或编辑项目时选择。当前内置：
+
+- `default`
+- `xianxia_intrigue`
 
 如果你需要替换其中一部分行为，而不是直接改 Python 代码，可以在 `backend/.env` 中设置：
 
 ```env
-AGENT_SKILLS_DIR=/absolute/path/to/your/agent_skills
+AGENT_SKILLS_DIR=/absolute/path/to/your/agent_profiles
 ```
 
-覆盖目录只需要放你要替换的 skill 文件，未提供的部分会继续使用内置版本。目录结构保持一致即可，例如：
+覆盖目录只需要放你要新增或替换的 profile，未提供的部分会继续使用内置版本。目录结构保持 profile 根目录形式，例如：
 
 ```text
-custom-agent-skills/
-├── planner/
-│   └── SKILL.md
-└── operations/
-    └── write-chapter-content/
-        └── SKILL.md
+custom-agent-profiles/
+└── xianxia_intrigue/
+    ├── planner/
+    │   └── SKILL.md
+    └── operations/
+        └── write-chapter-content/
+            └── SKILL.md
 ```
 
-运行中可以通过 `GET /api/v1/agent/skills` 查看当前实际加载的 planner 与 operation skills。
+运行中可以通过以下接口检查当前配置：
+
+- `GET /api/v1/agent/profiles`
+- `GET /api/v1/agent/skills`
+- `GET /api/v1/agent/skills?project_id=...`
 
 ## 本地手动运行
 

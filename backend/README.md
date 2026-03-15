@@ -68,10 +68,13 @@ make verify
 - 每个项目有一个默认 `AgentThread`
 - 用户消息会生成一个 `AgentRun`
 - `AgentRun` 会先给出待确认的多步操作预览，再进入执行
+- 项目可绑定 `agent_profile_id`；当前内置 `default` 与 `xianxia_intrigue`
+- run 会带出内部 `subtask` 摘要，展示 planner / researcher / writer / editor / continuity
+- 高风险正文覆盖会进入二次确认，而不是直接执行
 - 执行阶段复用现有 CRUD service，并在落库前为目标对象创建 snapshot
-- planner 与每个 operation 都由文件化 skill 驱动，默认技能位于 `app/agent_skills/`
-- `AGENT_SKILLS_DIR` 可覆盖内置 planner 或单个 operation skill，而不需要修改后端代码
-- `GET /api/v1/agent/skills` 可用于检查当前实际加载的 skill 集合
+- planner 与每个 operation 都由文件化 skill 驱动；通用技能位于 `app/agent_skills/`，profile 覆盖位于 `app/agent_profiles/`
+- `AGENT_SKILLS_DIR` 作为 profile 根目录覆盖入口，可新增或替换某个 profile
+- `GET /api/v1/agent/profiles` 与 `GET /api/v1/agent/skills?project_id=...` 可用于检查当前实际加载结果
 - legacy `/api/v1/agent/chat*` 仍保留，用于次级页面和兼容路径
 
 ### 健康检查

@@ -33,6 +33,7 @@ const SUGGESTION_STATUS_META: Record<string, StatusMeta> = {
 const RUN_STATUS_META: Record<string, StatusMeta> = {
   draft: { label: "草拟中", className: "ink-badge ink-badge-ash" },
   awaiting_confirmation: { label: "待确认", className: "ink-badge ink-badge-amber" },
+  awaiting_high_risk_confirmation: { label: "高风险待复核", className: "ink-badge ink-badge-rust" },
   executing: { label: "执行中", className: "ink-badge ink-badge-rust" },
   completed: { label: "已完成", className: "ink-badge ink-badge-jade" },
   failed: { label: "执行失败", className: "ink-badge ink-badge-rust" },

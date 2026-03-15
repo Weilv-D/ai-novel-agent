@@ -2,66 +2,58 @@
 
 最后更新：2026-03-15
 
-## 当前定位
+## 当前已完成
 
-AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶段。它当前服务的对象很明确：单人、本地、长期创作。当前版本的主交互模型已经从 suggestion 导向的聊天辅助，升级为项目内的 planner/executor Agent Workspace。
+AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主交互模型明确为项目内 Agent Workspace，而不是旧的 suggestion 导向聊天面板。
 
-## 已交付能力
+当前稳定能力包括：
 
-### 后端
-
-- FastAPI 主应用与异常处理
-- 配置、日志与健康检查
-- 单用户模式与可选 `ADMIN_API_KEY` 保护
-- 项目、人物、世界观、卷、章、场景的完整 API
-- Suggestion、Dependency、Snapshot、Memory 相关 API
-- Agent thread / run / operation 工作流
-- 文件化 planner / operation skills，可按目录覆盖更新
-- legacy Agent chat / stream / continuity / summarize
-- Alembic 初始化迁移
-- PostgreSQL + pgvector 目标运行时
-
-### 前端
-
-- Next.js 15 App Router
-- 首页与个人模式配置入口
-- 项目级 Agent Workspace 主视图
-- 项目、人物、章节、世界观辅助视图
-- Diff / Impact Analysis 组件
-- API client、状态管理与类型定义
-- 当前版本的水墨风 UI 主题
-- 本地 serif 字体栈，无外部字体依赖
-
-### 运行与验证
-
-- 仓库级验证命令：`make verify`
-- 后端快速验证：`backend/verify.py`
-- SQLite HTTP 集成验证：`scripts/verify_sqlite_integration.py`
-- 联调环境 live smoke：`scripts/verify_api_integration.py`
-- Docker Compose 本地联调可用
+- 项目、人物、世界观、卷、章、场景的完整 CRUD
+- Snapshot、Memory、Dependency、导出能力
+- 项目级 `thread / run / operation` Agent 工作流
+- preview-first、confirm-then-execute 的执行模式
+- 项目级 `agent_profile_id`
+- 内置 `default` 与 `xianxia_intrigue` profile
+- profile-aware planner / operation skills
+- run 级 subtask 摘要
+- operation 风险分级与高风险二次确认
+- 执行后 verification gate
+- 长线程 checkpoint 基础设施
 
 ## 当前质量状态
 
-- 后端测试：`407` collected / `405 passed` / `2 skipped`
+- 后端测试：`410 passed / 2 skipped`
 - 后端 lint：通过
 - 后端类型检查：通过
 - 前端 lint：通过
 - 前端 build：通过
-- 健康接口：返回 API、数据库和 Redis 的实时状态
+
+当前仓库可以通过：
+
+- `ruff check app tests`
+- `mypy app`
+- `pytest`
+- `npm run lint`
+- `npm run build`
 
 ## 当前边界
 
-以下内容不在当前交付范围内：
+以下内容仍不在当前交付范围内：
 
 - 多用户注册、登录、组织与权限体系
 - 浏览器自动化 e2e 测试
+- 真正独立执行的内部子代理
 - 面向公网部署的完整安全加固方案
 
-这些边界是当前产品定位的一部分，而不是遗漏。
+这些边界是当前产品定位与当前实施顺序的一部分，不是遗漏说明。
 
-## 维护建议
+## 下一阶段
 
-- 把 `make verify` 作为提交前最低验证标准
-- 把 `/api/v1/health` 作为联调环境启动后的第一道检查
-- 修改 embedding 模型时，同步调整 `EMBEDDING_DIMENSION`
-- 保持 `frontend/.next-docker` 只作为 Docker 前端运行态目录使用
+后续工作不再推翻现有 `thread / run / operation` 底座，而是沿着以下方向收口：
+
+- 把 subtask 从“摘要记录”升级为真正独立的内部执行单元
+- 把权限分级从规则判断升级为更稳定的 classifier
+- 把 verification 从摘要级比对升级为更细的 field-level 校验
+- 把 checkpoint 从基础摘要升级为长期线程的正式 compact 流程
+
+详细路线见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)。

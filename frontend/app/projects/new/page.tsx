@@ -1,13 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { ApiError, projectApi } from "@/lib/api-client";
-import type { ProjectCreate } from "@/lib/types";
+import { agentWorkflowApi, ApiError, projectApi } from "@/lib/api-client";
+import type { AgentProfile, ProjectCreate } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+
+const FALLBACK_PROFILES: AgentProfile[] = [
+  {
+    id: "default",
+    name: "Default",
+    description: "通用长篇写作 profile。",
+    builtin: true,
+    root: "builtin",
+  },
+  {
+    id: "xianxia_intrigue",
+    name: "仙侠权谋",
+    description: "严格遵照 others/ 下的大纲、章纲与写作规范。",
+    builtin: true,
+    root: "builtin",
+  },
+];
 
 export default function NewProjectPage() {
   const [formData, setFormData] = useState<ProjectCreate>({
@@ -15,9 +32,24 @@ export default function NewProjectPage() {
     genre: "",
     target_audience: "",
     target_word_count: undefined,
+    agent_profile_id: "default",
   });
+  const [profiles, setProfiles] = useState<AgentProfile[]>(FALLBACK_PROFILES);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const nextProfiles = await agentWorkflowApi.listProfiles();
+        if (nextProfiles.length > 0) {
+          setProfiles(nextProfiles);
+        }
+      } catch {
+        setProfiles(FALLBACK_PROFILES);
+      }
+    })();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -96,6 +128,24 @@ export default function NewProjectPage() {
                   })
                 }
               />
+
+              <div>
+                <label className="ink-label">Agent Profile</label>
+                <select
+                  value={formData.agent_profile_id || "default"}
+                  onChange={(e) => setFormData({ ...formData, agent_profile_id: e.target.value })}
+                  className="ink-select"
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-600))]">
+                  {(profiles.find((profile) => profile.id === (formData.agent_profile_id || "default")) || profiles[0])?.description}
+                </p>
+              </div>
 
               {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 

@@ -1,5 +1,7 @@
 # AI 超长篇小说写作 Agent - 技术架构设计
 
+> 当前实现说明：仓库已经以项目级 `thread / run / operation` 作为公开 Agent 工作流接口，并在其上加入了项目级 profile、subtask、风险分级、verification 与 checkpoint 基础设施。后续多子代理、权限分层、完成校验深化与上下文压缩的演进路线，以 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md) 为准。本文件继续保留“目标架构”视角。
+
 ## 文档信息
 - 项目名称：AI 超长篇小说写作 Agent 应用
 - 文档类型：技术架构文档（TECH_ARCH）
@@ -8,7 +10,7 @@
 - 创建日期：2026-03-11
 - 更新日期：2026-03-12
 
-> 实现说明：本文件保留“目标架构”视角，部分目录示意早于当前代码实现。当前仓库实际结构、开发命令和测试状态以 `README.md`、`docs/STATUS.md`、`docs/DEVELOPMENT.md` 为准。
+> 兼容说明：本文件中部分目录示意早于当前代码实现。当前仓库实际结构、开发命令和测试状态以 `README.md`、`docs/STATUS.md`、`docs/DEVELOPMENT.md` 为准。
 
 ---
 

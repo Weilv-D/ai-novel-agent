@@ -80,7 +80,9 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     run = message_response.json()["run"]
     assert run["status"] == "awaiting_confirmation"
     assert run["operations"][0]["tool_name"] == "create_character"
+    assert run["subtasks"]
     assert run["meta"]["skill_snapshot"]["planner"]["name"] == "novel-agent-planner"
+    assert run["meta"]["skill_snapshot"]["profile_id"] == "default"
     assert run["meta"]["skill_snapshot"]["operations"][0]["tool_name"] == "create_character"
 
     confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
@@ -351,6 +353,95 @@ async def test_skill_catalog_endpoint(client: AsyncClient) -> None:
     assert "create_character" in tool_names
     assert "write_chapter_content" in tool_names
     assert payload["source_roots"]
+
+
+@pytest.mark.asyncio
+async def test_profiles_and_project_skill_catalog(client: AsyncClient) -> None:
+    """Projects can opt into a non-default profile and inspect its active skills."""
+    response = await client.get("/api/v1/agent/profiles")
+    assert response.status_code == 200
+    profiles = {profile["id"] for profile in response.json()}
+    assert "default" in profiles
+    assert "xianxia_intrigue" in profiles
+
+    project_response = await client.post(
+        "/api/v1/projects",
+        json={"name": "Xianxia Project", "genre": "fantasy", "agent_profile_id": "xianxia_intrigue"},
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["id"]
+
+    catalog_response = await client.get(f"/api/v1/agent/skills?project_id={project_id}")
+    assert catalog_response.status_code == 200
+    payload = catalog_response.json()
+    assert payload["profile_id"] == "xianxia_intrigue"
+    assert payload["planner"]["name"] == "xianxia-intrigue-planner"
+
+
+@pytest.mark.asyncio
+async def test_high_risk_run_requires_second_confirmation(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Large replace writes should pause for a second confirmation before execution."""
+    project_id = await create_project(client, name="High Risk")
+    thread_id = await create_thread(client, project_id)
+
+    chapter_response = await client.post(
+        "/api/v1/chapters",
+        json={
+            "project_id": project_id,
+            "chapter_number": 3,
+            "title": "夜行",
+            "content": "旧章内容",
+        },
+    )
+    assert chapter_response.status_code == 201
+    chapter_id = chapter_response.json()["id"]
+
+    long_content = " ".join(["夜色沉坠，皇城如渊。"] * 40)
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会重写第三章，并先给出完整预览。",
+                summary="重写第三章正文",
+                operations=[
+                    {
+                        "tool_name": "write_chapter_content",
+                        "description": "重写第三章正文",
+                        "reason": "用户要求完整覆盖第三章",
+                        "payload": {
+                            "chapter_id": chapter_id,
+                            "mode": "replace",
+                            "content": long_content,
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "完整重写第三章，改成更冷峻的皇城夜行"},
+    )
+    assert message.status_code == 200
+    run = message.json()["run"]
+    assert run["operations"][0]["requires_secondary_confirmation"] is True
+    assert run["operations"][0]["risk_level"] == "high"
+
+    confirm = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
+    assert confirm.status_code == 200
+    assert confirm.json()["run"]["status"] == "awaiting_high_risk_confirmation"
+
+    confirm_high_risk = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm-high-risk")
+    assert confirm_high_risk.status_code == 200
+    confirmed_run = confirm_high_risk.json()["run"]
+    assert confirmed_run["status"] == "completed"
+    assert confirmed_run["verification_status"] == "passed"
+
+    chapter = await client.get(f"/api/v1/chapters/{chapter_id}")
+    assert chapter.status_code == 200
+    assert chapter.json()["content"] == long_content
 
 
 @pytest.mark.asyncio
