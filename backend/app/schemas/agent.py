@@ -30,6 +30,17 @@ RetryStrategyLiteral = Literal["service_only", "planner_then_service_fallback"]
 ConfirmationGateLiteral = Literal["none", "single", "double"]
 CapabilityKindLiteral = Literal["read_search", "planning", "writing", "editing", "verification"]
 CapabilityExecutionStatusLiteral = Literal["planned", "completed", "failed", "skipped"]
+RiskPolicyIdLiteral = Literal[
+    "create_only",
+    "standard_updates",
+    "content_append",
+    "content_rewrite",
+    "long_form_overwrite",
+    "multi_object_write",
+]
+RiskPolicyScopeLiteral = Literal["operation", "run"]
+ChildUnitRoleLiteral = Literal["planner", "researcher", "writer", "editor", "continuity", "executor"]
+ChildUnitStageLiteral = Literal["preview", "pre_execution", "execution"]
 
 
 class OperationPreview(BaseModel):
@@ -116,6 +127,16 @@ class AgentCapabilityExecutionRecordResponse(BaseModel):
     attempt_count: int = 1
 
 
+class AgentCapabilityPolicyResponse(BaseModel):
+    """Stable policy contract for one internal capability."""
+
+    execution_phase: Literal["plan", "build"]
+    source_role: CapabilitySourceRoleLiteral
+    confirmation_gate: ConfirmationGateLiteral
+    internal_only: bool = True
+    requires_confirmation: bool = False
+
+
 class AgentCapabilityResponse(BaseModel):
     """One stable internal capability exposed with the run contract."""
 
@@ -124,6 +145,7 @@ class AgentCapabilityResponse(BaseModel):
     kind: CapabilityKindLiteral
     description: str
     tool_scope: list[str] = Field(default_factory=list)
+    policy: AgentCapabilityPolicyResponse
     execution_record: AgentCapabilityExecutionRecordResponse | None = None
 
 
@@ -201,13 +223,92 @@ class AgentExecutionPhaseResponse(BaseModel):
     requires_confirmation: bool = False
     requires_secondary_confirmation: bool = False
     operation_count: int = 0
+    child_units: list["AgentExecutionChildUnitResponse"] = Field(default_factory=list)
     capabilities: list[AgentCapabilityResponse] = Field(default_factory=list)
+
+
+class AgentExecutionChildUnitResponse(BaseModel):
+    """Stable contract for one internal child unit inside a workflow phase."""
+
+    unit_id: str
+    role: ChildUnitRoleLiteral
+    phase: Literal["plan", "build"]
+    stage: ChildUnitStageLiteral
+    mode: ExecutionModeLiteral
+    title: str
+    description: str
+    tool_scope: list[str] = Field(default_factory=list)
+    capability_ids: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    operation_positions: list[int] = Field(default_factory=list)
+    confirmation_gate: ConfirmationGateLiteral
+    requires_confirmation: bool = False
+    internal_only: bool = True
 
 
 class AgentExecutionContractResponse(BaseModel):
     """Stable child unit contract surfaced with each run."""
 
+    registry_version: str
     phases: list[AgentExecutionPhaseResponse] = Field(default_factory=list)
+
+
+class AgentCapabilityRegistryResponse(BaseModel):
+    """Stable registry of capability contracts available to the workflow."""
+
+    registry_version: str
+    capabilities: list[AgentCapabilityResponse] = Field(default_factory=list)
+
+
+class AgentRiskPolicyResponse(BaseModel):
+    """Stable risk classification policy exposed independently from one run."""
+
+    policy_id: RiskPolicyIdLiteral
+    name: str
+    scope: RiskPolicyScopeLiteral
+    description: str
+    risk_level: RiskLevelLiteral
+    confirmation_gate: ConfirmationGateLiteral
+    requires_secondary_confirmation: bool = False
+    tool_scope: list[str] = Field(default_factory=list)
+
+
+class AgentAppliedRiskPolicyResponse(BaseModel):
+    """One policy application recorded on a concrete run."""
+
+    policy_id: RiskPolicyIdLiteral
+    name: str
+    scope: RiskPolicyScopeLiteral
+    description: str
+    risk_level: RiskLevelLiteral
+    confirmation_gate: ConfirmationGateLiteral
+    requires_secondary_confirmation: bool = False
+    matched_operation_positions: list[int] = Field(default_factory=list)
+
+
+class AgentRiskPolicyRegistryResponse(BaseModel):
+    """Stable registry of risk policies used by the run classifier."""
+
+    policy_version: str
+    policies: list[AgentRiskPolicyResponse] = Field(default_factory=list)
+
+
+class AgentRunRiskSummaryResponse(BaseModel):
+    """Stable run-level aggregation of write risk and confirmation gates."""
+
+    policy_version: str
+    overall_risk_level: RiskLevelLiteral
+    confirmation_gate: ConfirmationGateLiteral
+    requires_confirmation: bool
+    requires_secondary_confirmation: bool
+    total_operations: int = 0
+    low_risk_operation_count: int = 0
+    medium_risk_operation_count: int = 0
+    high_risk_operation_count: int = 0
+    high_risk_operation_positions: list[int] = Field(default_factory=list)
+    secondary_confirmation_operation_positions: list[int] = Field(default_factory=list)
+    applied_policies: list[AgentAppliedRiskPolicyResponse] = Field(default_factory=list)
+    summary: str
 
 
 class AgentRunResponse(BaseModel):
@@ -226,6 +327,7 @@ class AgentRunResponse(BaseModel):
     verification_status: VerificationStatusLiteral
     verification_summary: str | None = None
     execution_contract: AgentExecutionContractResponse | None = None
+    risk_summary: AgentRunRiskSummaryResponse | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
     confirmed_at: datetime | None = None
     secondary_confirmed_at: datetime | None = None

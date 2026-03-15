@@ -109,6 +109,13 @@
 - `researcher` 子任务已切到内部 `read/search` 工具层，不再把这类能力暴露成用户可确认 operation
 - `AgentRunResponse.execution_contract` 与 `AgentSubtaskResponse.child_trace` 已成为显式响应字段
 - `execution_contract.capabilities[*].execution_record` 已记录 capability 的真实执行状态与输出摘要
+- capability 已分成 `registry / policy / execution_record` 三层，`GET /api/v1/agent/capabilities` 可独立查看 registry
+- 风险分类已分成 `registry / applied_policies / run summary` 三层，`GET /api/v1/agent/risk-policies` 可独立查看 registry
+- 风险分类实现已从 workflow 内部规则提取为独立 classifier service，当前入口是 `app/services/agent_risk.py`
+- classifier 已支持 profile-aware override，当前 `xianxia_intrigue` 会使用更保守的长正文覆盖阈值，同时保持原有 risk policy contract 不变
+- `AgentRunResponse.risk_summary` 已提供稳定的 run 级风险聚合与命中策略，前端不再需要从 operation 列表和 run 状态机自行推断整体风险
+- `execution_contract.phases[*].child_units` 已把 `planner / researcher / writer / editor / continuity / executor` 收敛为显式 child unit contract
+- phase contract 与 child unit contract 的装配已提取到独立服务，当前入口是 `app/services/agent_contract.py`
 - run 状态机已扩展出 `awaiting_high_risk_confirmation`
 - `POST /api/v1/agent/runs/{run_id}/confirm-high-risk` 已可用
 - 前端已展示高风险提示与二次确认入口
@@ -120,9 +127,7 @@
 
 后续收口：
 
-- 把“高风险”从当前规则判断升级到更稳定的 classifier
-- 增加批量修改时的 run 级风险摘要
-- 把当前 `Plan / Build` 权限矩阵进一步收敛为明确的 child unit contract
+- 继续把 Plan / Build 权限边界推进成可复用的 child capability policy，而不是只停留在 run 级 contract
 
 ### Phase 4: 完成校验与落库一致性
 
@@ -136,16 +141,20 @@
 - 内容型 operation 已记录：
   - `preview_content_hash`
   - `persisted_content_hash`
+- 非正文类 `update_*` 已接入字段级 verification，会按 `payload.updates` 对落库结果逐字段比对
+- operation 的 `execution_result` 已记录 snapshot linkage，verification 会校验 snapshot 是否真实存在且与目标对象一致
 - 执行完成后会验证：
   - 目标对象存在
   - 摘要与预览一致
   - 内容 hash 与 planning 阶段一致
+  - 结构化更新字段与预期值一致
+  - snapshot linkage 有效
   - continuity gate 未阻断
 
 后续收口：
 
-- 对非内容字段增加更细的 field-level verification
-- 对 snapshot 与 verification 建立明确联动关系
+- 把当前字段级 verification 从结构化 `update_*` 扩展到更多对象与更细粒度结果
+- 把当前 snapshot linkage 从存在性校验推进到变更前后语义校验
 - 在前端提供更清晰的“执行成功但建议人工复核”的分类展示
 
 ### Phase 5: 上下文压缩与长期线程
@@ -181,9 +190,12 @@
 
 - `ProjectCreate / ProjectUpdate / ProjectResponse.agent_profile_id`
 - `GET /api/v1/agent/profiles`
+- `GET /api/v1/agent/risk-policies`
 - `GET /api/v1/agent/skills?project_id=...`
 - `POST /api/v1/agent/runs/{run_id}/confirm-high-risk`
 - `AgentRunResponse.subtasks`
+- `AgentRunResponse.risk_summary`
+- `AgentExecutionPhaseResponse.child_units`
 - `AgentRunResponse.verification_status`
 - `AgentRunResponse.verification_summary`
 - `AgentOperationResponse.permission_level`
@@ -221,6 +233,11 @@
 - run-level permission matrix 与 internal read/search layer
 - explicit execution contract / child trace response schema
 - capability execution record
+- capability registry / policy layering
+- run-level risk summary for normal and high-risk plans
+- risk policy registry and applied policy snapshots
+- replaceable classifier service
+- explicit child unit contract inside execution phases
 - subtask 与 verification 字段的 API 暴露
 
 ## 兼容与迁移策略

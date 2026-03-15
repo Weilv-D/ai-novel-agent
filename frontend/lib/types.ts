@@ -425,6 +425,16 @@ export type AgentRetryStrategy = "service_only" | "planner_then_service_fallback
 export type AgentConfirmationGate = "none" | "single" | "double";
 export type AgentCapabilityKind = "read_search" | "planning" | "writing" | "editing" | "verification";
 export type AgentCapabilitySourceRole = AgentSubtaskRole | "executor";
+export type AgentChildUnitRole = AgentSubtaskRole | "executor";
+export type AgentChildUnitStage = "preview" | "pre_execution" | "execution";
+export type AgentRiskPolicyId =
+  | "create_only"
+  | "standard_updates"
+  | "content_append"
+  | "content_rewrite"
+  | "long_form_overwrite"
+  | "multi_object_write";
+export type AgentRiskPolicyScope = "operation" | "run";
 
 export interface OperationPreview {
   changed_fields: string[];
@@ -520,6 +530,7 @@ export interface AgentCapability {
   kind: AgentCapabilityKind;
   description: string;
   tool_scope: string[];
+  policy: AgentCapabilityPolicy;
   execution_record?: AgentCapabilityExecutionRecord | null;
 }
 
@@ -533,6 +544,31 @@ export interface AgentCapabilityExecutionRecord {
   attempt_count: number;
 }
 
+export interface AgentCapabilityPolicy {
+  execution_phase: AgentExecutionPhase;
+  source_role: AgentCapabilitySourceRole;
+  confirmation_gate: AgentConfirmationGate;
+  internal_only: boolean;
+  requires_confirmation: boolean;
+}
+
+export interface AgentExecutionChildUnit {
+  unit_id: string;
+  role: AgentChildUnitRole;
+  phase: AgentExecutionPhase;
+  stage: AgentChildUnitStage;
+  mode: AgentExecutionMode;
+  title: string;
+  description: string;
+  tool_scope: string[];
+  capability_ids: string[];
+  depends_on: string[];
+  operation_positions: number[];
+  confirmation_gate: AgentConfirmationGate;
+  requires_confirmation: boolean;
+  internal_only: boolean;
+}
+
 export interface AgentExecutionContractPhase {
   phase: AgentExecutionPhase;
   mode: AgentExecutionMode;
@@ -543,11 +579,61 @@ export interface AgentExecutionContractPhase {
   requires_confirmation: boolean;
   requires_secondary_confirmation: boolean;
   operation_count: number;
+  child_units: AgentExecutionChildUnit[];
   capabilities: AgentCapability[];
 }
 
 export interface AgentExecutionContract {
+  registry_version: string;
   phases: AgentExecutionContractPhase[];
+}
+
+export interface AgentCapabilityRegistry {
+  registry_version: string;
+  capabilities: AgentCapability[];
+}
+
+export interface AgentRiskPolicy {
+  policy_id: AgentRiskPolicyId;
+  name: string;
+  scope: AgentRiskPolicyScope;
+  description: string;
+  risk_level: AgentRiskLevel;
+  confirmation_gate: AgentConfirmationGate;
+  requires_secondary_confirmation: boolean;
+  tool_scope: string[];
+}
+
+export interface AgentAppliedRiskPolicy {
+  policy_id: AgentRiskPolicyId;
+  name: string;
+  scope: AgentRiskPolicyScope;
+  description: string;
+  risk_level: AgentRiskLevel;
+  confirmation_gate: AgentConfirmationGate;
+  requires_secondary_confirmation: boolean;
+  matched_operation_positions: number[];
+}
+
+export interface AgentRiskPolicyRegistry {
+  policy_version: string;
+  policies: AgentRiskPolicy[];
+}
+
+export interface AgentRunRiskSummary {
+  policy_version: string;
+  overall_risk_level: AgentRiskLevel;
+  confirmation_gate: AgentConfirmationGate;
+  requires_confirmation: boolean;
+  requires_secondary_confirmation: boolean;
+  total_operations: number;
+  low_risk_operation_count: number;
+  medium_risk_operation_count: number;
+  high_risk_operation_count: number;
+  high_risk_operation_positions: number[];
+  secondary_confirmation_operation_positions: number[];
+  applied_policies: AgentAppliedRiskPolicy[];
+  summary: string;
 }
 
 export interface AgentThreadCheckpoint {
@@ -585,6 +671,7 @@ export interface AgentRun {
   verification_status: AgentVerificationStatus;
   verification_summary?: string | null;
   execution_contract?: AgentExecutionContract | null;
+  risk_summary?: AgentRunRiskSummary | null;
   meta: Record<string, unknown>;
   confirmed_at?: string | null;
   secondary_confirmed_at?: string | null;

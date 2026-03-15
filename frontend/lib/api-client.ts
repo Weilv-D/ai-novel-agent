@@ -425,6 +425,7 @@ import type {
   AgentChatRequest,
   AgentChatResponse,
   AgentProfile,
+  AgentRiskPolicyRegistry,
   AgentRun,
   AgentSkillCatalog,
   AgentThread,
@@ -517,6 +518,9 @@ export const agentApi = {
 export const agentWorkflowApi = {
   listProfiles: () =>
     fetchApi<AgentProfile[]>("/api/v1/agent/profiles"),
+
+  getRiskPolicies: () =>
+    fetchApi<AgentRiskPolicyRegistry>("/api/v1/agent/risk-policies"),
 
   getSkills: (projectId?: string) =>
     fetchApi<AgentSkillCatalog>(`/api/v1/agent/skills${buildQueryString({ project_id: projectId })}`),

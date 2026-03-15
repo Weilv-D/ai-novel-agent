@@ -12,9 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.orchestrator import orchestrator
 from app.api.deps import get_db
 from app.schemas.agent import (
+    AgentCapabilityRegistryResponse,
     AgentChatRequest,
     AgentChatResponse,
     AgentProfileResponse,
+    AgentRiskPolicyRegistryResponse,
     AgentRunActionResponse,
     AgentRunResponse,
     AgentSkillCatalogResponse,
@@ -60,6 +62,27 @@ async def get_thread(
 async def list_agent_profiles() -> list[AgentProfileResponse]:
     """List available project-level agent profiles."""
     return await agent_workflow_service.get_profile_catalog_response()
+
+
+@router.get("/capabilities", response_model=AgentCapabilityRegistryResponse)
+async def get_agent_capabilities() -> AgentCapabilityRegistryResponse:
+    """Inspect the stable capability registry used by the workflow."""
+    return await agent_workflow_service.get_capability_registry_response()
+
+
+@router.get("/risk-policies", response_model=AgentRiskPolicyRegistryResponse)
+async def get_agent_risk_policies(
+    *,
+    db: AsyncSession = Depends(get_db),
+    project_id: UUID | None = None,
+    profile_id: str | None = None,
+) -> AgentRiskPolicyRegistryResponse:
+    """Inspect the stable risk policy registry used by the workflow."""
+    return await agent_workflow_service.get_risk_policy_registry_response(
+        db,
+        project_id=project_id,
+        profile_id=profile_id,
+    )
 
 
 @router.get("/skills", response_model=AgentSkillCatalogResponse)

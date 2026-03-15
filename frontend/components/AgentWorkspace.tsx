@@ -4,10 +4,13 @@ import { useEffect, useState, useTransition } from "react";
 
 import { agentWorkflowApi, ApiError } from "@/lib/api-client";
 import type {
+  AgentExecutionChildUnit,
+  AgentAppliedRiskPolicy,
   AgentExecutionContractPhase,
   AgentHookTraceEntry,
   AgentOperation,
   AgentRun,
+  AgentRunRiskSummary,
   AgentSubtask,
   AgentThread,
   AgentThreadCheckpoint,
@@ -229,6 +232,142 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
   );
 }
 
+function RiskSummaryCard({ riskSummary }: { riskSummary: AgentRunRiskSummary }) {
+  const riskMeta = RISK_META[riskSummary.overall_risk_level] || RISK_META.medium;
+  return (
+    <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.48)] px-4 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">Run Risk</div>
+          <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">执行风险摘要</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={riskMeta.className}>{riskMeta.label}</span>
+          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+            gate:{riskSummary.confirmation_gate}
+          </span>
+          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+            policy:{riskSummary.policy_version}
+          </span>
+        </div>
+      </div>
+      <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">{riskSummary.summary}</p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+          total:{riskSummary.total_operations}
+        </span>
+        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+          low:{riskSummary.low_risk_operation_count}
+        </span>
+        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+          medium:{riskSummary.medium_risk_operation_count}
+        </span>
+        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+          high:{riskSummary.high_risk_operation_count}
+        </span>
+      </div>
+      {riskSummary.applied_policies.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {riskSummary.applied_policies.map((policy: AgentAppliedRiskPolicy) => (
+            <div
+              key={`${policy.policy_id}-${policy.matched_operation_positions.join("-")}`}
+              className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.03)] px-3 py-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{policy.name}</div>
+                <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-600))]">
+                  {policy.scope} / {policy.risk_level} / gate:{policy.confirmation_gate}
+                </div>
+              </div>
+              <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{policy.description}</p>
+              {policy.matched_operation_positions.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                  <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
+                    steps:{policy.matched_operation_positions.join(", ")}
+                  </span>
+                  {policy.requires_secondary_confirmation && (
+                    <span className="rounded-full bg-[rgba(var(--danger),0.08)] px-3 py-1 text-[rgb(var(--danger))]">
+                      二次确认
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {(riskSummary.high_risk_operation_positions.length > 0 ||
+        riskSummary.secondary_confirmation_operation_positions.length > 0) && (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+          {riskSummary.high_risk_operation_positions.length > 0 && (
+            <span className="rounded-full bg-[rgba(var(--danger),0.08)] px-3 py-1 text-[rgb(var(--danger))]">
+              高风险步骤:{riskSummary.high_risk_operation_positions.join(", ")}
+            </span>
+          )}
+          {riskSummary.secondary_confirmation_operation_positions.length > 0 && (
+            <span className="rounded-full bg-[rgba(var(--amber),0.12)] px-3 py-1">
+              二次确认步骤:{riskSummary.secondary_confirmation_operation_positions.join(", ")}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChildUnitCard({ childUnit }: { childUnit: AgentExecutionChildUnit }) {
+  return (
+    <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.03)] px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{childUnit.title}</div>
+        <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-600))]">
+          {childUnit.role} / {childUnit.stage}
+        </div>
+      </div>
+      <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{childUnit.description}</p>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+          gate:{childUnit.confirmation_gate}
+        </span>
+        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+          mode:{childUnit.mode}
+        </span>
+        {childUnit.requires_confirmation && (
+          <span className="rounded-full bg-[rgba(var(--amber),0.12)] px-3 py-1">requires-confirmation</span>
+        )}
+      </div>
+      {(childUnit.depends_on.length > 0 || childUnit.operation_positions.length > 0) && (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+          {childUnit.depends_on.map((dependency) => (
+            <span key={dependency} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
+              depends:{dependency}
+            </span>
+          ))}
+          {childUnit.operation_positions.length > 0 && (
+            <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
+              steps:{childUnit.operation_positions.join(", ")}
+            </span>
+          )}
+        </div>
+      )}
+      {(childUnit.capability_ids.length > 0 || childUnit.tool_scope.length > 0) && (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+          {childUnit.capability_ids.map((capabilityId) => (
+            <span key={capabilityId} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+              capability:{capabilityId}
+            </span>
+          ))}
+          {childUnit.tool_scope.slice(0, 4).map((tool) => (
+            <span key={tool} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
+              {tool}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AgentWorkspace({
   projectId,
   projectName,
@@ -426,6 +565,7 @@ export function AgentWorkspace({
                     {currentRun.error_message}
                   </div>
                 )}
+                {currentRun.risk_summary && <RiskSummaryCard riskSummary={currentRun.risk_summary} />}
                 {currentRun.subtasks.length > 0 && (
                   <div className="space-y-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">
@@ -456,7 +596,7 @@ export function AgentWorkspace({
                               {phaseName.toUpperCase()} / {mode}
                             </div>
                             <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-600))]">
-                              {`${phase.operation_count} ops / gate:${phase.confirmation_gate}`}
+                              {`${phase.operation_count} ops / gate:${phase.confirmation_gate} / registry:${currentRun.execution_contract?.registry_version ?? "n/a"}`}
                             </div>
                           </div>
                           {levels.length > 0 && (
@@ -465,6 +605,13 @@ export function AgentWorkspace({
                                 <span key={level} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
                                   level:{level}
                                 </span>
+                              ))}
+                            </div>
+                          )}
+                          {phase.child_units.length > 0 && (
+                            <div className="mt-3 space-y-3">
+                              {phase.child_units.map((childUnit: AgentExecutionChildUnit) => (
+                                <ChildUnitCard key={childUnit.unit_id} childUnit={childUnit} />
                               ))}
                             </div>
                           )}
@@ -488,6 +635,14 @@ export function AgentWorkspace({
                                   <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">
                                     {capability.description}
                                   </p>
+                                  <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                                      policy:{capability.policy.execution_phase}/{capability.policy.source_role}
+                                    </span>
+                                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                                      gate:{capability.policy.confirmation_gate}
+                                    </span>
+                                  </div>
                                   {capability.execution_record?.output_summary && (
                                     <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-600))]">
                                       {capability.execution_record.output_summary}

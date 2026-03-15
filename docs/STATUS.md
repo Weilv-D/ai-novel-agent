@@ -23,14 +23,23 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - researcher 内部 read/search 工具层
 - 显式 `execution_contract` / `child_trace` 接口字段
 - capability execution record
+- capability registry / policy layering
 - operation 风险分级与高风险二次确认
+- run 级 risk summary
+- risk policy registry / applied policy snapshot
+- replaceable risk classifier service
+- profile-aware risk classifier override
+- explicit child unit contract
+- independent execution contract assembly layer
 - 执行后 verification gate
+- structured update field-level verification
+- snapshot-verification linkage
 - 长线程 checkpoint 基础设施
 - 工作台可见的 latest checkpoint 摘要
 
 ## 当前质量状态
 
-- 后端测试：`414 passed / 2 skipped`
+- 后端测试：`429 passed / 2 skipped`
 - 后端 lint：通过
 - 后端类型检查：通过
 - 前端 lint：通过
@@ -60,8 +69,9 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 后续工作不再推翻现有 `thread / run / operation` 底座，而是沿着以下方向收口：
 
 - 把 subtask 从“摘要记录”升级为真正独立的内部执行单元
-- 把权限分级从规则判断升级为更稳定的 classifier
-- 把 verification 从摘要级比对升级为更细的 field-level 校验
+- 把当前 `Plan / Build` 权限矩阵进一步收敛为明确的 child unit contract
+- 把 field-level verification 从当前的结构化 `update_*` 扩展到更广的对象类型与校验粒度
+- 把 snapshot linkage 从当前的存在性校验推进到更细的变更前后语义校验
 - 把 checkpoint 从基础摘要升级为长期线程的正式 compact 流程
 
 详细路线见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)。

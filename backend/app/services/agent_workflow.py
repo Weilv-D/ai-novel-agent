@@ -36,17 +36,23 @@ from app.models.agent_workflow import (
 from app.models.chapter import Chapter, Scene
 from app.models.character import Character
 from app.models.project import Project
+from app.models.snapshot import Snapshot
 from app.models.world_setting import WorldSetting
 from app.schemas.agent import (
     AgentCapabilityExecutionRecordResponse,
+    AgentCapabilityPolicyResponse,
+    AgentCapabilityRegistryResponse,
     AgentCapabilityResponse,
+    AgentExecutionChildUnitResponse,
     AgentExecutionContractResponse,
     AgentExecutionPhaseResponse,
     AgentMessageResponse,
     AgentOperationResponse,
     AgentProfileResponse,
+    AgentRiskPolicyRegistryResponse,
     AgentRunActionResponse,
     AgentRunResponse,
+    AgentRunRiskSummaryResponse,
     AgentSkillCatalogResponse,
     AgentSkillSummaryResponse,
     AgentSubtaskAttemptResponse,
@@ -61,6 +67,8 @@ from app.schemas.agent import (
 from app.schemas.chapter import ChapterCreate, ChapterUpdate, SceneCreate, SceneUpdate
 from app.schemas.character import CharacterCreate, CharacterUpdate
 from app.schemas.world_setting import WorldSettingCreate, WorldSettingUpdate
+from app.services.agent_contract import agent_contract_service
+from app.services.agent_risk import agent_risk_service
 from app.services.agent_skill import AgentSkillBundle, agent_skill_service
 from app.services.chapter import chapter_service, scene_service
 from app.services.character import character_service
@@ -94,6 +102,7 @@ COMPACTION_MESSAGE_THRESHOLD = 24
 COMPACTION_RUN_THRESHOLD = 10
 COMPACTION_CHAR_THRESHOLD = 9000
 HOOK_NAMES = ("PreCompact", "PrePlan", "SubagentStop", "RunStop")
+CAPABILITY_REGISTRY_VERSION = "2026-03-15.1"
 INTERNAL_READ_SEARCH_TOOLS = (
     "list_project_characters",
     "list_project_world_settings",
@@ -201,6 +210,7 @@ class CapabilityScopeSummary(BaseModel):
     kind: Literal["read_search", "planning", "writing", "editing", "verification"]
     description: str
     tool_scope: list[str] = Field(default_factory=list)
+    policy: CapabilityPolicySummary
     execution_record: CapabilityExecutionRecordSummary | None = None
 
 
@@ -216,25 +226,14 @@ class CapabilityExecutionRecordSummary(BaseModel):
     attempt_count: int = 1
 
 
-class PermissionPhaseSummary(BaseModel):
-    """Serializable summary for one workflow permission phase."""
+class CapabilityPolicySummary(BaseModel):
+    """Stable capability policy independent of one run."""
 
-    phase: Literal["plan", "build"]
-    mode: Literal["restricted", "gated"]
-    allowed_permission_levels: list[str] = Field(default_factory=list)
-    tool_scope: list[str] = Field(default_factory=list)
-    role_scope: list[str] = Field(default_factory=list)
-    confirmation_gate: Literal["none", "single", "double"] = "none"
+    execution_phase: Literal["plan", "build"]
+    source_role: Literal["planner", "researcher", "writer", "editor", "continuity", "executor"]
+    confirmation_gate: Literal["none", "single", "double"]
+    internal_only: bool = True
     requires_confirmation: bool = False
-    requires_secondary_confirmation: bool = False
-    operation_count: int = 0
-    capabilities: list[CapabilityScopeSummary] = Field(default_factory=list)
-
-
-class RunPermissionMatrix(BaseModel):
-    """Permission summary for the current run."""
-
-    phases: list[PermissionPhaseSummary] = Field(default_factory=list)
 
 
 class CRUDAgentThread:
@@ -729,6 +728,30 @@ class AgentWorkflowService:
             for profile in agent_skill_service.list_profiles()
         ]
 
+    async def get_capability_registry_response(self) -> AgentCapabilityRegistryResponse:
+        """Expose the stable capability registry used by the workflow."""
+        registry = self._capability_registry()
+        return AgentCapabilityRegistryResponse(
+            registry_version=CAPABILITY_REGISTRY_VERSION,
+            capabilities=[self._capability_response(entry) for entry in registry.values()],
+        )
+
+    async def get_risk_policy_registry_response(
+        self,
+        db: AsyncSession | None = None,
+        *,
+        project_id: uuid.UUID | None = None,
+        profile_id: str | None = None,
+    ) -> AgentRiskPolicyRegistryResponse:
+        """Expose the stable risk policy registry used by the workflow."""
+        resolved_profile_id = profile_id or "default"
+        if project_id is not None:
+            if db is None:
+                raise BadRequestException("Database session is required when project_id is provided")
+            project = await project_service.get(db, id=project_id)
+            resolved_profile_id = project.agent_profile_id
+        return agent_risk_service.get_registry_response(profile_id=resolved_profile_id)
+
     async def get_skill_catalog_response(
         self,
         db: AsyncSession,
@@ -826,14 +849,18 @@ class AgentWorkflowService:
             request_context=request_context,
             operations=planner_output.operations,
         )
-        classified_operations = self._classify_operations(planned_operations)
+        classified_operations = self._classify_operations(planned_operations, profile_id=profile_id)
+        risk_summary = agent_risk_service.build_run_risk_summary(
+            classified_operations,
+            profile_id=profile_id,
+        )
         planned_subtasks = self._build_subtasks(
             planner_output=planner_output,
             operations=classified_operations,
             context_data=context_data,
             latest_checkpoint=checkpoint,
         )
-        permission_matrix = self._build_permission_matrix(
+        execution_contract_payload = self._build_execution_contract_payload(
             operations=classified_operations,
             subtasks=planned_subtasks,
             context_data=context_data,
@@ -868,7 +895,8 @@ class AgentWorkflowService:
                 "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
                 "skill_snapshot": self._build_skill_snapshot(skill_bundle, blueprint.user_visible_operations),
                 "hook_trace": [entry.model_dump(mode="json") for entry in blueprint.hook_trace],
-                "permission_matrix": permission_matrix.model_dump(mode="json"),
+                "permission_matrix": execution_contract_payload,
+                "risk_summary": risk_summary.model_dump(mode="json"),
                 "blueprint": {
                     "operation_count": len(blueprint.user_visible_operations),
                     "subtask_count": len(blueprint.internal_subtasks),
@@ -979,6 +1007,8 @@ class AgentWorkflowService:
         await db.flush()
 
         failing_operation_id: uuid.UUID | None = None
+        current_operation: AgentOperation | None = None
+        failing_execution_result: dict[str, Any] | None = None
         try:
             request_context = cast(dict[str, Any], run.meta.get("request_context", {}))
             continuity_summary = self._check_continuity_gate(operations)
@@ -993,6 +1023,7 @@ class AgentWorkflowService:
                 continuity_subtask.status = AgentSubtaskStatus.COMPLETED.value
 
             for operation in operations:
+                current_operation = operation
                 failing_operation_id = operation.id
                 await self._execute_operation(
                     db,
@@ -1000,11 +1031,15 @@ class AgentWorkflowService:
                     request_context=request_context,
                     operation=operation,
                 )
-                await self._verify_operation(
-                    db,
-                    project_id=run.project_id,
-                    operation=operation,
-                )
+                try:
+                    await self._verify_operation(
+                        db,
+                        project_id=run.project_id,
+                        operation=operation,
+                    )
+                finally:
+                    if current_operation.id == failing_operation_id:
+                        failing_execution_result = dict(current_operation.execution_result or {})
             run.status = AgentRunStatus.COMPLETED.value
             run.completed_at = datetime.now(UTC)
             run.warning_message = self._execution_warning(operations)
@@ -1066,6 +1101,8 @@ class AgentWorkflowService:
                     failed_operation.error_message = str(exc)
                     failed_operation.verification_status = AgentVerificationStatus.FAILED.value
                     failed_operation.verification_summary = str(exc)
+                    if failing_execution_result is not None:
+                        failed_operation.execution_result = dict(failing_execution_result)
             if continuity_subtask is not None:
                 failed_continuity = await self.subtask_store.get_by_role(
                     db,
@@ -1605,25 +1642,29 @@ class AgentWorkflowService:
         if tool_name == "create_character":
             character_in = CharacterCreate(project_id=project_id, **payload)
             character = await character_service.create_with_project(db, obj_in=character_in, project_id=project_id)
-            await snapshot_service.create_snapshot(
-                db,
-                project_id=project_id,
-                target_type="character",
-                target_id=character.id,
-                data=_serialize_model(character),
-            )
             operation.target_id = character.id
             operation.target_display = character.name
             operation.execution_result = {"created_id": str(character.id)}
-
-        elif tool_name == "update_character":
-            character = await self._resolve_character(db, project_id=project_id, payload=payload, request_context=request_context)
-            await snapshot_service.create_snapshot(
+            await self._create_operation_snapshot(
                 db,
                 project_id=project_id,
+                operation=operation,
                 target_type="character",
                 target_id=character.id,
                 data=_serialize_model(character),
+                stage="post_create",
+            )
+
+        elif tool_name == "update_character":
+            character = await self._resolve_character(db, project_id=project_id, payload=payload, request_context=request_context)
+            await self._create_operation_snapshot(
+                db,
+                project_id=project_id,
+                operation=operation,
+                target_type="character",
+                target_id=character.id,
+                data=_serialize_model(character),
+                stage="pre_update",
             )
             updated_character = await character_service.update(
                 db,
@@ -1632,30 +1673,36 @@ class AgentWorkflowService:
             )
             operation.target_id = updated_character.id
             operation.target_display = updated_character.name
-            operation.execution_result = {"updated_id": str(updated_character.id)}
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_character.id)
+            operation.execution_result = execution_result
 
         elif tool_name == "create_world_setting":
             world_setting_in = WorldSettingCreate(project_id=project_id, **payload)
             setting = await world_setting_service.create_with_project(db, obj_in=world_setting_in, project_id=project_id)
-            await snapshot_service.create_snapshot(
-                db,
-                project_id=project_id,
-                target_type="world_setting",
-                target_id=setting.id,
-                data=_serialize_model(setting),
-            )
             operation.target_id = setting.id
             operation.target_display = setting.name
             operation.execution_result = {"created_id": str(setting.id)}
-
-        elif tool_name == "update_world_setting":
-            setting = await self._resolve_world_setting(db, project_id=project_id, payload=payload, request_context=request_context)
-            await snapshot_service.create_snapshot(
+            await self._create_operation_snapshot(
                 db,
                 project_id=project_id,
+                operation=operation,
                 target_type="world_setting",
                 target_id=setting.id,
                 data=_serialize_model(setting),
+                stage="post_create",
+            )
+
+        elif tool_name == "update_world_setting":
+            setting = await self._resolve_world_setting(db, project_id=project_id, payload=payload, request_context=request_context)
+            await self._create_operation_snapshot(
+                db,
+                project_id=project_id,
+                operation=operation,
+                target_type="world_setting",
+                target_id=setting.id,
+                data=_serialize_model(setting),
+                stage="pre_update",
             )
             updated_setting = await world_setting_service.update(
                 db,
@@ -1664,30 +1711,36 @@ class AgentWorkflowService:
             )
             operation.target_id = updated_setting.id
             operation.target_display = updated_setting.name
-            operation.execution_result = {"updated_id": str(updated_setting.id)}
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_setting.id)
+            operation.execution_result = execution_result
 
         elif tool_name == "create_chapter":
             chapter_in = ChapterCreate(project_id=project_id, **payload)
             chapter = await chapter_service.create_with_project(db, obj_in=chapter_in, project_id=project_id)
-            await snapshot_service.create_snapshot(
-                db,
-                project_id=project_id,
-                target_type="chapter",
-                target_id=chapter.id,
-                data=_serialize_model(chapter),
-            )
             operation.target_id = chapter.id
             operation.target_display = f"第{chapter.chapter_number}章 {chapter.title or ''}".strip()
             operation.execution_result = {"created_id": str(chapter.id)}
-
-        elif tool_name == "update_chapter":
-            chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
-            await snapshot_service.create_snapshot(
+            await self._create_operation_snapshot(
                 db,
                 project_id=project_id,
+                operation=operation,
                 target_type="chapter",
                 target_id=chapter.id,
                 data=_serialize_model(chapter),
+                stage="post_create",
+            )
+
+        elif tool_name == "update_chapter":
+            chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
+            await self._create_operation_snapshot(
+                db,
+                project_id=project_id,
+                operation=operation,
+                target_type="chapter",
+                target_id=chapter.id,
+                data=_serialize_model(chapter),
+                stage="pre_update",
             )
             updated_chapter = await chapter_service.update(
                 db,
@@ -1696,16 +1749,20 @@ class AgentWorkflowService:
             )
             operation.target_id = updated_chapter.id
             operation.target_display = f"第{updated_chapter.chapter_number}章 {updated_chapter.title or ''}".strip()
-            operation.execution_result = {"updated_id": str(updated_chapter.id)}
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_chapter.id)
+            operation.execution_result = execution_result
 
         elif tool_name == "write_chapter_content":
             chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
-            await snapshot_service.create_snapshot(
+            await self._create_operation_snapshot(
                 db,
                 project_id=project_id,
+                operation=operation,
                 target_type="chapter",
                 target_id=chapter.id,
                 data=_serialize_model(chapter),
+                stage="pre_update",
             )
             next_content = self._apply_text_mode(chapter.content, str(payload["content"]), str(payload.get("mode", "replace")))
             updated_chapter = await chapter_service.update(
@@ -1715,31 +1772,37 @@ class AgentWorkflowService:
             )
             operation.target_id = updated_chapter.id
             operation.target_display = f"第{updated_chapter.chapter_number}章 {updated_chapter.title or ''}".strip()
-            operation.execution_result = {"updated_id": str(updated_chapter.id)}
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_chapter.id)
+            operation.execution_result = execution_result
 
         elif tool_name == "create_scene":
             chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
             scene_in = SceneCreate(**payload, chapter_id=chapter.id)
             scene = await scene_service.create_with_chapter(db, obj_in=scene_in, chapter_id=chapter.id)
-            await snapshot_service.create_snapshot(
-                db,
-                project_id=project_id,
-                target_type="scene",
-                target_id=scene.id,
-                data=_serialize_model(scene),
-            )
             operation.target_id = scene.id
             operation.target_display = f"场景 {scene.scene_order}"
             operation.execution_result = {"created_id": str(scene.id)}
-
-        elif tool_name == "update_scene":
-            scene = await self._resolve_scene(db, project_id=project_id, payload=payload, request_context=request_context)
-            await snapshot_service.create_snapshot(
+            await self._create_operation_snapshot(
                 db,
                 project_id=project_id,
+                operation=operation,
                 target_type="scene",
                 target_id=scene.id,
                 data=_serialize_model(scene),
+                stage="post_create",
+            )
+
+        elif tool_name == "update_scene":
+            scene = await self._resolve_scene(db, project_id=project_id, payload=payload, request_context=request_context)
+            await self._create_operation_snapshot(
+                db,
+                project_id=project_id,
+                operation=operation,
+                target_type="scene",
+                target_id=scene.id,
+                data=_serialize_model(scene),
+                stage="pre_update",
             )
             updated_scene = await scene_service.update(
                 db,
@@ -1748,16 +1811,20 @@ class AgentWorkflowService:
             )
             operation.target_id = updated_scene.id
             operation.target_display = f"场景 {updated_scene.scene_order}"
-            operation.execution_result = {"updated_id": str(updated_scene.id)}
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_scene.id)
+            operation.execution_result = execution_result
 
         elif tool_name == "write_scene_content":
             scene = await self._resolve_scene(db, project_id=project_id, payload=payload, request_context=request_context)
-            await snapshot_service.create_snapshot(
+            await self._create_operation_snapshot(
                 db,
                 project_id=project_id,
+                operation=operation,
                 target_type="scene",
                 target_id=scene.id,
                 data=_serialize_model(scene),
+                stage="pre_update",
             )
             next_content = self._apply_text_mode(scene.content, str(payload["content"]), str(payload.get("mode", "replace")))
             updated_scene = await scene_service.update(
@@ -1767,7 +1834,9 @@ class AgentWorkflowService:
             )
             operation.target_id = updated_scene.id
             operation.target_display = f"场景 {updated_scene.scene_order}"
-            operation.execution_result = {"updated_id": str(updated_scene.id)}
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_scene.id)
+            operation.execution_result = execution_result
 
         else:
             raise BadRequestException(f"Unsupported tool '{tool_name}'")
@@ -2092,6 +2161,7 @@ class AgentWorkflowService:
             verification_status=cast(Any, run.verification_status),
             verification_summary=run.verification_summary,
             execution_contract=self._execution_contract_response(meta),
+            risk_summary=self._run_risk_summary_response(meta=meta, operations=operations),
             meta=meta,
             confirmed_at=run.confirmed_at,
             secondary_confirmed_at=run.secondary_confirmed_at,
@@ -2101,6 +2171,25 @@ class AgentWorkflowService:
             updated_at=run.updated_at,
             operations=[self._operation_response(operation) for operation in operations],
             subtasks=[self._subtask_response(subtask) for subtask in subtasks],
+        )
+
+    def _run_risk_summary_response(
+        self,
+        *,
+        meta: dict[str, Any],
+        operations: list[AgentOperation],
+    ) -> AgentRunRiskSummaryResponse | None:
+        """Return the stored risk summary snapshot, with deterministic fallback for legacy runs."""
+        raw = meta.get("risk_summary")
+        if isinstance(raw, dict):
+            try:
+                return AgentRunRiskSummaryResponse.model_validate(raw)
+            except ValidationError:
+                logger.warning("Skipping invalid risk_summary payload during response serialization.")
+
+        return agent_risk_service.build_run_risk_summary(
+            operations,
+            profile_id=str(meta.get("profile_id") or "default"),
         )
 
     def _thread_response(self, thread: AgentThread) -> AgentThreadResponse:
@@ -2193,36 +2282,80 @@ class AgentWorkflowService:
                     requires_confirmation=bool(phase.get("requires_confirmation", False)),
                     requires_secondary_confirmation=bool(phase.get("requires_secondary_confirmation", False)),
                     operation_count=int(phase.get("operation_count", 0)),
+                    child_units=[
+                        self._child_unit_response(child_unit)
+                        for child_unit in cast(list[dict[str, Any]], phase.get("child_units", []))
+                    ],
                     capabilities=[
-                        AgentCapabilityResponse(
-                            capability_id=str(capability["capability_id"]),
-                            name=str(capability["name"]),
-                            kind=cast(Any, capability["kind"]),
-                            description=str(capability["description"]),
-                            tool_scope=[str(item) for item in cast(list[Any], capability.get("tool_scope", []))],
-                            execution_record=(
-                                AgentCapabilityExecutionRecordResponse(
-                                    record_id=str(record["record_id"]),
-                                    source_role=cast(Any, record["source_role"]),
-                                    status=cast(Any, record["status"]),
-                                    tool_scope=[str(item) for item in cast(list[Any], record.get("tool_scope", []))],
-                                    input_summary=cast(str | None, record.get("input_summary")),
-                                    output_summary=cast(str | None, record.get("output_summary")),
-                                    attempt_count=int(record.get("attempt_count", 1)),
-                                )
-                                if isinstance((record := capability.get("execution_record")), dict)
-                                else None
-                            ),
-                        )
+                        self._capability_response(capability)
                         for capability in cast(list[dict[str, Any]], phase.get("capabilities", []))
                     ],
                 )
                 for phase in cast(list[dict[str, Any]], raw.get("phases", []))
             ]
-            return AgentExecutionContractResponse(phases=phases)
+            return AgentExecutionContractResponse(
+                registry_version=str(raw.get("registry_version", CAPABILITY_REGISTRY_VERSION)),
+                phases=phases,
+            )
         except (ValidationError, KeyError, TypeError, ValueError):
             logger.warning("Skipping invalid execution contract payload during response serialization.")
             return None
+
+    def _child_unit_response(
+        self,
+        child_unit: dict[str, Any],
+    ) -> AgentExecutionChildUnitResponse:
+        """Serialize one child unit contract from the execution matrix."""
+        raw = child_unit
+        return AgentExecutionChildUnitResponse(
+            unit_id=str(raw["unit_id"]),
+            role=cast(Any, raw["role"]),
+            phase=cast(Any, raw["phase"]),
+            stage=cast(Any, raw["stage"]),
+            mode=cast(Any, raw["mode"]),
+            title=str(raw["title"]),
+            description=str(raw["description"]),
+            tool_scope=[str(item) for item in cast(list[Any], raw.get("tool_scope", []))],
+            capability_ids=[str(item) for item in cast(list[Any], raw.get("capability_ids", []))],
+            depends_on=[str(item) for item in cast(list[Any], raw.get("depends_on", []))],
+            operation_positions=[int(item) for item in cast(list[Any], raw.get("operation_positions", []))],
+            confirmation_gate=cast(Any, raw.get("confirmation_gate", "none")),
+            requires_confirmation=bool(raw.get("requires_confirmation", False)),
+            internal_only=bool(raw.get("internal_only", True)),
+        )
+
+    def _capability_response(self, capability: CapabilityScopeSummary | dict[str, Any]) -> AgentCapabilityResponse:
+        """Serialize one capability definition or run-scoped instance."""
+        raw = capability if isinstance(capability, dict) else capability.model_dump(mode="json")
+        policy = cast(dict[str, Any], raw["policy"])
+        record = raw.get("execution_record")
+        return AgentCapabilityResponse(
+            capability_id=str(raw["capability_id"]),
+            name=str(raw["name"]),
+            kind=cast(Any, raw["kind"]),
+            description=str(raw["description"]),
+            tool_scope=[str(item) for item in cast(list[Any], raw.get("tool_scope", []))],
+            policy=AgentCapabilityPolicyResponse(
+                execution_phase=cast(Any, policy["execution_phase"]),
+                source_role=cast(Any, policy["source_role"]),
+                confirmation_gate=cast(Any, policy["confirmation_gate"]),
+                internal_only=bool(policy.get("internal_only", True)),
+                requires_confirmation=bool(policy.get("requires_confirmation", False)),
+            ),
+            execution_record=(
+                AgentCapabilityExecutionRecordResponse(
+                    record_id=str(record["record_id"]),
+                    source_role=cast(Any, record["source_role"]),
+                    status=cast(Any, record["status"]),
+                    tool_scope=[str(item) for item in cast(list[Any], record.get("tool_scope", []))],
+                    input_summary=cast(str | None, record.get("input_summary")),
+                    output_summary=cast(str | None, record.get("output_summary")),
+                    attempt_count=int(record.get("attempt_count", 1)),
+                )
+                if isinstance(record, dict)
+                else None
+            ),
+        )
 
     def _checkpoint_response(
         self,
@@ -2242,59 +2375,16 @@ class AgentWorkflowService:
             updated_at=checkpoint.updated_at,
         )
 
-    def _classify_operations(self, operations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _classify_operations(
+        self,
+        operations: list[dict[str, Any]],
+        *,
+        profile_id: str,
+    ) -> list[dict[str, Any]]:
         """Attach permission and risk metadata to planner operations."""
-        classified: list[dict[str, Any]] = []
-        content_rewrite_indexes: list[int] = []
-
-        for index, operation in enumerate(operations):
-            enriched = dict(operation)
-            tool_name = str(enriched["tool_name"])
-            payload = cast(dict[str, Any], enriched.get("payload", {}))
-            permission_level = AgentPermissionLevel.STANDARD_WRITE.value
-            risk_level = AgentRiskLevel.MEDIUM.value
-            requires_secondary_confirmation = False
-
-            content_candidate = self._operation_content_candidate(enriched)
-            touches_content = content_candidate is not None
-
-            if tool_name in {"write_chapter_content", "write_scene_content"}:
-                mode = str(payload.get("mode", "replace"))
-                if mode == "append":
-                    risk_level = AgentRiskLevel.MEDIUM.value
-                else:
-                    risk_level = AgentRiskLevel.HIGH.value if len(content_candidate or "") >= 280 else AgentRiskLevel.MEDIUM.value
-                if mode == "replace" and len(content_candidate or "") >= 280:
-                    permission_level = AgentPermissionLevel.HIGH_RISK_WRITE.value
-                    requires_secondary_confirmation = True
-                    content_rewrite_indexes.append(index)
-            elif tool_name in {"update_chapter", "update_scene"} and touches_content:
-                if len(content_candidate or "") >= 280:
-                    permission_level = AgentPermissionLevel.HIGH_RISK_WRITE.value
-                    risk_level = AgentRiskLevel.HIGH.value
-                    requires_secondary_confirmation = True
-                    content_rewrite_indexes.append(index)
-                else:
-                    risk_level = AgentRiskLevel.MEDIUM.value
-            elif tool_name in {"create_chapter", "create_scene"} and touches_content:
-                risk_level = AgentRiskLevel.MEDIUM.value
-            elif tool_name in {"update_character", "update_world_setting"}:
-                risk_level = AgentRiskLevel.MEDIUM.value
-            else:
-                risk_level = AgentRiskLevel.LOW.value
-
-            enriched["permission_level"] = permission_level
-            enriched["risk_level"] = risk_level
-            enriched["requires_secondary_confirmation"] = requires_secondary_confirmation
-            enriched["verification_status"] = AgentVerificationStatus.PENDING.value
-            classified.append(enriched)
-
-        if len(content_rewrite_indexes) > 1:
-            for index in content_rewrite_indexes:
-                classified[index]["permission_level"] = AgentPermissionLevel.HIGH_RISK_WRITE.value
-                classified[index]["risk_level"] = AgentRiskLevel.HIGH.value
-                classified[index]["requires_secondary_confirmation"] = True
-
+        classified = agent_risk_service.classify_operations(operations, profile_id=profile_id)
+        for operation in classified:
+            operation["verification_status"] = AgentVerificationStatus.PENDING.value
         return classified
 
     def _build_subtasks(
@@ -2637,9 +2727,108 @@ class AgentWorkflowService:
             return ["build_structured_diff", "stage_patch_preview"]
         return ["verify_preview_consistency", "check_target_resolution", "detect_multi_step_conflict"]
 
+    def _capability_registry(self) -> dict[str, CapabilityScopeSummary]:
+        """Return the stable workflow capability registry."""
+        return {
+            "project_inventory": CapabilityScopeSummary(
+                capability_id="project_inventory",
+                name="Project Inventory",
+                kind="read_search",
+                description="读取项目内人物、设定、章节与场景的当前清单。",
+                tool_scope=[
+                    "list_project_characters",
+                    "list_project_world_settings",
+                    "list_project_chapters",
+                    "list_project_scenes",
+                ],
+                policy=CapabilityPolicySummary(
+                    execution_phase="plan",
+                    source_role=AgentSubtaskRole.RESEARCHER.value,
+                    confirmation_gate="none",
+                    internal_only=True,
+                    requires_confirmation=False,
+                ),
+            ),
+            "focused_object_resolution": CapabilityScopeSummary(
+                capability_id="focused_object_resolution",
+                name="Focused Object Resolution",
+                kind="read_search",
+                description="根据当前请求解析聚焦对象，命中人物、设定、章节或场景。",
+                tool_scope=[
+                    "resolve_current_character",
+                    "resolve_current_world_setting",
+                    "resolve_current_chapter",
+                    "resolve_current_scene",
+                ],
+                policy=CapabilityPolicySummary(
+                    execution_phase="plan",
+                    source_role=AgentSubtaskRole.RESEARCHER.value,
+                    confirmation_gate="none",
+                    internal_only=True,
+                    requires_confirmation=False,
+                ),
+            ),
+            "checkpoint_context": CapabilityScopeSummary(
+                capability_id="checkpoint_context",
+                name="Checkpoint Context",
+                kind="read_search",
+                description="读取最近线程 checkpoint，为长期线程提供压缩上下文。",
+                tool_scope=["load_latest_checkpoint"],
+                policy=CapabilityPolicySummary(
+                    execution_phase="plan",
+                    source_role=AgentSubtaskRole.RESEARCHER.value,
+                    confirmation_gate="none",
+                    internal_only=True,
+                    requires_confirmation=False,
+                ),
+            ),
+            "operation_execution": CapabilityScopeSummary(
+                capability_id="operation_execution",
+                name="Operation Execution",
+                kind="planning",
+                description="按已确认的 operation 执行项目对象写入。",
+                tool_scope=[],
+                policy=CapabilityPolicySummary(
+                    execution_phase="build",
+                    source_role="executor",
+                    confirmation_gate="single",
+                    internal_only=True,
+                    requires_confirmation=True,
+                ),
+            ),
+        }
+
+    def _instantiate_capability(
+        self,
+        *,
+        registry: dict[str, CapabilityScopeSummary],
+        capability_id: str,
+        execution_record: CapabilityExecutionRecordSummary | None = None,
+        tool_scope: list[str] | None = None,
+        confirmation_gate: Literal["none", "single", "double"] | None = None,
+    ) -> CapabilityScopeSummary:
+        """Create one run-scoped capability instance from the registry."""
+        base = registry[capability_id]
+        return CapabilityScopeSummary(
+            capability_id=base.capability_id,
+            name=base.name,
+            kind=base.kind,
+            description=base.description,
+            tool_scope=list(tool_scope or base.tool_scope),
+            policy=CapabilityPolicySummary(
+                execution_phase=base.policy.execution_phase,
+                source_role=base.policy.source_role,
+                confirmation_gate=confirmation_gate or base.policy.confirmation_gate,
+                internal_only=base.policy.internal_only,
+                requires_confirmation=base.policy.requires_confirmation,
+            ),
+            execution_record=execution_record,
+        )
+
     def _read_search_capabilities(
         self,
         *,
+        registry: dict[str, CapabilityScopeSummary],
         subtasks: list[dict[str, Any]],
         context_data: dict[str, Any],
         latest_checkpoint: AgentThreadCheckpoint | None,
@@ -2666,11 +2855,9 @@ class AgentWorkflowService:
             "resolve_current_scene",
         ]
         return [
-            CapabilityScopeSummary(
+            self._instantiate_capability(
+                registry=registry,
                 capability_id="project_inventory",
-                name="Project Inventory",
-                kind="read_search",
-                description="读取项目内人物、设定、章节与场景的当前清单。",
                 tool_scope=inventory_tools,
                 execution_record=CapabilityExecutionRecordSummary(
                     record_id=f"cap-{uuid.uuid4().hex[:10]}",
@@ -2685,11 +2872,9 @@ class AgentWorkflowService:
                     ),
                 ),
             ),
-            CapabilityScopeSummary(
+            self._instantiate_capability(
+                registry=registry,
                 capability_id="focused_object_resolution",
-                name="Focused Object Resolution",
-                kind="read_search",
-                description="根据当前请求解析聚焦对象，命中人物、设定、章节或场景。",
                 tool_scope=resolution_tools,
                 execution_record=CapabilityExecutionRecordSummary(
                     record_id=f"cap-{uuid.uuid4().hex[:10]}",
@@ -2704,11 +2889,9 @@ class AgentWorkflowService:
                     ),
                 ),
             ),
-            CapabilityScopeSummary(
+            self._instantiate_capability(
+                registry=registry,
                 capability_id="checkpoint_context",
-                name="Checkpoint Context",
-                kind="read_search",
-                description="读取最近线程 checkpoint，为长期线程提供压缩上下文。",
                 tool_scope=["load_latest_checkpoint"],
                 execution_record=CapabilityExecutionRecordSummary(
                     record_id=f"cap-{uuid.uuid4().hex[:10]}",
@@ -2725,55 +2908,36 @@ class AgentWorkflowService:
             ),
         ]
 
-    def _build_permission_matrix(
+    def _build_execution_contract_payload(
         self,
         *,
         operations: list[dict[str, Any]],
         subtasks: list[dict[str, Any]],
         context_data: dict[str, Any],
         latest_checkpoint: AgentThreadCheckpoint | None,
-    ) -> RunPermissionMatrix:
-        """Build the run-level Plan/Build permission matrix."""
-        build_levels = sorted({str(operation["permission_level"]) for operation in operations})
-        high_risk_count = sum(
-            1 for operation in operations if str(operation["permission_level"]) == AgentPermissionLevel.HIGH_RISK_WRITE.value
-        )
-        role_scope = [str(subtask["role"]) for subtask in subtasks]
+    ) -> dict[str, Any]:
+        """Build the serialized execution contract payload for one run."""
+        registry = self._capability_registry()
         plan_capabilities = self._read_search_capabilities(
+            registry=registry,
             subtasks=subtasks,
             context_data=context_data,
             latest_checkpoint=latest_checkpoint,
         )
-        plan_phase = PermissionPhaseSummary(
-            phase="plan",
-            mode="restricted",
-            allowed_permission_levels=[AgentPermissionLevel.READ_SEARCH.value],
-            tool_scope=list(INTERNAL_READ_SEARCH_TOOLS),
-            role_scope=role_scope,
-            confirmation_gate="none",
-            requires_confirmation=False,
-            requires_secondary_confirmation=False,
-            operation_count=0,
-            capabilities=plan_capabilities,
-        )
-        confirmation_gate: Literal["none", "single", "double"] = "double" if high_risk_count > 0 else "single"
-        build_phase = PermissionPhaseSummary(
-            phase="build",
-            mode="gated",
-            allowed_permission_levels=build_levels,
-            tool_scope=[str(operation["tool_name"]) for operation in operations],
-            role_scope=role_scope,
-            confirmation_gate=confirmation_gate,
-            requires_confirmation=bool(operations),
-            requires_secondary_confirmation=high_risk_count > 0,
-            operation_count=len(operations),
-            capabilities=[
-                CapabilityScopeSummary(
+        build_capabilities = (
+            [
+                self._instantiate_capability(
+                    registry=registry,
                     capability_id="operation_execution",
-                    name="Operation Execution",
-                    kind="planning",
-                    description="按已确认的 operation 执行项目对象写入。",
                     tool_scope=[str(operation["tool_name"]) for operation in operations],
+                    confirmation_gate=(
+                        "double"
+                        if any(
+                            str(operation["permission_level"]) == AgentPermissionLevel.HIGH_RISK_WRITE.value
+                            for operation in operations
+                        )
+                        else "single"
+                    ),
                     execution_record=CapabilityExecutionRecordSummary(
                         record_id=f"cap-{uuid.uuid4().hex[:10]}",
                         source_role="executor",
@@ -2785,9 +2949,16 @@ class AgentWorkflowService:
                 )
             ]
             if operations
-            else [],
+            else []
         )
-        return RunPermissionMatrix(phases=[plan_phase, build_phase])
+        return agent_contract_service.build_execution_contract_payload(
+            operations=operations,
+            subtasks=subtasks,
+            plan_capabilities=[capability.model_dump(mode="json") for capability in plan_capabilities],
+            build_capabilities=[capability.model_dump(mode="json") for capability in build_capabilities],
+            registry_version=CAPABILITY_REGISTRY_VERSION,
+            internal_read_search_tools=list(INTERNAL_READ_SEARCH_TOOLS),
+        )
 
     def _build_subtask_input_summary(
         self,
@@ -3017,6 +3188,12 @@ class AgentWorkflowService:
         actual_summary = self._target_summary(target, operation.tool_name)
         actual_content = self._target_content(target)
         operation.persisted_content_hash = _hash_text(actual_content)
+        matched_fields, mismatched_fields = self._verify_operation_fields(operation=operation, target=target)
+        snapshot_linked, snapshot_summary = await self._verify_operation_snapshot_linkage(
+            db,
+            project_id=project_id,
+            operation=operation,
+        )
 
         content_match = (
             operation.preview_content_hash is None
@@ -3024,9 +3201,14 @@ class AgentWorkflowService:
         )
         summary_match = preview.after_summary is None or preview.after_summary == actual_summary
 
-        if content_match and summary_match:
+        if content_match and summary_match and not mismatched_fields and snapshot_linked:
             operation.verification_status = AgentVerificationStatus.PASSED.value
-            operation.verification_summary = "预览与落库结果一致。"
+            verification_parts = ["预览与落库结果一致"]
+            if matched_fields:
+                verification_parts.append(f"字段验证通过：{', '.join(matched_fields)}")
+            if snapshot_summary:
+                verification_parts.append(snapshot_summary)
+            operation.verification_summary = "；".join(verification_parts) + "。"
             return
 
         mismatches: list[str] = []
@@ -3034,9 +3216,139 @@ class AgentWorkflowService:
             mismatches.append("摘要不一致")
         if not content_match:
             mismatches.append("内容 hash 不一致")
+        if mismatched_fields:
+            mismatches.append(f"字段不一致：{', '.join(mismatched_fields)}")
+        if not snapshot_linked and snapshot_summary:
+            mismatches.append(snapshot_summary)
         operation.verification_status = AgentVerificationStatus.FAILED.value
         operation.verification_summary = "；".join(mismatches)
         raise BadRequestException(f"Operation verification failed: {operation.verification_summary}")
+
+    def _verify_operation_fields(
+        self,
+        *,
+        operation: AgentOperation,
+        target: Character | WorldSetting | Chapter | Scene,
+    ) -> tuple[list[str], list[str]]:
+        """Verify field-level updates for structured update operations."""
+        expected_updates = self._field_level_expected_updates(operation)
+        if not expected_updates:
+            return [], []
+
+        actual_data = _serialize_model(target)
+        matched_fields: list[str] = []
+        mismatched_fields: list[str] = []
+        for field_name, expected_value in expected_updates.items():
+            actual_value = actual_data.get(field_name)
+            if actual_value == expected_value:
+                matched_fields.append(field_name)
+            else:
+                mismatched_fields.append(field_name)
+
+        execution_result = dict(operation.execution_result or {})
+        execution_result["field_verification"] = {
+            "matched_fields": list(matched_fields),
+            "mismatched_fields": list(mismatched_fields),
+        }
+        operation.execution_result = execution_result
+        return matched_fields, mismatched_fields
+
+    async def _verify_operation_snapshot_linkage(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        operation: AgentOperation,
+    ) -> tuple[bool, str | None]:
+        """Verify that the operation carries a valid snapshot linkage."""
+        raw_result = dict(operation.execution_result or {})
+        raw_snapshot = raw_result.get("snapshot")
+        if not isinstance(raw_snapshot, dict):
+            raw_result["snapshot_verification"] = {"status": "failed", "reason": "missing_snapshot_linkage"}
+            operation.execution_result = raw_result
+            return False, "缺少快照联动"
+
+        snapshot_id = raw_snapshot.get("snapshot_id")
+        stage = str(raw_snapshot.get("stage") or "")
+        if snapshot_id is None or stage not in {"pre_update", "post_create"}:
+            raw_result["snapshot_verification"] = {"status": "failed", "reason": "invalid_snapshot_linkage"}
+            operation.execution_result = raw_result
+            return False, "快照联动无效"
+
+        try:
+            snapshot = await snapshot_service.get(db, id=uuid.UUID(str(snapshot_id)))
+        except (NotFoundException, ValueError):
+            raw_result["snapshot_verification"] = {"status": "failed", "reason": "snapshot_missing"}
+            operation.execution_result = raw_result
+            return False, "快照缺失"
+
+        if (
+            snapshot.project_id != project_id
+            or operation.target_id is None
+            or snapshot.target_id != operation.target_id
+            or snapshot.target_type != str(operation.target_type)
+        ):
+            raw_result["snapshot_verification"] = {"status": "failed", "reason": "snapshot_target_mismatch"}
+            operation.execution_result = raw_result
+            return False, "快照目标不一致"
+
+        raw_result["snapshot_verification"] = {
+            "status": "passed",
+            "snapshot_id": str(snapshot.id),
+            "stage": stage,
+        }
+        operation.execution_result = raw_result
+        return True, f"快照联动已校验：{stage}"
+
+    async def _create_operation_snapshot(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        operation: AgentOperation,
+        target_type: str,
+        target_id: uuid.UUID,
+        data: dict[str, Any],
+        stage: Literal["pre_update", "post_create"],
+    ) -> Snapshot:
+        """Create and record the snapshot linked to one operation execution."""
+        snapshot = await snapshot_service.create_snapshot(
+            db,
+            project_id=project_id,
+            target_type=target_type,
+            target_id=target_id,
+            data=data,
+        )
+        execution_result = dict(operation.execution_result or {})
+        execution_result["snapshot"] = {
+            "snapshot_id": str(snapshot.id),
+            "target_type": snapshot.target_type,
+            "target_id": str(snapshot.target_id),
+            "stage": stage,
+        }
+        operation.execution_result = execution_result
+        return snapshot
+
+    def _field_level_expected_updates(self, operation: AgentOperation) -> dict[str, Any]:
+        """Return comparable expected field values for structured update operations."""
+        if operation.tool_name not in {
+            "update_character",
+            "update_world_setting",
+            "update_chapter",
+            "update_scene",
+        }:
+            return {}
+
+        raw_updates = operation.payload.get("updates", {})
+        if not isinstance(raw_updates, dict):
+            return {}
+
+        expected_updates: dict[str, Any] = {}
+        for field_name, value in raw_updates.items():
+            if field_name == "content" and operation.tool_name in {"update_chapter", "update_scene"}:
+                continue
+            expected_updates[str(field_name)] = _json_ready(value)
+        return expected_updates
 
     async def _load_operation_target(
         self,

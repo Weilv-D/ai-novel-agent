@@ -74,14 +74,23 @@ make verify
 - 每个 `subtask` 还会带出 child execution trace，记录依赖、输入摘要、重试策略和每次尝试结果
 - run metadata 会带出 `Plan / Build` 权限矩阵；其中 `researcher` 固定运行在内部 `read/search` 工具层，不进入用户确认列表
 - `AgentRunResponse.execution_contract` 与 `AgentSubtaskResponse.child_trace` 是当前稳定接口，前端不再从 `meta` 里推断这两类结构
+- `GET /api/v1/agent/risk-policies` 会返回当前稳定 risk policy registry
+- `AgentRunResponse.risk_summary` 会聚合 run 级整体风险、确认门槛、命中策略和高风险步骤位置
+- 风险分类实现已经从 workflow 内部逻辑抽离到 `app/services/agent_risk.py`，后续替换 classifier 时不需要改动前端 contract
+- risk classifier 已支持 profile-aware override；当前 `xianxia_intrigue` 会比默认 profile 更早把正文覆盖判定为 high-risk write
+- `execution_contract.phases[*].child_units` 会显式给出当前 run 的 `planner / researcher / writer / editor / continuity / executor` child unit contract
+- phase contract 与 child unit contract 的装配已经抽离到 `app/services/agent_contract.py`，workflow service 只负责准备运行期 capability 与 orchestration 输入
 - `execution_contract.capabilities[*].execution_record` 会跟随 run 状态更新，标记 planned / completed / failed / skipped
+- `GET /api/v1/agent/capabilities` 会返回当前稳定 capability registry；registry 定义、policy 和 execution record 已经分层
 - run metadata 会记录 `PreCompact / PrePlan / SubagentStop / RunStop` hook trace
 - 高风险正文覆盖会进入二次确认，而不是直接执行
 - 长线程达到阈值后会生成 `AgentThreadCheckpoint`，并通过线程状态接口返回最近一条压缩摘要
 - 执行阶段复用现有 CRUD service，并在落库前为目标对象创建 snapshot
+- verification gate 现在除了 summary / content hash，也会对结构化 `update_*` 的落库字段做逐字段校验
+- operation `execution_result` 会带出 snapshot linkage，verification 会校验该 snapshot 是否真实存在并与目标对象一致
 - planner 与每个 operation 都由文件化 skill 驱动；通用技能位于 `app/agent_skills/`，profile 覆盖位于 `app/agent_profiles/`
 - `AGENT_SKILLS_DIR` 作为 profile 根目录覆盖入口，可新增或替换某个 profile
-- `GET /api/v1/agent/profiles` 与 `GET /api/v1/agent/skills?project_id=...` 可用于检查当前实际加载结果
+- `GET /api/v1/agent/profiles`、`GET /api/v1/agent/skills?project_id=...` 与 `GET /api/v1/agent/risk-policies?project_id=...` 可用于检查当前实际加载结果
 - legacy `/api/v1/agent/chat*` 仍保留，用于次级页面和兼容路径
 
 ### 健康检查
