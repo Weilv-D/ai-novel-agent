@@ -38,6 +38,7 @@ from app.models.character import Character
 from app.models.project import Project
 from app.models.world_setting import WorldSetting
 from app.schemas.agent import (
+    AgentCapabilityExecutionRecordResponse,
     AgentCapabilityResponse,
     AgentExecutionContractResponse,
     AgentExecutionPhaseResponse,
@@ -200,6 +201,19 @@ class CapabilityScopeSummary(BaseModel):
     kind: Literal["read_search", "planning", "writing", "editing", "verification"]
     description: str
     tool_scope: list[str] = Field(default_factory=list)
+    execution_record: CapabilityExecutionRecordSummary | None = None
+
+
+class CapabilityExecutionRecordSummary(BaseModel):
+    """Internal execution record for one capability."""
+
+    record_id: str
+    source_role: Literal["planner", "researcher", "writer", "editor", "continuity", "executor"]
+    status: Literal["planned", "completed", "failed", "skipped"]
+    tool_scope: list[str] = Field(default_factory=list)
+    input_summary: str | None = None
+    output_summary: str | None = None
+    attempt_count: int = 1
 
 
 class PermissionPhaseSummary(BaseModel):
@@ -822,6 +836,8 @@ class AgentWorkflowService:
         permission_matrix = self._build_permission_matrix(
             operations=classified_operations,
             subtasks=planned_subtasks,
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
         )
         subagent_stop_hook = self._validate_blueprint(
             operations=classified_operations,
@@ -892,6 +908,13 @@ class AgentWorkflowService:
         run.completed_at = datetime.now(UTC)
         run.verification_status = AgentVerificationStatus.SKIPPED.value
         run.verification_summary = "Run was cancelled before execution."
+        self._update_capability_execution_record(
+            run,
+            phase_name="build",
+            capability_id="operation_execution",
+            status="skipped",
+            output_summary="Run was cancelled before execution.",
+        )
         operations = await self.operation_store.list_by_run(db, run_id=run.id)
         for operation in operations:
             operation.status = AgentOperationStatus.CANCELLED.value
@@ -989,6 +1012,13 @@ class AgentWorkflowService:
                 operations,
                 continuity_subtask=continuity_subtask,
             )
+            self._update_capability_execution_record(
+                run,
+                phase_name="build",
+                capability_id="operation_execution",
+                status="completed",
+                output_summary=run.verification_summary or "Build phase completed.",
+            )
             self._upsert_run_hook_trace(
                 run,
                 HookTraceEntry(
@@ -1013,6 +1043,13 @@ class AgentWorkflowService:
             failed_run.completed_at = datetime.now(UTC)
             failed_run.verification_status = AgentVerificationStatus.FAILED.value
             failed_run.verification_summary = str(exc)
+            self._update_capability_execution_record(
+                failed_run,
+                phase_name="build",
+                capability_id="operation_execution",
+                status="failed",
+                output_summary=str(exc),
+            )
             self._upsert_run_hook_trace(
                 failed_run,
                 HookTraceEntry(
@@ -2163,6 +2200,19 @@ class AgentWorkflowService:
                             kind=cast(Any, capability["kind"]),
                             description=str(capability["description"]),
                             tool_scope=[str(item) for item in cast(list[Any], capability.get("tool_scope", []))],
+                            execution_record=(
+                                AgentCapabilityExecutionRecordResponse(
+                                    record_id=str(record["record_id"]),
+                                    source_role=cast(Any, record["source_role"]),
+                                    status=cast(Any, record["status"]),
+                                    tool_scope=[str(item) for item in cast(list[Any], record.get("tool_scope", []))],
+                                    input_summary=cast(str | None, record.get("input_summary")),
+                                    output_summary=cast(str | None, record.get("output_summary")),
+                                    attempt_count=int(record.get("attempt_count", 1)),
+                                )
+                                if isinstance((record := capability.get("execution_record")), dict)
+                                else None
+                            ),
                         )
                         for capability in cast(list[dict[str, Any]], phase.get("capabilities", []))
                     ],
@@ -2591,35 +2641,68 @@ class AgentWorkflowService:
         self,
         *,
         subtasks: list[dict[str, Any]],
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
     ) -> list[CapabilityScopeSummary]:
         """Split the researcher read/search layer into stable internal capabilities."""
         role_scope = {str(subtask["role"]) for subtask in subtasks}
         if AgentSubtaskRole.RESEARCHER.value not in role_scope:
             return []
+        current_targets = sorted(
+            key.removeprefix("current_")
+            for key, value in context_data.items()
+            if key.startswith("current_") and isinstance(value, dict) and value.get("id")
+        )
+        inventory_tools = [
+            "list_project_characters",
+            "list_project_world_settings",
+            "list_project_chapters",
+            "list_project_scenes",
+        ]
+        resolution_tools = [
+            "resolve_current_character",
+            "resolve_current_world_setting",
+            "resolve_current_chapter",
+            "resolve_current_scene",
+        ]
         return [
             CapabilityScopeSummary(
                 capability_id="project_inventory",
                 name="Project Inventory",
                 kind="read_search",
                 description="读取项目内人物、设定、章节与场景的当前清单。",
-                tool_scope=[
-                    "list_project_characters",
-                    "list_project_world_settings",
-                    "list_project_chapters",
-                    "list_project_scenes",
-                ],
+                tool_scope=inventory_tools,
+                execution_record=CapabilityExecutionRecordSummary(
+                    record_id=f"cap-{uuid.uuid4().hex[:10]}",
+                    source_role=AgentSubtaskRole.RESEARCHER.value,
+                    status="completed",
+                    tool_scope=inventory_tools,
+                    input_summary="读取项目范围对象清单。",
+                    output_summary=(
+                        f"人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
+                        f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
+                        f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
+                    ),
+                ),
             ),
             CapabilityScopeSummary(
                 capability_id="focused_object_resolution",
                 name="Focused Object Resolution",
                 kind="read_search",
                 description="根据当前请求解析聚焦对象，命中人物、设定、章节或场景。",
-                tool_scope=[
-                    "resolve_current_character",
-                    "resolve_current_world_setting",
-                    "resolve_current_chapter",
-                    "resolve_current_scene",
-                ],
+                tool_scope=resolution_tools,
+                execution_record=CapabilityExecutionRecordSummary(
+                    record_id=f"cap-{uuid.uuid4().hex[:10]}",
+                    source_role=AgentSubtaskRole.RESEARCHER.value,
+                    status="completed",
+                    tool_scope=resolution_tools,
+                    input_summary="根据当前请求尝试命中聚焦对象。",
+                    output_summary=(
+                        f"命中对象：{', '.join(current_targets)}。"
+                        if current_targets
+                        else "当前请求没有命中具体人物、设定、章节或场景。"
+                    ),
+                ),
             ),
             CapabilityScopeSummary(
                 capability_id="checkpoint_context",
@@ -2627,6 +2710,18 @@ class AgentWorkflowService:
                 kind="read_search",
                 description="读取最近线程 checkpoint，为长期线程提供压缩上下文。",
                 tool_scope=["load_latest_checkpoint"],
+                execution_record=CapabilityExecutionRecordSummary(
+                    record_id=f"cap-{uuid.uuid4().hex[:10]}",
+                    source_role=AgentSubtaskRole.RESEARCHER.value,
+                    status="completed" if latest_checkpoint is not None else "skipped",
+                    tool_scope=["load_latest_checkpoint"],
+                    input_summary="读取最近一次线程压缩摘要。",
+                    output_summary=(
+                        f"已加载 checkpoint {latest_checkpoint.id}。"
+                        if latest_checkpoint is not None
+                        else "当前线程没有可复用的 checkpoint。"
+                    ),
+                ),
             ),
         ]
 
@@ -2635,6 +2730,8 @@ class AgentWorkflowService:
         *,
         operations: list[dict[str, Any]],
         subtasks: list[dict[str, Any]],
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
     ) -> RunPermissionMatrix:
         """Build the run-level Plan/Build permission matrix."""
         build_levels = sorted({str(operation["permission_level"]) for operation in operations})
@@ -2642,7 +2739,11 @@ class AgentWorkflowService:
             1 for operation in operations if str(operation["permission_level"]) == AgentPermissionLevel.HIGH_RISK_WRITE.value
         )
         role_scope = [str(subtask["role"]) for subtask in subtasks]
-        plan_capabilities = self._read_search_capabilities(subtasks=subtasks)
+        plan_capabilities = self._read_search_capabilities(
+            subtasks=subtasks,
+            context_data=context_data,
+            latest_checkpoint=latest_checkpoint,
+        )
         plan_phase = PermissionPhaseSummary(
             phase="plan",
             mode="restricted",
@@ -2673,6 +2774,14 @@ class AgentWorkflowService:
                     kind="planning",
                     description="按已确认的 operation 执行项目对象写入。",
                     tool_scope=[str(operation["tool_name"]) for operation in operations],
+                    execution_record=CapabilityExecutionRecordSummary(
+                        record_id=f"cap-{uuid.uuid4().hex[:10]}",
+                        source_role="executor",
+                        status="planned",
+                        tool_scope=[str(operation["tool_name"]) for operation in operations],
+                        input_summary=f"等待执行 {len(operations)} 个已确认 operation。",
+                        output_summary="尚未进入执行阶段。",
+                    ),
                 )
             ]
             if operations
@@ -3029,6 +3138,35 @@ class AgentWorkflowService:
         else:
             trace.append(serialized)
         next_meta["hook_trace"] = trace
+        run.meta = next_meta
+
+    def _update_capability_execution_record(
+        self,
+        run: AgentRun,
+        *,
+        phase_name: str,
+        capability_id: str,
+        status: str,
+        output_summary: str,
+    ) -> None:
+        """Update one capability execution record inside the serialized run contract."""
+        next_meta = dict(run.meta or {})
+        raw_contract = cast(dict[str, Any], next_meta.get("permission_matrix", {}))
+        raw_phases = cast(list[dict[str, Any]], raw_contract.get("phases", []))
+        for phase in raw_phases:
+            if str(phase.get("phase")) != phase_name:
+                continue
+            for capability in cast(list[dict[str, Any]], phase.get("capabilities", [])):
+                if str(capability.get("capability_id")) != capability_id:
+                    continue
+                record = dict(cast(dict[str, Any], capability.get("execution_record", {})))
+                if not record:
+                    continue
+                record["status"] = status
+                record["output_summary"] = output_summary
+                capability["execution_record"] = record
+        raw_contract["phases"] = raw_phases
+        next_meta["permission_matrix"] = raw_contract
         run.meta = next_meta
 
     async def _safe_get_operation(

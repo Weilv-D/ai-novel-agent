@@ -424,6 +424,7 @@ export type AgentExecutionMode = "restricted" | "gated";
 export type AgentRetryStrategy = "service_only" | "planner_then_service_fallback";
 export type AgentConfirmationGate = "none" | "single" | "double";
 export type AgentCapabilityKind = "read_search" | "planning" | "writing" | "editing" | "verification";
+export type AgentCapabilitySourceRole = AgentSubtaskRole | "executor";
 
 export interface OperationPreview {
   changed_fields: string[];
@@ -519,6 +520,17 @@ export interface AgentCapability {
   kind: AgentCapabilityKind;
   description: string;
   tool_scope: string[];
+  execution_record?: AgentCapabilityExecutionRecord | null;
+}
+
+export interface AgentCapabilityExecutionRecord {
+  record_id: string;
+  source_role: AgentCapabilitySourceRole;
+  status: "planned" | "completed" | "failed" | "skipped";
+  tool_scope: string[];
+  input_summary?: string | null;
+  output_summary?: string | null;
+  attempt_count: number;
 }
 
 export interface AgentExecutionContractPhase {

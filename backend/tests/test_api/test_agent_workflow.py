@@ -100,8 +100,11 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert permission_matrix["phases"][0]["allowed_permission_levels"] == ["read_search"]
     assert "list_project_characters" in permission_matrix["phases"][0]["tool_scope"]
     assert permission_matrix["phases"][0]["capabilities"][0]["capability_id"] == "project_inventory"
+    assert permission_matrix["phases"][0]["capabilities"][0]["execution_record"]["status"] == "completed"
+    assert permission_matrix["phases"][0]["capabilities"][0]["execution_record"]["source_role"] == "researcher"
     assert permission_matrix["phases"][1]["phase"] == "build"
     assert permission_matrix["phases"][1]["allowed_permission_levels"] == ["standard_write"]
+    assert permission_matrix["phases"][1]["capabilities"][0]["execution_record"]["status"] == "planned"
     planner_subtask = next(subtask for subtask in run["subtasks"] if subtask["role"] == "planner")
     planner_trace = planner_subtask["child_trace"]
     assert planner_subtask["meta"]["retry_strategy"] == "service_only"
@@ -424,6 +427,12 @@ async def test_invalid_planner_subtask_recovers_to_service_unit(
     assert researcher["child_trace"]["attempts"][1]["source"] == "service_recovery"
     assert researcher["child_trace"]["attempts"][1]["accepted"] is True
     assert run["meta"]["hook_trace"][-1]["meta"]["recovered_roles"] == ["researcher"]
+    focused_resolution = next(
+        capability
+        for capability in run["execution_contract"]["phases"][0]["capabilities"]
+        if capability["capability_id"] == "focused_object_resolution"
+    )
+    assert focused_resolution["execution_record"]["status"] == "completed"
 
 
 @pytest.mark.asyncio
@@ -485,6 +494,48 @@ async def test_failed_service_subtask_rejects_blueprint(
     )
     assert response.status_code == 400
     assert "failed subtask units: writer" in response.text
+
+
+@pytest.mark.asyncio
+async def test_cancel_run_marks_build_capability_skipped(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancelling a run should mark build capability execution as skipped."""
+    project_id = await create_project(client, name="Cancel Capability")
+    thread_id = await create_thread(client, project_id)
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会先创建人物卡。",
+                summary="创建人物 秦昭",
+                operations=[
+                    {
+                        "tool_name": "create_character",
+                        "description": "创建人物秦昭",
+                        "reason": "测试取消链路",
+                        "payload": {"name": "秦昭", "role": "刀客"},
+                    }
+                ],
+            )
+        ),
+    )
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "创建一个刀客秦昭"},
+    )
+    assert message.status_code == 200
+    run_id = message.json()["run"]["id"]
+
+    cancelled = await client.post(f"/api/v1/agent/runs/{run_id}/cancel")
+    assert cancelled.status_code == 200
+    run = cancelled.json()["run"]
+    build_phase = next(phase for phase in run["execution_contract"]["phases"] if phase["phase"] == "build")
+    assert build_phase["capabilities"][0]["execution_record"]["status"] == "skipped"
 
 
 @pytest.mark.asyncio
@@ -578,6 +629,7 @@ async def test_high_risk_run_requires_second_confirmation(client: AsyncClient, m
     assert build_phase["requires_secondary_confirmation"] is True
     assert build_phase["allowed_permission_levels"] == ["high_risk_write"]
     assert build_phase["confirmation_gate"] == "double"
+    assert build_phase["capabilities"][0]["execution_record"]["status"] == "planned"
 
     confirm = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
     assert confirm.status_code == 200
@@ -588,6 +640,8 @@ async def test_high_risk_run_requires_second_confirmation(client: AsyncClient, m
     confirmed_run = confirm_high_risk.json()["run"]
     assert confirmed_run["status"] == "completed"
     assert confirmed_run["verification_status"] == "passed"
+    build_phase = next(phase for phase in confirmed_run["execution_contract"]["phases"] if phase["phase"] == "build")
+    assert build_phase["capabilities"][0]["execution_record"]["status"] == "completed"
 
     chapter = await client.get(f"/api/v1/chapters/{chapter_id}")
     assert chapter.status_code == 200

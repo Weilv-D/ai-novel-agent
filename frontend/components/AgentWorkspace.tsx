@@ -469,11 +469,41 @@ export function AgentWorkspace({
                             </div>
                           )}
                           {phase.capabilities.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                            <div className="mt-3 space-y-3">
                               {phase.capabilities.map((capability) => (
-                                <span key={capability.capability_id} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                                  capability:{capability.capability_id}
-                                </span>
+                                <div
+                                  key={capability.capability_id}
+                                  className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.03)] px-3 py-3"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
+                                      {capability.name}
+                                    </div>
+                                    <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-600))]">
+                                      {capability.execution_record
+                                        ? `${capability.execution_record.status} / ${capability.execution_record.source_role}`
+                                        : capability.kind}
+                                    </div>
+                                  </div>
+                                  <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">
+                                    {capability.description}
+                                  </p>
+                                  {capability.execution_record?.output_summary && (
+                                    <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-600))]">
+                                      {capability.execution_record.output_summary}
+                                    </p>
+                                  )}
+                                  <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                                      capability:{capability.capability_id}
+                                    </span>
+                                    {capability.execution_record && (
+                                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                                        attempts:{capability.execution_record.attempt_count}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           )}

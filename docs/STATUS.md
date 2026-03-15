@@ -22,6 +22,7 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - run 级 Plan / Build 权限矩阵
 - researcher 内部 read/search 工具层
 - 显式 `execution_contract` / `child_trace` 接口字段
+- capability execution record
 - operation 风险分级与高风险二次确认
 - 执行后 verification gate
 - 长线程 checkpoint 基础设施
@@ -29,7 +30,7 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 
 ## 当前质量状态
 
-- 后端测试：`413 passed / 2 skipped`
+- 后端测试：`414 passed / 2 skipped`
 - 后端 lint：通过
 - 后端类型检查：通过
 - 前端 lint：通过

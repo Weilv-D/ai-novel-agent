@@ -19,6 +19,7 @@ RunStatusLiteral = Literal[
 OperationStatusLiteral = Literal["planned", "executed", "failed", "cancelled"]
 MessageRoleLiteral = Literal["user", "assistant", "system"]
 SubtaskRoleLiteral = Literal["planner", "researcher", "writer", "editor", "continuity"]
+CapabilitySourceRoleLiteral = Literal["planner", "researcher", "writer", "editor", "continuity", "executor"]
 SubtaskStatusLiteral = Literal["planned", "completed", "failed", "skipped"]
 PermissionLevelLiteral = Literal["read_search", "standard_write", "high_risk_write"]
 RiskLevelLiteral = Literal["low", "medium", "high"]
@@ -28,6 +29,7 @@ ExecutionModeLiteral = Literal["restricted", "gated"]
 RetryStrategyLiteral = Literal["service_only", "planner_then_service_fallback"]
 ConfirmationGateLiteral = Literal["none", "single", "double"]
 CapabilityKindLiteral = Literal["read_search", "planning", "writing", "editing", "verification"]
+CapabilityExecutionStatusLiteral = Literal["planned", "completed", "failed", "skipped"]
 
 
 class OperationPreview(BaseModel):
@@ -102,6 +104,18 @@ class AgentOperationResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgentCapabilityExecutionRecordResponse(BaseModel):
+    """Execution record for one internal capability."""
+
+    record_id: str
+    source_role: CapabilitySourceRoleLiteral
+    status: CapabilityExecutionStatusLiteral
+    tool_scope: list[str] = Field(default_factory=list)
+    input_summary: str | None = None
+    output_summary: str | None = None
+    attempt_count: int = 1
+
+
 class AgentCapabilityResponse(BaseModel):
     """One stable internal capability exposed with the run contract."""
 
@@ -110,6 +124,7 @@ class AgentCapabilityResponse(BaseModel):
     kind: CapabilityKindLiteral
     description: str
     tool_scope: list[str] = Field(default_factory=list)
+    execution_record: AgentCapabilityExecutionRecordResponse | None = None
 
 
 class AgentSubtaskAttemptResponse(BaseModel):

@@ -74,6 +74,7 @@ make verify
 - 每个 `subtask` 还会带出 child execution trace，记录依赖、输入摘要、重试策略和每次尝试结果
 - run metadata 会带出 `Plan / Build` 权限矩阵；其中 `researcher` 固定运行在内部 `read/search` 工具层，不进入用户确认列表
 - `AgentRunResponse.execution_contract` 与 `AgentSubtaskResponse.child_trace` 是当前稳定接口，前端不再从 `meta` 里推断这两类结构
+- `execution_contract.capabilities[*].execution_record` 会跟随 run 状态更新，标记 planned / completed / failed / skipped
 - run metadata 会记录 `PreCompact / PrePlan / SubagentStop / RunStop` hook trace
 - 高风险正文覆盖会进入二次确认，而不是直接执行
 - 长线程达到阈值后会生成 `AgentThreadCheckpoint`，并通过线程状态接口返回最近一条压缩摘要
