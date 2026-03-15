@@ -1,4 +1,4 @@
-import type { ChapterStatus, ProjectStatus } from "@/lib/types";
+import type { ChapterStatus, ProjectStatus, RunStatus } from "@/lib/types";
 
 interface StatusMeta {
   label: string;
@@ -30,6 +30,16 @@ const SUGGESTION_STATUS_META: Record<string, StatusMeta> = {
   discarded: { label: "已丢弃", className: "ink-badge ink-badge-smoke" },
 };
 
+const RUN_STATUS_META: Record<string, StatusMeta> = {
+  draft: { label: "草拟中", className: "ink-badge ink-badge-ash" },
+  awaiting_confirmation: { label: "待确认", className: "ink-badge ink-badge-amber" },
+  executing: { label: "执行中", className: "ink-badge ink-badge-rust" },
+  completed: { label: "已完成", className: "ink-badge ink-badge-jade" },
+  failed: { label: "执行失败", className: "ink-badge ink-badge-rust" },
+  cancelled: { label: "已取消", className: "ink-badge ink-badge-smoke" },
+  superseded: { label: "已替换", className: "ink-badge ink-badge-smoke" },
+};
+
 const IMPACT_LEVEL_CLASS: Record<string, string> = {
   high: "ink-badge ink-badge-rust",
   medium: "ink-badge ink-badge-amber",
@@ -52,6 +62,13 @@ export function getChapterStatusMeta(status: ChapterStatus | string): StatusMeta
 
 export function getSuggestionStatusMeta(status: string): StatusMeta {
   return SUGGESTION_STATUS_META[status] || {
+    label: status,
+    className: DEFAULT_STATUS_META.className,
+  };
+}
+
+export function getRunStatusMeta(status: RunStatus | string): StatusMeta {
+  return RUN_STATUS_META[status] || {
     label: status,
     className: DEFAULT_STATUS_META.className,
   };

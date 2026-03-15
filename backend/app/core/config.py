@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     max_tokens: int = 4096
     temperature: float = 0.7
+    agent_skills_dir: str = ""
 
     # Embedding (defaults to same provider as chat if not set)
     embedding_api_key: str = ""

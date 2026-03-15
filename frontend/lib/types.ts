@@ -398,6 +398,105 @@ export interface DependencyAnalysis {
   risks: string[];
 }
 
+// Agent workflow types
+export type AgentMessageRole = "user" | "assistant" | "system";
+export type RunStatus =
+  | "draft"
+  | "awaiting_confirmation"
+  | "executing"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "superseded";
+export type OperationStatus = "planned" | "executed" | "failed" | "cancelled";
+
+export interface OperationPreview {
+  changed_fields: string[];
+  before_summary?: string | null;
+  after_summary?: string | null;
+  diff?: string | null;
+  reason?: string | null;
+}
+
+export interface AgentThread {
+  id: string;
+  project_id: string;
+  title: string;
+  is_default: boolean;
+  meta: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentThreadMessage {
+  id: string;
+  thread_id: string;
+  role: AgentMessageRole;
+  content: string;
+  meta: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentOperation {
+  id: string;
+  run_id: string;
+  position: number;
+  tool_name: string;
+  target_type?: string | null;
+  target_id?: string | null;
+  target_display?: string | null;
+  description: string;
+  reason?: string | null;
+  payload: Record<string, unknown>;
+  preview: OperationPreview;
+  status: OperationStatus;
+  execution_result?: Record<string, unknown> | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentRun {
+  id: string;
+  thread_id: string;
+  project_id: string;
+  user_message_id?: string | null;
+  assistant_message_id?: string | null;
+  revision_of_run_id?: string | null;
+  status: RunStatus;
+  summary?: string | null;
+  error_message?: string | null;
+  warning_message?: string | null;
+  meta: Record<string, unknown>;
+  confirmed_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  operations: AgentOperation[];
+}
+
+export interface AgentThreadState {
+  thread: AgentThread;
+  messages: AgentThreadMessage[];
+  recent_runs: AgentRun[];
+  current_run?: AgentRun | null;
+}
+
+export interface AgentThreadMessageRequest {
+  content: string;
+  context?: Record<string, unknown>;
+  stream?: boolean;
+}
+
+export interface AgentThreadMessageResponse {
+  thread: AgentThread;
+  user_message: AgentThreadMessage;
+  assistant_message: AgentThreadMessage;
+  run?: AgentRun | null;
+}
+
 // Chat types
 export interface ChatMessage {
   id: string;

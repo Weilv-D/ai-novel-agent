@@ -1,0 +1,377 @@
+"""API tests for the planner/executor agent workflow."""
+
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from httpx import AsyncClient
+
+from app.services.agent_workflow import agent_workflow_service
+
+
+def planner_response(*, assistant_message: str, summary: str, operations: list[dict[str, object]], warning_message: str | None = None) -> dict[str, object]:
+    """Build a fake planner response payload."""
+    return {
+        "content": json.dumps(
+            {
+                "assistant_message": assistant_message,
+                "summary": summary,
+                "warning_message": warning_message,
+                "operations": operations,
+            },
+            ensure_ascii=False,
+        )
+    }
+
+
+async def create_project(client: AsyncClient, *, name: str = "Agent Test Project") -> str:
+    response = await client.post("/api/v1/projects", json={"name": name, "genre": "fantasy"})
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
+async def create_thread(client: AsyncClient, project_id: str) -> str:
+    response = await client.post("/api/v1/agent/threads", json={"project_id": project_id})
+    assert response.status_code == 200
+    return response.json()["id"]
+
+
+@pytest.fixture(autouse=True)
+def _agent_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Allow the planner service to run under test."""
+    monkeypatch.setattr(agent_workflow_service.llm, "api_key", "test-key")
+
+
+@pytest.mark.asyncio
+async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A planned run can create a new character and persist a snapshot."""
+    project_id = await create_project(client)
+    thread_id = await create_thread(client, project_id)
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会先创建人物卡，再等你确认执行。",
+                summary="创建人物 林霁",
+                operations=[
+                    {
+                        "tool_name": "create_character",
+                        "description": "创建新人物林霁",
+                        "reason": "用户要求新增主要人物",
+                        "payload": {
+                            "name": "林霁",
+                            "role": "主角",
+                            "profile": {"personality": "冷静克制"},
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    message_response = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "创建一个冷静克制的主角，名字叫林霁"},
+    )
+    assert message_response.status_code == 200
+    run = message_response.json()["run"]
+    assert run["status"] == "awaiting_confirmation"
+    assert run["operations"][0]["tool_name"] == "create_character"
+    assert run["meta"]["skill_snapshot"]["planner"]["name"] == "novel-agent-planner"
+    assert run["meta"]["skill_snapshot"]["operations"][0]["tool_name"] == "create_character"
+
+    confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
+    assert confirm_response.status_code == 200
+    confirmed_run = confirm_response.json()["run"]
+    assert confirmed_run["status"] == "completed"
+
+    characters_response = await client.get(f"/api/v1/characters/project/{project_id}")
+    assert characters_response.status_code == 200
+    characters = characters_response.json()
+    assert len(characters) == 1
+    assert characters[0]["name"] == "林霁"
+
+    snapshots_response = await client.get(f"/api/v1/snapshots?project_id={project_id}")
+    assert snapshots_response.status_code == 200
+    snapshots = snapshots_response.json()
+    assert len(snapshots) == 1
+    assert snapshots[0]["target_type"] == "character"
+
+
+@pytest.mark.asyncio
+async def test_revision_supersedes_previous_run_and_updates_setting(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A new message replaces a pending run and executes the revised plan."""
+    project_id = await create_project(client, name="World Test")
+    thread_id = await create_thread(client, project_id)
+
+    setting_response = await client.post(
+        "/api/v1/world-settings",
+        json={
+            "project_id": project_id,
+            "category": "rules",
+            "name": "灵脉规则",
+            "content": "旧设定",
+        },
+    )
+    assert setting_response.status_code == 201
+
+    planner_generate = AsyncMock(
+        side_effect=[
+            planner_response(
+                assistant_message="我会改灵脉规则。",
+                summary="修改设定 灵脉规则",
+                operations=[
+                    {
+                        "tool_name": "update_world_setting",
+                        "description": "补强灵脉规则",
+                        "reason": "用户要求修订设定",
+                        "payload": {
+                            "setting_name": "灵脉规则",
+                            "updates": {"content": "新设定 v1"},
+                        },
+                    }
+                ],
+            ),
+            planner_response(
+                assistant_message="我会把设定调得更冷峻。",
+                summary="再次修改设定 灵脉规则",
+                operations=[
+                    {
+                        "tool_name": "update_world_setting",
+                        "description": "把设定改得更冷峻",
+                        "reason": "用户进一步细化要求",
+                        "payload": {
+                            "setting_name": "灵脉规则",
+                            "updates": {"content": "新设定 v2，更冷峻"},
+                        },
+                    }
+                ],
+            ),
+        ]
+    )
+    monkeypatch.setattr(agent_workflow_service.llm, "generate", planner_generate)
+
+    first = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "把灵脉规则改得更严格"},
+    )
+    assert first.status_code == 200
+    first_run_id = first.json()["run"]["id"]
+
+    second = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "再改得更冷峻一点"},
+    )
+    assert second.status_code == 200
+    second_run_id = second.json()["run"]["id"]
+
+    first_run = await client.get(f"/api/v1/agent/runs/{first_run_id}")
+    assert first_run.status_code == 200
+    assert first_run.json()["status"] == "superseded"
+
+    confirm = await client.post(f"/api/v1/agent/runs/{second_run_id}/confirm")
+    assert confirm.status_code == 200
+    assert confirm.json()["run"]["status"] == "completed"
+
+    settings_response = await client.get(f"/api/v1/world-settings/project/{project_id}")
+    assert settings_response.status_code == 200
+    assert settings_response.json()[0]["content"] == "新设定 v2，更冷峻"
+
+
+@pytest.mark.asyncio
+async def test_write_chapter_content_flow(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The workflow can preview and write chapter content."""
+    project_id = await create_project(client, name="Chapter Test")
+    thread_id = await create_thread(client, project_id)
+
+    chapter_response = await client.post(
+        "/api/v1/chapters",
+        json={
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "雨夜",
+            "content": "旧正文",
+        },
+    )
+    assert chapter_response.status_code == 201
+    chapter_id = chapter_response.json()["id"]
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会重写第一章正文。",
+                summary="重写第一章正文",
+                warning_message="写作完成后建议手动复核记忆。",
+                operations=[
+                    {
+                        "tool_name": "write_chapter_content",
+                        "description": "改写第一章正文",
+                        "reason": "用户要求重写章节",
+                        "payload": {
+                            "chapter_number": 1,
+                            "mode": "replace",
+                            "content": "雨夜压城，灯影像刀一样切过长街。",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "把第一章改成更紧张的雨夜开场"},
+    )
+    assert message.status_code == 200
+    run = message.json()["run"]
+    assert run["operations"][0]["target_id"] == chapter_id
+
+    confirm = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
+    assert confirm.status_code == 200
+    assert confirm.json()["run"]["warning_message"] is not None
+
+    chapter = await client.get(f"/api/v1/chapters/{chapter_id}")
+    assert chapter.status_code == 200
+    assert chapter.json()["content"] == "雨夜压城，灯影像刀一样切过长街。"
+
+
+@pytest.mark.asyncio
+async def test_multi_step_run_is_transactional(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """If execution fails mid-run, earlier operations are rolled back."""
+    project_id = await create_project(client, name="Txn Test")
+    thread_id = await create_thread(client, project_id)
+
+    chapter_response = await client.post(
+        "/api/v1/chapters",
+        json={
+            "project_id": project_id,
+            "chapter_number": 2,
+            "title": "埋伏",
+            "content": "旧内容",
+        },
+    )
+    assert chapter_response.status_code == 201
+    chapter_id = chapter_response.json()["id"]
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会创建人物并改写第二章。",
+                summary="创建人物并改写第二章",
+                operations=[
+                    {
+                        "tool_name": "create_character",
+                        "description": "创建人物白隼",
+                        "reason": "补充关键配角",
+                        "payload": {"name": "白隼", "role": "密探"},
+                    },
+                    {
+                        "tool_name": "write_chapter_content",
+                        "description": "改写第二章",
+                        "reason": "增强埋伏张力",
+                        "payload": {
+                            "chapter_id": chapter_id,
+                            "mode": "replace",
+                            "content": "新正文",
+                        },
+                    },
+                ],
+            )
+        ),
+    )
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "创建一个密探白隼，再把第二章改得更紧张"},
+    )
+    assert message.status_code == 200
+    run_id = message.json()["run"]["id"]
+
+    delete_chapter = await client.delete(f"/api/v1/chapters/{chapter_id}")
+    assert delete_chapter.status_code == 200
+
+    confirm = await client.post(f"/api/v1/agent/runs/{run_id}/confirm")
+    assert confirm.status_code == 200
+    assert confirm.json()["run"]["status"] == "failed"
+
+    characters = await client.get(f"/api/v1/characters/project/{project_id}")
+    assert characters.status_code == 200
+    assert characters.json() == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_planner_tool_is_rejected(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unsupported planner tools are rejected with a client error."""
+    project_id = await create_project(client, name="Invalid Tool Test")
+    thread_id = await create_thread(client, project_id)
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会直接执行黑盒工具。",
+                summary="非法工具计划",
+                operations=[
+                    {
+                        "tool_name": "delete_everything",
+                        "description": "非法操作",
+                        "payload": {},
+                    }
+                ],
+            )
+        ),
+    )
+
+    response = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "做点危险的事"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_skill_catalog_endpoint(client: AsyncClient) -> None:
+    """The active planner and operation skills are exposed for inspection."""
+    response = await client.get("/api/v1/agent/skills")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["planner"]["name"] == "novel-agent-planner"
+    tool_names = {item["tool_name"] for item in payload["operations"]}
+    assert "create_character" in tool_names
+    assert "write_chapter_content" in tool_names
+    assert payload["source_roots"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_chat_endpoint_still_available(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legacy chat remains callable for auxiliary pages."""
+    project_id = await create_project(client, name="Legacy Chat")
+
+    monkeypatch.setattr(
+        "app.api.v1.agent.orchestrator.chat",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                message="legacy ok",
+                suggestions=[],
+                metadata={"agent_type": "draft"},
+            )
+        ),
+    )
+
+    response = await client.post(
+        "/api/v1/agent/chat",
+        json={"project_id": project_id, "message": "hello", "history": [], "context": {}},
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "legacy ok"

@@ -8,8 +8,8 @@ const featureCards = [
     description: "人物、设定、章节同处于一纸之上，挥毫泼墨不被打断。",
   },
   {
-    title: "AI 伴写建议",
-    description: "生成、确认、应用链路完整，若有神助而不喧宾夺主。",
+    title: "Agent 计划执行",
+    description: "直接用自然语言下达目标，先看完整计划和预览，再确认落笔。",
   },
   {
     title: "匠心工作流",
@@ -39,7 +39,7 @@ export default function HomePage() {
               </h1>
               <p className="max-w-2xl text-lg leading-relaxed text-ink-800 tracking-wide font-light">
                 用克制、精致的界面组织项目与章节。<br/>
-                AI 不是冷冰冰的按钮，而是藏在砚台下、嵌进创作流里的那支生花妙笔。
+                Agent 不是浮在表面的聊天玩具，而是藏在砚台下、能规划并执行创作动作的那支生花妙笔。
               </p>
               <div className="inline-flex items-center gap-4 bg-paper-deep/40 px-4 py-2 rounded-md border border-line/30">
                  <span className="w-2 h-2 rounded-full bg-jade/60 animate-pulse"></span>
@@ -97,10 +97,10 @@ export default function HomePage() {
                   <div className="rounded-xl bg-ink-950/5 border border-line/10 p-5 hover:-translate-y-1 transition-transform">
                     <div className="text-sm font-medium tracking-widest text-ink-900 mb-2 flex items-center gap-2">
                         <span className="w-1.5 h-1.5 bg-jade/60 rounded-full"></span>
-                        灵犀建议
+                        Agent Workspace
                     </div>
                     <p className="text-sm leading-relaxed text-ink-700">
-                      针对文脉、设定冲突、行文润色提供“可确认”批注，保留作者绝对控制权。
+                      在项目里直接下达“创建人物”“修改设定”“重写章节”这类指令，先拿到可执行计划与预览。
                     </p>
                   </div>
                   <div className="rounded-xl bg-seal/5 border border-seal/10 p-5 hover:-translate-y-1 transition-transform">

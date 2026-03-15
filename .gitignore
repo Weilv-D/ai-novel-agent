@@ -127,3 +127,5 @@ alembic/versions/*.py
 
 # Claude Code
 .claude/
+
+others/

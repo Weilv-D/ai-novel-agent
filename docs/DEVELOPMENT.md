@@ -41,6 +41,9 @@ cp .env.example .env
 - Shell 环境变量优先级高于 `.env`；如果终端或 IDE 注入了通用变量，例如 `DEBUG=release`，当前配置层会兼容常见 release/prod 拼写，但本地运行值仍应以 `backend/.env` 为准
 - SQLite 仅用于测试与轻量验证；目标运行环境仍然是 PostgreSQL + pgvector
 - 单用户模式是当前明确边界：`PERSONAL_USER_EMAIL` 和 `PERSONAL_USER_NAME` 决定本地归属用户
+- Agent 主流程是同步 planner/executor：消息先生成待确认 run，再由确认操作触发真正写入
+- Agent 规划层由 `backend/app/agent_skills/` 下的文件化 skills 驱动；`AGENT_SKILLS_DIR` 可覆盖默认 planner 或 operation skill
+- 覆盖 skill 后，可通过 `GET /api/v1/agent/skills` 检查实际加载结果
 
 ## 前端开发
 
@@ -65,6 +68,7 @@ npm run build
 - 前端脚本通过 `node` 直接调用本地 CLI，不依赖 `node_modules/.bin` 的可执行位
 - 全局样式入口由 `frontend/app/layout.tsx` 引入 `frontend/app/globals.css`
 - 前端排版使用本地 serif 字体栈，不依赖外部字体服务
+- 项目详情页当前是 Agent Workspace 主入口；人物、设定、章节、场景页面保留为辅助编辑路径
 - Docker 前端运行目录是 `frontend/.next-docker`；它属于运行态目录，不应由通用清理命令在服务运行时删除
 
 ## Docker 开发

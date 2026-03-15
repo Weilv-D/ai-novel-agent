@@ -4,7 +4,7 @@
 
 ## 当前定位
 
-AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶段。它当前服务的对象很明确：单人、本地、长期创作。项目的设计重点是稳定的内容结构和 AI 辅助链路，而不是多用户协作系统。
+AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶段。它当前服务的对象很明确：单人、本地、长期创作。当前版本的主交互模型已经从 suggestion 导向的聊天辅助，升级为项目内的 planner/executor Agent Workspace。
 
 ## 已交付能力
 
@@ -15,7 +15,9 @@ AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶�
 - 单用户模式与可选 `ADMIN_API_KEY` 保护
 - 项目、人物、世界观、卷、章、场景的完整 API
 - Suggestion、Dependency、Snapshot、Memory 相关 API
-- Agent chat / stream / continuity / summarize
+- Agent thread / run / operation 工作流
+- 文件化 planner / operation skills，可按目录覆盖更新
+- legacy Agent chat / stream / continuity / summarize
 - Alembic 初始化迁移
 - PostgreSQL + pgvector 目标运行时
 
@@ -23,8 +25,9 @@ AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶�
 
 - Next.js 15 App Router
 - 首页与个人模式配置入口
-- 项目、人物、章节、世界观主视图
-- Suggestion / Diff / Impact Analysis 组件
+- 项目级 Agent Workspace 主视图
+- 项目、人物、章节、世界观辅助视图
+- Diff / Impact Analysis 组件
 - API client、状态管理与类型定义
 - 当前版本的水墨风 UI 主题
 - 本地 serif 字体栈，无外部字体依赖
@@ -39,7 +42,7 @@ AI Novel Agent 已经具备可用的个人创作工作流，不再是原型阶�
 
 ## 当前质量状态
 
-- 后端测试：`398` collected / `396 passed` / `2 skipped`
+- 后端测试：`407` collected / `405 passed` / `2 skipped`
 - 后端 lint：通过
 - 后端类型检查：通过
 - 前端 lint：通过

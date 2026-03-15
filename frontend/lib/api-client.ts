@@ -148,10 +148,16 @@ async function fetchApi<T>(
   const data = hasJsonBody ? await response.json() : null;
 
   if (!response.ok) {
+    const errorPayload = data as {
+      detail?: string;
+      message?: string;
+      error?: { message?: string };
+    } | null;
     throw new ApiError(
       response.status,
-      (data as { detail?: string; message?: string })?.detail
-        || (data as { detail?: string; message?: string })?.message
+      errorPayload?.detail
+        || errorPayload?.message
+        || errorPayload?.error?.message
         || "An error occurred",
       data
     );
@@ -415,7 +421,29 @@ export const dependencyApi = {
 // Agent API
 // ============================================================================
 
-import type { AgentChatRequest, AgentChatResponse, Suggestion } from "@/lib/types";
+import type {
+  AgentChatRequest,
+  AgentChatResponse,
+  AgentRun,
+  AgentThread,
+  AgentThreadMessageRequest,
+  AgentThreadMessageResponse,
+  AgentThreadState,
+  Suggestion,
+} from "@/lib/types";
+
+async function buildAuthenticatedHeaders(
+  initialHeaders: Record<string, string> = {}
+): Promise<Record<string, string>> {
+  const headers = { ...initialHeaders };
+  const apiKey = typeof window !== "undefined" ? localStorage.getItem("api_key") : null;
+  if (!apiKey) {
+    return headers;
+  }
+  const headerName = await resolveApiKeyHeader();
+  headers[headerName] = apiKey;
+  return headers;
+}
 
 export const agentApi = {
   chat: (data: AgentChatRequest) =>
@@ -426,14 +454,9 @@ export const agentApi = {
 
   chatStream: async function* (data: AgentChatRequest): AsyncGenerator<string, void, unknown> {
     const url = `${API_BASE_URL}/api/v1/agent/chat/stream`;
-    const apiKey = typeof window !== "undefined" ? localStorage.getItem("api_key") : null;
-
-    const headers: Record<string, string> = {
+    const headers = await buildAuthenticatedHeaders({
       "Content-Type": "application/json",
-    };
-    if (apiKey) {
-      headers["X-API-Key"] = apiKey;
-    }
+    });
 
     const response = await fetch(url, {
       method: "POST",
@@ -489,6 +512,36 @@ export const agentApi = {
     }),
 };
 
+export const agentWorkflowApi = {
+  createThread: (projectId: string) =>
+    fetchApi<AgentThread>("/api/v1/agent/threads", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId }),
+    }),
+
+  getThread: (threadId: string) =>
+    fetchApi<AgentThreadState>(`/api/v1/agent/threads/${threadId}`),
+
+  sendMessage: (threadId: string, data: AgentThreadMessageRequest) =>
+    fetchApi<AgentThreadMessageResponse>(`/api/v1/agent/threads/${threadId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getRun: (runId: string) =>
+    fetchApi<AgentRun>(`/api/v1/agent/runs/${runId}`),
+
+  confirmRun: (runId: string) =>
+    fetchApi<{ run: AgentRun }>(`/api/v1/agent/runs/${runId}/confirm`, {
+      method: "POST",
+    }),
+
+  cancelRun: (runId: string) =>
+    fetchApi<{ run: AgentRun }>(`/api/v1/agent/runs/${runId}/cancel`, {
+      method: "POST",
+    }),
+};
+
 // ============================================================================
 // Suggestion API (enhanced)
 // ============================================================================
@@ -524,12 +577,7 @@ export const suggestionApi = {
 export const exportApi = {
   download: async (projectId: string, format: "txt" | "markdown" = "txt") => {
     const url = `${API_BASE_URL}/api/v1/projects/${projectId}/export?format=${format}`;
-    const apiKey = typeof window !== "undefined" ? localStorage.getItem("api_key") : null;
-
-    const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers["X-API-Key"] = apiKey;
-    }
+    const headers = await buildAuthenticatedHeaders();
 
     const response = await fetch(url, { headers });
     if (!response.ok) {

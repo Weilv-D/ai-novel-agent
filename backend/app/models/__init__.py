@@ -1,5 +1,14 @@
 """SQLAlchemy models."""
 
+from app.models.agent_workflow import (
+    AgentMessage,
+    AgentMessageRole,
+    AgentOperation,
+    AgentOperationStatus,
+    AgentRun,
+    AgentRunStatus,
+    AgentThread,
+)
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.chapter import Chapter, ChapterStatus, Scene, Volume
 from app.models.character import Character
@@ -15,6 +24,13 @@ __all__ = [
     "Base",
     "TimestampMixin",
     "UUIDMixin",
+    "AgentThread",
+    "AgentMessage",
+    "AgentRun",
+    "AgentOperation",
+    "AgentMessageRole",
+    "AgentRunStatus",
+    "AgentOperationStatus",
     "User",
     "Project",
     "ProjectStatus",

@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
-import { AgentChatPanel } from "@/components/AgentChatPanel";
-import { SuggestionList } from "@/components/SuggestionList";
+import { AgentWorkspace } from "@/components/AgentWorkspace";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
@@ -95,7 +94,7 @@ export default function ProjectDetailPage() {
 
   return (
     <main className="ink-page">
-      <div className="mx-auto max-w-5xl px-4 py-10">
+      <div className="mx-auto max-w-7xl px-4 py-10">
         <div className="mb-10">
           <Link href="/projects" className="ink-backlink mb-5">
             ← 返回项目列表
@@ -122,8 +121,8 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-          <Card>
+        <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <Card className="h-fit">
             <CardHeader>
               <CardTitle className="text-lg">基本信息</CardTitle>
             </CardHeader>
@@ -150,49 +149,55 @@ export default function ProjectDetailPage() {
                   {new Date(project.created_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
+              <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">
+                <div className="mb-2 text-[rgb(var(--ink-700))]">辅助入口</div>
+                <div className="flex flex-wrap gap-2">
+                  <Button href={`/projects/${project.id}/chapters`} size="sm">
+                    章节
+                  </Button>
+                  <Button variant="outline" href={`/projects/${project.id}/characters`} size="sm">
+                    人物
+                  </Button>
+                  <Button variant="outline" href={`/projects/${project.id}/worldsettings`} size="sm">
+                    设定
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">
+                <div className="mb-2 text-[rgb(var(--ink-700))]">导出</div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => exportApi.download(project.id, "txt")} size="sm">
+                    TXT
+                  </Button>
+                  <Button variant="outline" onClick={() => exportApi.download(project.id, "markdown")} size="sm">
+                    Markdown
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {project.notes && (
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-lg">备注</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">
-                  {project.notes}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          <div className="space-y-6">
+            {project.notes && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">备注</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">
+                    {project.notes}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            <AgentWorkspace
+              projectId={project.id}
+              projectName={project.name}
+              onProjectRefresh={() => fetchProject(project.id)}
+            />
+          </div>
         </div>
-
-        <Card className="mb-8 overflow-hidden">
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-4">
-              <Button href={`/projects/${project.id}/chapters`}>章节管理</Button>
-              <Button variant="outline" href={`/projects/${project.id}/characters`}>人物管理</Button>
-              <Button variant="outline" href={`/projects/${project.id}/worldsettings`}>世界观</Button>
-              <Button variant="outline" onClick={() => exportApi.download(project.id, "txt")}>
-                导出 TXT
-              </Button>
-              <Button variant="outline" onClick={() => exportApi.download(project.id, "markdown")}>
-                导出 Markdown
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="text-lg">AI 建议</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SuggestionList projectId={project.id} status="draft" />
-          </CardContent>
-        </Card>
-
-        <AgentChatPanel projectId={project.id} />
 
         <Modal
           isOpen={deleteModalOpen}

@@ -1,7 +1,9 @@
-"""Agent API routes for AI-assisted writing."""
+"""Agent workflow API routes."""
 
 import json
 from collections.abc import AsyncIterator
+from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -12,12 +14,123 @@ from app.api.deps import get_db
 from app.schemas.agent import (
     AgentChatRequest,
     AgentChatResponse,
+    AgentRunActionResponse,
+    AgentRunResponse,
+    AgentSkillCatalogResponse,
+    AgentThreadCreateRequest,
+    AgentThreadMessageRequest,
+    AgentThreadMessageResponse,
+    AgentThreadResponse,
+    AgentThreadStateResponse,
     AutoSummarizeRequest,
     AutoSummarizeResponse,
     ContinuityCheckRequest,
 )
+from app.services.agent_workflow import agent_workflow_service
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+
+
+def _chunk_text(text: str, *, size: int = 120) -> list[str]:
+    return [text[index : index + size] for index in range(0, len(text), size)] or [""]
+
+
+@router.post("/threads", response_model=AgentThreadResponse)
+async def create_or_get_thread(
+    *,
+    db: AsyncSession = Depends(get_db),
+    req: AgentThreadCreateRequest,
+) -> AgentThreadResponse:
+    """Create or fetch the default project-scoped agent thread."""
+    return await agent_workflow_service.get_or_create_thread_response(db, project_id=req.project_id)
+
+
+@router.get("/threads/{thread_id}", response_model=AgentThreadStateResponse)
+async def get_thread(
+    *,
+    db: AsyncSession = Depends(get_db),
+    thread_id: UUID,
+) -> AgentThreadStateResponse:
+    """Fetch thread messages and recent runs for the Agent Workspace."""
+    return await agent_workflow_service.get_thread_state_response(db, thread_id=thread_id)
+
+
+@router.get("/skills", response_model=AgentSkillCatalogResponse)
+async def get_agent_skills() -> AgentSkillCatalogResponse:
+    """Inspect the active planner and operation skills."""
+    return await agent_workflow_service.get_skill_catalog_response()
+
+
+@router.post("/threads/{thread_id}/messages", response_model=AgentThreadMessageResponse)
+async def create_thread_message(
+    *,
+    db: AsyncSession = Depends(get_db),
+    thread_id: UUID,
+    req: AgentThreadMessageRequest,
+) -> AgentThreadMessageResponse | StreamingResponse:
+    """Send a message into an agent thread and receive a planned run."""
+    response = await agent_workflow_service.create_planned_run(
+        db,
+        thread_id=thread_id,
+        content=req.content,
+        context=req.context,
+    )
+    if not req.stream:
+        return response
+
+    async def event_generator() -> AsyncIterator[str]:
+        for chunk in _chunk_text(response.assistant_message.content):
+            payload: dict[str, Any] = {"type": "message_chunk", "content": chunk}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        payload = {
+            "type": "result",
+            "thread": response.thread.model_dump(mode="json"),
+            "user_message": response.user_message.model_dump(mode="json"),
+            "assistant_message": response.assistant_message.model_dump(mode="json"),
+            "run": response.run.model_dump(mode="json") if response.run else None,
+        }
+        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/runs/{run_id}", response_model=AgentRunResponse)
+async def get_run(
+    *,
+    db: AsyncSession = Depends(get_db),
+    run_id: UUID,
+) -> AgentRunResponse:
+    """Fetch a single run with its operation previews/results."""
+    return await agent_workflow_service.get_run_response(db, run_id=run_id)
+
+
+@router.post("/runs/{run_id}/confirm", response_model=AgentRunActionResponse)
+async def confirm_run(
+    *,
+    db: AsyncSession = Depends(get_db),
+    run_id: UUID,
+) -> AgentRunActionResponse:
+    """Confirm and execute a planned run."""
+    return await agent_workflow_service.confirm_run_response(db, run_id=run_id)
+
+
+@router.post("/runs/{run_id}/cancel", response_model=AgentRunActionResponse)
+async def cancel_run(
+    *,
+    db: AsyncSession = Depends(get_db),
+    run_id: UUID,
+) -> AgentRunActionResponse:
+    """Cancel a run that has not been executed yet."""
+    return await agent_workflow_service.cancel_run_response(db, run_id=run_id)
 
 
 @router.post("/chat", response_model=AgentChatResponse)
@@ -26,7 +139,7 @@ async def agent_chat(
     db: AsyncSession = Depends(get_db),
     req: AgentChatRequest,
 ) -> AgentChatResponse:
-    """Send a message to the AI writing assistant."""
+    """Legacy chat endpoint kept for auxiliary pages."""
     result = await orchestrator.chat(
         db,
         project_id=req.project_id,
@@ -47,7 +160,7 @@ async def agent_chat_stream(
     db: AsyncSession = Depends(get_db),
     req: AgentChatRequest,
 ) -> StreamingResponse:
-    """Send a message to the AI writing assistant with SSE streaming."""
+    """Legacy streaming chat endpoint kept for auxiliary pages."""
 
     async def event_generator() -> AsyncIterator[str]:
         async for chunk in orchestrator.chat_stream(
@@ -57,7 +170,6 @@ async def agent_chat_stream(
             history=req.history,
             extra_context=req.context,
         ):
-            # SSE format
             data = json.dumps({"content": chunk}, ensure_ascii=False)
             yield f"data: {data}\n\n"
         yield "data: [DONE]\n\n"
@@ -79,7 +191,7 @@ async def auto_summarize(
     db: AsyncSession = Depends(get_db),
     req: AutoSummarizeRequest,
 ) -> AutoSummarizeResponse:
-    """Auto-summarize chapter content into memory facts."""
+    """Legacy auto-summarize endpoint."""
     memories = await orchestrator.auto_summarize(
         db,
         project_id=req.project_id,
@@ -95,7 +207,7 @@ async def continuity_check(
     db: AsyncSession = Depends(get_db),
     req: ContinuityCheckRequest,
 ) -> AgentChatResponse:
-    """Run a continuity check on content."""
+    """Legacy continuity check endpoint."""
     result = await orchestrator.continuity_check(
         db,
         project_id=req.project_id,

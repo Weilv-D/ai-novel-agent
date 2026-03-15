@@ -6,7 +6,8 @@
 
 - 项目、人物、世界观、卷、章、场景的 CRUD
 - Suggestion、Dependency、Snapshot、Memory 的持久化与查询
-- Agent chat、流式响应、连续性检查与摘要接口
+- Agent Workspace 所需的线程、消息、运行计划与执行接口
+- legacy Agent chat、流式响应、连续性检查与摘要接口
 - TXT / Markdown 导出
 - 运行时健康检查与单用户访问控制
 
@@ -61,6 +62,17 @@ make verify
 - `PERSONAL_USER_EMAIL` / `PERSONAL_USER_NAME` 定义本地用户身份
 - 启动时会自动初始化该用户记录
 - `ADMIN_API_KEY` 可选；启用后，业务接口要求客户端在指定请求头中携带它
+
+### Agent 工作流
+
+- 每个项目有一个默认 `AgentThread`
+- 用户消息会生成一个 `AgentRun`
+- `AgentRun` 会先给出待确认的多步操作预览，再进入执行
+- 执行阶段复用现有 CRUD service，并在落库前为目标对象创建 snapshot
+- planner 与每个 operation 都由文件化 skill 驱动，默认技能位于 `app/agent_skills/`
+- `AGENT_SKILLS_DIR` 可覆盖内置 planner 或单个 operation skill，而不需要修改后端代码
+- `GET /api/v1/agent/skills` 可用于检查当前实际加载的 skill 集合
+- legacy `/api/v1/agent/chat*` 仍保留，用于次级页面和兼容路径
 
 ### 健康检查
 

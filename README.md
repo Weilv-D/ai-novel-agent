@@ -1,6 +1,6 @@
 # AI Novel Agent
 
-AI Novel Agent 是一个面向个人长期创作的 AI 长篇小说工作台。它把项目管理、人物设定、世界观、章节场景、AI 建议、记忆检索与导出整合在同一套流程里，重点不是“多功能堆叠”，而是让写作上下文始终连贯。
+AI Novel Agent 是一个面向个人长期创作的 Agent 化长篇小说工作台。它把项目管理、人物设定、世界观、章节场景、记忆检索与导出整合在同一套流程里，但主入口不再是零散表单，而是项目内的 Agent Workspace。
 
 
 ## 核心能力
@@ -8,7 +8,7 @@ AI Novel Agent 是一个面向个人长期创作的 AI 长篇小说工作台。�
 - 项目管理：建立作品、维护题材、受众、目标字数与摘要
 - 角色与世界观：沉淀人物档案、设定条目与背景信息
 - 章节与场景：按创作结构推进内容，而不是散落在独立文档里
-- AI 建议：保留生成、确认、应用的完整链路
+- Agent Workspace：用自然语言下达创作与修改指令，先看完整计划与预览，再确认执行
 - 记忆与检索：支持 embedding 驱动的内容记忆
 - 内容导出：导出 TXT 与 Markdown
 
@@ -52,6 +52,7 @@ ADMIN_API_KEY=
 配置要点：
 
 - `LLM_*` 用于聊天与生成
+- `AGENT_SKILLS_DIR` 可选；留空时使用内置 skills，指向自定义目录后可覆盖 planner 与单个 operation skill
 - `EMBEDDING_*` 留空时，会复用聊天模型的 `API_KEY` 与 `BASE_URL`
 - `EMBEDDING_DIMENSION` 必须与 embedding 模型真实输出维度一致
 - `PERSONAL_USER_*` 定义本地单用户身份
@@ -88,7 +89,33 @@ docker-compose up -d
 2. 如果启用了 `ADMIN_API_KEY`，先在首页保存 Key
 3. 创建一个项目
 4. 进入项目后维护人物、世界观、章节和场景
-5. 在需要时使用 AI 建议、对话、记忆和导出
+5. 进入项目后的主入口是 Agent Workspace
+6. 直接输入自然语言指令，例如创建人物、修改设定、重写某一章节
+7. 先检查 Agent 生成的执行计划与预览，再确认执行
+8. 需要时再进入人物、世界观、章节、场景页面做手动复核或微调
+
+## Skill 配置
+
+Agent Workspace 默认使用后端内置的 planner skill 与 operation skills。它们位于 `backend/app/agent_skills/`，按 `planner / operations / references` 组织。
+
+如果你需要替换其中一部分行为，而不是直接改 Python 代码，可以在 `backend/.env` 中设置：
+
+```env
+AGENT_SKILLS_DIR=/absolute/path/to/your/agent_skills
+```
+
+覆盖目录只需要放你要替换的 skill 文件，未提供的部分会继续使用内置版本。目录结构保持一致即可，例如：
+
+```text
+custom-agent-skills/
+├── planner/
+│   └── SKILL.md
+└── operations/
+    └── write-chapter-content/
+        └── SKILL.md
+```
+
+运行中可以通过 `GET /api/v1/agent/skills` 查看当前实际加载的 planner 与 operation skills。
 
 ## 本地手动运行
 
@@ -161,7 +188,15 @@ make verify
 
 通常是已经设置了 `ADMIN_API_KEY`，但浏览器里还没有保存。回到首页保存一次即可。
 
-### 2. 记忆或 embedding 功能报错
+### 2. Agent 生成了计划，但没有真正修改数据
+
+这是当前设计的正常行为。项目主流程是“先计划、后执行”，所以 Agent 会先生成一组待确认操作；只有你点击确认执行后，数据才会真正写入。
+
+### 3. 我想替换某个写作或设定 skill
+
+优先使用 `AGENT_SKILLS_DIR` 覆盖内置 skill，而不是直接改后端代码。覆盖后可以访问 `GET /api/v1/agent/skills`，确认当前加载的是你自己的文件。
+
+### 4. 记忆或 embedding 功能报错
 
 优先检查：
 
@@ -170,7 +205,7 @@ make verify
 
 如果数据库已经按旧维度初始化，修改模型后需要同步迁移或重建。
 
-### 3. 前端容器运行时出现异常
+### 5. 前端容器运行时出现异常
 
 Docker 前端 dev server 使用 `frontend/.next-docker` 作为运行目录。这个目录不应在服务运行时手动删除；如果误删，执行一次：
 
