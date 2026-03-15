@@ -54,7 +54,7 @@
 - `app/services/`：业务编排与 Agent 主实现
 - `app/models/`：SQLAlchemy 模型
 - `app/schemas/`：Pydantic contract
-- `app/core/`：配置、安全、日志
+- `app/core/`：配置，安全，日志
 - `app/db/`：会话、初始化、迁移入口
 - `app/agent_skills/`：通用 skill
 - `app/agent_profiles/`：profile 覆盖
@@ -217,12 +217,111 @@
 - content transition 校验
 - domain-level semantic 校验
 
-### 当前覆盖的业务语义
+### Domain Verification 覆盖的业务语义
 
-- 章节序号
-- 场景序号
+#### Character
+
+- `character_name_empty`：名称不能为空
+- `character_name_duplicate`：同项目下名称唯一
+- `character_age_invalid`：年龄必须为非负整数
+
+#### WorldSetting
+
+- `world_setting_name_empty`：名称不能为空
+- `world_setting_content_empty`：内容不能为空
+- `world_setting_name_duplicate`：同分类下名称唯一
+
+#### Chapter/Scene
+
+- 章节序号唯一
+- 场景序号唯一
 - 卷归属
 - POV 人物归属
+
+## E2E 测试基础设施
+
+系统已集成 Playwright 作为浏览器级测试框架。
+
+### 核心组件
+
+- `playwright.config.ts`：Playwright 配置
+- `e2e/e2e.spec.ts`：E2E 测试用例
+- `e2e/fixtures/test-helpers.ts`：测试辅助函数
+- `e2e/fixtures/planner-responses.json`：Fixture planner 响应数据
+
+### Fixture Planner 模式
+
+通过环境变量启用测试专用的 planner 模式：
+
+- `AGENT_E2E_MODE=fixture`：启用 fixture 模式
+- `AGENT_E2E_FIXTURE_PATH`：指定 fixture 文件路径
+
+在 fixture 模式下，系统按消息全文精确匹配返回固定 planner 输出，不调用真实 LLM。
+
+### 前端测试标识
+
+关键 UI 节点添加了 `data-testid` 属性：
+
+- 首页：API key 输入与保存按钮
+- 新建项目：表单提交按钮
+- Agent Workspace：输入框、发送按钮、确认按钮、二次确认按钮
+- 项目详情页：导出按钮
+- 项目列表页：导入入口和上传确认按钮
+
+## 项目包导出导入
+
+系统支持完整项目数据的打包导出与恢复导入。
+
+### 导出接口
+
+```
+GET /api/v1/projects/{project_id}/package
+```
+
+导出为 ZIP 文件，包含：
+
+- `manifest.json`：包元信息（版本、导出时间、源项目信息、embedding 维度）
+- `project_bundle.json`：完整项目数据
+
+### 导入接口
+
+```
+POST /api/v1/projects/import
+```
+
+导入策略：
+
+- 始终创建新项目副本，不覆盖现有项目
+- 单事务内完成，任一步失败整单回滚
+- 所有对象重新生成 UUID，并维护旧 ID → 新 ID 映射
+- 重写所有引用关系（project_id、volume_id、chapter_id、pov_character_id、dependencies、snapshots）
+- `Memory.embedding` 仅在向量维度与当前 EMBEDDING_DIMENSION 一致时保留，否则置空并给出 `requires_reembed` warning
+
+### 导入响应
+
+```json
+{
+  "project_id": "uuid",
+  "project_name": "string",
+  "imported_counts": {
+    "characters": 5,
+    "world_settings": 10,
+    "volumes": 2,
+    "chapters": 20,
+    "scenes": 50,
+    "dependencies": 30,
+    "snapshots": 100,
+    "memories": 15
+  },
+  "warnings": [
+    {
+      "code": "embedding_dimension_mismatch",
+      "message": "string",
+      "details": {}
+    }
+  ]
+}
+```
 
 ## Compact Flow
 
@@ -264,7 +363,6 @@ compact 行为通过以下 contract 对外可见：
 当前范围明确排除：
 
 - 多实例协作与组织权限
-- 浏览器自动化 e2e
 - 真正独立运行的 child agent session
 - 面向公网的完整安全加固
 

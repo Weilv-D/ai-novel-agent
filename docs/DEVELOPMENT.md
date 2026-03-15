@@ -114,6 +114,14 @@ make verify
 - 前端 lint
 - 前端构建
 
+### E2E 测试
+
+```bash
+make e2e
+```
+
+E2E 测试使用 Playwright，运行时会启动隔离的后端（SQLite 临时库）和前端服务。
+
 ### 后端独立验证
 
 ```bash
