@@ -1390,6 +1390,8 @@ class AgentWorkflowService:
             if run.verification_status != AgentVerificationStatus.PASSED.value:
                 raise BadRequestException(run.verification_summary or "Run verification failed")
             await db.flush()
+            completed_run = await self.run_store.get(db, run_id_value)
+            return AgentRunActionResponse(run=await self._run_response(db, completed_run))
         except Exception as exc:
             logger.exception("Agent run %s failed", run_id_value)
             await db.rollback()
@@ -1435,8 +1437,6 @@ class AgentWorkflowService:
                     failed_continuity.error_message = str(exc)
             await db.flush()
             return AgentRunActionResponse(run=await self._run_response(db, failed_run))
-
-        return AgentRunActionResponse(run=await self._run_response(db, run))
 
     async def _load_project_context(
         self,
@@ -2389,11 +2389,68 @@ class AgentWorkflowService:
         self._validate_schema(CharacterUpdate, **updates)
         return updates
 
+    VALID_CATEGORY_VALUES = frozenset({
+        "magic_system",
+        "geography",
+        "history",
+        "organization",
+        "technology",
+        "culture",
+        "religion",
+        "economy",
+        "rules",
+        "other",
+    })
+
+    CATEGORY_ALIASES: dict[str, str] = {
+        "rule": "rules",
+        "rules": "rules",
+        "rulebook": "rules",
+        "law": "rules",
+        "lawbook": "rules",
+        "magic": "magic_system",
+        "magicsystem": "magic_system",
+        "spell": "magic_system",
+        "spell_system": "magic_system",
+        "geo": "geography",
+        "geographic": "geography",
+        "location": "geography",
+        "map": "geography",
+        "hist": "history",
+        "historical": "history",
+        "past": "history",
+        "org": "organization",
+        "organizations": "organization",
+        "group": "organization",
+        "faction": "organization",
+        "tech": "technology",
+        "technologies": "technology",
+        "cult": "culture",
+        "cultures": "culture",
+        "tradition": "culture",
+        "relig": "religion",
+        "religions": "religion",
+        "faith": "religion",
+        "god": "religion",
+        "deity": "religion",
+        "econom": "economy",
+        "economics": "economy",
+        "financial": "economy",
+        "trade": "economy",
+    }
+
+    def _normalize_category(self, category: str) -> str:
+        normalized = category.lower().strip()
+        if normalized in self.VALID_CATEGORY_VALUES:
+            return normalized
+        return self.CATEGORY_ALIASES.get(normalized, "other")
+
     def _filter_world_setting_create_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        category = str(payload.get("category") or "other")
+        raw_category = str(payload.get("category") or "other")
+        normalized_category = self._normalize_category(raw_category)
         normalized = {
             "name": str(payload.get("name", "")).strip(),
-            "category": category,
+            "category": normalized_category,
             "content": payload.get("content"),
             "meta": cast(dict[str, Any], payload.get("meta", {})),
         }
@@ -2406,7 +2463,10 @@ class AgentWorkflowService:
         updates: dict[str, Any] = {}
         for key in ["name", "category", "content", "meta"]:
             if key in payload:
-                updates[key] = payload[key]
+                value = payload[key]
+                if key == "category" and value is not None:
+                    value = self._normalize_category(str(value))
+                updates[key] = value
         self._validate_schema(WorldSettingUpdate, **updates)
         return updates
 

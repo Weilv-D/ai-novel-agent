@@ -358,7 +358,7 @@ function ChildUnitCard({ childUnit }: { childUnit: AgentExecutionChildUnit }) {
               capability:{capabilityId}
             </span>
           ))}
-          {childUnit.tool_scope.slice(0, 4).map((tool) => (
+          {Array.from(new Set(childUnit.tool_scope.slice(0, 4))).map((tool) => (
             <span key={tool} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
               {tool}
             </span>
@@ -619,9 +619,9 @@ export function AgentWorkspace({
         </CardContent>
       </Card>
 
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
+      <div className="flex min-h-[780px] flex-col gap-6">
+        <Card className="flex-1 overflow-hidden">
+          <CardHeader className="border-b border-[rgba(var(--line),0.12)] pb-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="ink-kicker">Current Run</p>
@@ -638,7 +638,7 @@ export function AgentWorkspace({
               {currentRun?.summary || "当前没有待确认计划。发送一条明确指令，Agent 会生成可执行步骤。"}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex flex-1 flex-col space-y-4">
             {currentRun ? (
               <>
                 {currentRun.warning_message && (
@@ -830,7 +830,7 @@ export function AgentWorkspace({
                           )}
                           {tools.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
-                              {tools.slice(0, 5).map((tool) => (
+                              {Array.from(new Set(tools.slice(0, 5))).map((tool) => (
                                 <span key={tool} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
                                   {tool}
                                 </span>
