@@ -3189,11 +3189,26 @@ class AgentWorkflowService:
         actual_content = self._target_content(target)
         operation.persisted_content_hash = _hash_text(actual_content)
         matched_fields, mismatched_fields = self._verify_operation_fields(operation=operation, target=target)
-        snapshot_linked, snapshot_summary = await self._verify_operation_snapshot_linkage(
+        snapshot, snapshot_summary = await self._verify_operation_snapshot_linkage(
             db,
             project_id=project_id,
             operation=operation,
         )
+        snapshot_semantics_ok = snapshot is not None
+        snapshot_semantic_summary: str | None = None
+        content_transition_ok = True
+        content_transition_summary: str | None = None
+        if snapshot is not None:
+            snapshot_semantics_ok, snapshot_semantic_summary = self._verify_operation_snapshot_semantics(
+                operation=operation,
+                snapshot=snapshot,
+                target=target,
+            )
+            content_transition_ok, content_transition_summary = self._verify_operation_content_transition(
+                operation=operation,
+                snapshot=snapshot,
+                target=target,
+            )
 
         content_match = (
             operation.preview_content_hash is None
@@ -3201,13 +3216,24 @@ class AgentWorkflowService:
         )
         summary_match = preview.after_summary is None or preview.after_summary == actual_summary
 
-        if content_match and summary_match and not mismatched_fields and snapshot_linked:
+        if (
+            content_match
+            and summary_match
+            and not mismatched_fields
+            and snapshot is not None
+            and snapshot_semantics_ok
+            and content_transition_ok
+        ):
             operation.verification_status = AgentVerificationStatus.PASSED.value
             verification_parts = ["预览与落库结果一致"]
             if matched_fields:
                 verification_parts.append(f"字段验证通过：{', '.join(matched_fields)}")
             if snapshot_summary:
                 verification_parts.append(snapshot_summary)
+            if snapshot_semantic_summary:
+                verification_parts.append(snapshot_semantic_summary)
+            if content_transition_summary:
+                verification_parts.append(content_transition_summary)
             operation.verification_summary = "；".join(verification_parts) + "。"
             return
 
@@ -3218,8 +3244,12 @@ class AgentWorkflowService:
             mismatches.append("内容 hash 不一致")
         if mismatched_fields:
             mismatches.append(f"字段不一致：{', '.join(mismatched_fields)}")
-        if not snapshot_linked and snapshot_summary:
+        if snapshot is None and snapshot_summary:
             mismatches.append(snapshot_summary)
+        if snapshot is not None and not snapshot_semantics_ok and snapshot_semantic_summary:
+            mismatches.append(snapshot_semantic_summary)
+        if snapshot is not None and not content_transition_ok and content_transition_summary:
+            mismatches.append(content_transition_summary)
         operation.verification_status = AgentVerificationStatus.FAILED.value
         operation.verification_summary = "；".join(mismatches)
         raise BadRequestException(f"Operation verification failed: {operation.verification_summary}")
@@ -3230,7 +3260,7 @@ class AgentWorkflowService:
         operation: AgentOperation,
         target: Character | WorldSetting | Chapter | Scene,
     ) -> tuple[list[str], list[str]]:
-        """Verify field-level updates for structured update operations."""
+        """Verify stable field values for create/update operations."""
         expected_updates = self._field_level_expected_updates(operation)
         if not expected_updates:
             return [], []
@@ -3259,28 +3289,43 @@ class AgentWorkflowService:
         *,
         project_id: uuid.UUID,
         operation: AgentOperation,
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[Snapshot | None, str | None]:
         """Verify that the operation carries a valid snapshot linkage."""
         raw_result = dict(operation.execution_result or {})
         raw_snapshot = raw_result.get("snapshot")
         if not isinstance(raw_snapshot, dict):
-            raw_result["snapshot_verification"] = {"status": "failed", "reason": "missing_snapshot_linkage"}
+            raw_result["snapshot_verification"] = {
+                "status": "failed",
+                "linkage_status": "failed",
+                "semantic_status": "skipped",
+                "reason": "missing_snapshot_linkage",
+            }
             operation.execution_result = raw_result
-            return False, "缺少快照联动"
+            return None, "缺少快照联动"
 
         snapshot_id = raw_snapshot.get("snapshot_id")
         stage = str(raw_snapshot.get("stage") or "")
         if snapshot_id is None or stage not in {"pre_update", "post_create"}:
-            raw_result["snapshot_verification"] = {"status": "failed", "reason": "invalid_snapshot_linkage"}
+            raw_result["snapshot_verification"] = {
+                "status": "failed",
+                "linkage_status": "failed",
+                "semantic_status": "skipped",
+                "reason": "invalid_snapshot_linkage",
+            }
             operation.execution_result = raw_result
-            return False, "快照联动无效"
+            return None, "快照联动无效"
 
         try:
             snapshot = await snapshot_service.get(db, id=uuid.UUID(str(snapshot_id)))
         except (NotFoundException, ValueError):
-            raw_result["snapshot_verification"] = {"status": "failed", "reason": "snapshot_missing"}
+            raw_result["snapshot_verification"] = {
+                "status": "failed",
+                "linkage_status": "failed",
+                "semantic_status": "skipped",
+                "reason": "snapshot_missing",
+            }
             operation.execution_result = raw_result
-            return False, "快照缺失"
+            return None, "快照缺失"
 
         if (
             snapshot.project_id != project_id
@@ -3288,17 +3333,170 @@ class AgentWorkflowService:
             or snapshot.target_id != operation.target_id
             or snapshot.target_type != str(operation.target_type)
         ):
-            raw_result["snapshot_verification"] = {"status": "failed", "reason": "snapshot_target_mismatch"}
+            raw_result["snapshot_verification"] = {
+                "status": "failed",
+                "linkage_status": "failed",
+                "semantic_status": "skipped",
+                "reason": "snapshot_target_mismatch",
+            }
             operation.execution_result = raw_result
-            return False, "快照目标不一致"
+            return None, "快照目标不一致"
 
         raw_result["snapshot_verification"] = {
             "status": "passed",
+            "linkage_status": "passed",
+            "semantic_status": "pending",
             "snapshot_id": str(snapshot.id),
             "stage": stage,
         }
         operation.execution_result = raw_result
-        return True, f"快照联动已校验：{stage}"
+        return snapshot, f"快照联动已校验：{stage}"
+
+    def _verify_operation_snapshot_semantics(
+        self,
+        *,
+        operation: AgentOperation,
+        snapshot: Snapshot,
+        target: Character | WorldSetting | Chapter | Scene,
+    ) -> tuple[bool, str]:
+        """Verify that the post-operation state matches the semantic transition from the snapshot."""
+        actual_data = _serialize_model(target)
+        expected_data = self._expected_target_from_snapshot(operation=operation, snapshot=snapshot)
+        comparable_fields = self._snapshot_semantic_fields(operation=operation, target=target)
+
+        matched_fields: list[str] = []
+        mismatched_fields: list[str] = []
+        for field_name in comparable_fields:
+            if actual_data.get(field_name) == expected_data.get(field_name):
+                matched_fields.append(field_name)
+            else:
+                mismatched_fields.append(field_name)
+
+        execution_result = dict(operation.execution_result or {})
+        snapshot_verification = dict(cast(dict[str, Any], execution_result.get("snapshot_verification", {})))
+        snapshot_verification["matched_fields"] = matched_fields
+        snapshot_verification["mismatched_fields"] = mismatched_fields
+        if mismatched_fields:
+            snapshot_verification["status"] = "failed"
+            snapshot_verification["semantic_status"] = "failed"
+            snapshot_verification["reason"] = "snapshot_semantic_mismatch"
+            execution_result["snapshot_verification"] = snapshot_verification
+            operation.execution_result = execution_result
+            return False, f"快照语义不一致：{', '.join(mismatched_fields)}"
+
+        snapshot_verification["status"] = "passed"
+        snapshot_verification["semantic_status"] = "passed"
+        execution_result["snapshot_verification"] = snapshot_verification
+        operation.execution_result = execution_result
+        stage = str(snapshot_verification.get("stage") or "unknown")
+        return True, f"快照语义已校验：{stage}"
+
+    def _verify_operation_content_transition(
+        self,
+        *,
+        operation: AgentOperation,
+        snapshot: Snapshot,
+        target: Character | WorldSetting | Chapter | Scene,
+    ) -> tuple[bool, str | None]:
+        """Verify content transition semantics for explicit write operations."""
+        if operation.tool_name not in {"write_chapter_content", "write_scene_content"}:
+            return True, None
+
+        payload = dict(operation.payload or {})
+        mode = str(payload.get("mode", "replace"))
+        incoming_content = str(payload.get("content", "")).strip()
+        previous_content = cast(str | None, snapshot.data.get("content") if isinstance(snapshot.data, dict) else None)
+        actual_content = self._target_content(target)
+        expected_content = self._apply_text_mode(previous_content, incoming_content, mode)
+
+        checks: dict[str, bool] = {
+            "matches_expected_content": actual_content == expected_content,
+            "incoming_content_applied": actual_content == incoming_content if mode == "replace" else bool(actual_content and actual_content.endswith(incoming_content)),
+        }
+        mismatch_reasons: list[str] = []
+
+        if not checks["matches_expected_content"]:
+            mismatch_reasons.append("expected_content_mismatch")
+        if not checks["incoming_content_applied"]:
+            mismatch_reasons.append("incoming_content_not_applied")
+
+        if mode == "append":
+            previous_excerpt = (previous_content or "").strip()
+            checks["existing_content_retained"] = not previous_excerpt or bool(actual_content and previous_excerpt in actual_content)
+            if not checks["existing_content_retained"]:
+                mismatch_reasons.append("existing_content_not_retained")
+
+        execution_result = dict(operation.execution_result or {})
+        execution_result["content_transition_verification"] = {
+            "status": "failed" if mismatch_reasons else "passed",
+            "mode": mode,
+            "before_content_hash": _hash_text(previous_content),
+            "expected_content_hash": _hash_text(expected_content),
+            "actual_content_hash": _hash_text(actual_content),
+            "checks": checks,
+            "mismatch_reasons": mismatch_reasons,
+        }
+        operation.execution_result = execution_result
+
+        if mismatch_reasons:
+            reason_labels = {
+                "expected_content_mismatch": "目标正文与预期不一致",
+                "incoming_content_not_applied": "新增正文未落库",
+                "existing_content_not_retained": "原正文未保留",
+            }
+            rendered = ", ".join(reason_labels[reason] for reason in mismatch_reasons)
+            return False, f"内容迁移不一致：{rendered}"
+        return True, f"内容迁移已校验：{mode}"
+
+    def _expected_target_from_snapshot(
+        self,
+        *,
+        operation: AgentOperation,
+        snapshot: Snapshot,
+    ) -> dict[str, Any]:
+        """Build the expected post-operation state using the snapshot and operation payload."""
+        expected_data = dict(snapshot.data or {})
+        payload = dict(operation.payload or {})
+
+        if operation.tool_name in {
+            "update_character",
+            "update_world_setting",
+            "update_chapter",
+            "update_scene",
+        }:
+            updates = payload.get("updates", {})
+            if isinstance(updates, dict):
+                expected_data.update(_json_ready(updates))
+            return expected_data
+
+        if operation.tool_name in {"write_chapter_content", "write_scene_content"}:
+            existing_content = cast(str | None, expected_data.get("content"))
+            next_content = self._apply_text_mode(
+                existing_content,
+                str(payload.get("content", "")),
+                str(payload.get("mode", "replace")),
+            )
+            expected_data["content"] = next_content
+            return expected_data
+
+        return expected_data
+
+    def _snapshot_semantic_fields(
+        self,
+        *,
+        operation: AgentOperation,
+        target: Character | WorldSetting | Chapter | Scene,
+    ) -> list[str]:
+        """Return stable business fields used for snapshot semantic verification."""
+        if isinstance(target, Character):
+            return ["project_id", "name", "role", "profile", "relationships", "arc_state", "notes"]
+        if isinstance(target, WorldSetting):
+            return ["project_id", "category", "name", "content", "meta"]
+        if isinstance(target, Chapter):
+            return ["project_id", "volume_id", "chapter_number", "title", "outline", "content", "status", "notes"]
+        if isinstance(target, Scene):
+            return ["chapter_id", "scene_order", "pov_character_id", "location", "content", "meta"]
+        raise BadRequestException(f"Unsupported target for snapshot semantic verification: {operation.tool_name}")
 
     async def _create_operation_snapshot(
         self,
@@ -3330,13 +3528,19 @@ class AgentWorkflowService:
         return snapshot
 
     def _field_level_expected_updates(self, operation: AgentOperation) -> dict[str, Any]:
-        """Return comparable expected field values for structured update operations."""
-        if operation.tool_name not in {
-            "update_character",
-            "update_world_setting",
-            "update_chapter",
-            "update_scene",
+        """Return comparable expected field values for create/update operations."""
+        if operation.tool_name in {
+            "create_character",
+            "create_world_setting",
+            "create_chapter",
+            "create_scene",
         }:
+            comparable_fields: dict[str, Any] = {}
+            for field_name, value in operation.payload.items():
+                comparable_fields[str(field_name)] = _json_ready(value)
+            return comparable_fields
+
+        if operation.tool_name not in {"update_character", "update_world_setting", "update_chapter", "update_scene"}:
             return {}
 
         raw_updates = operation.payload.get("updates", {})

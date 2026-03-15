@@ -141,20 +141,22 @@
 - 内容型 operation 已记录：
   - `preview_content_hash`
   - `persisted_content_hash`
-- 非正文类 `update_*` 已接入字段级 verification，会按 `payload.updates` 对落库结果逐字段比对
-- operation 的 `execution_result` 已记录 snapshot linkage，verification 会校验 snapshot 是否真实存在且与目标对象一致
+- `create_*` 与非正文类 `update_*` 已接入字段级 verification，会按 payload 对落库结果逐字段比对
+- operation 的 `execution_result` 已记录 snapshot linkage，verification 会校验 snapshot 是否真实存在、与目标对象一致，并验证从 snapshot 推导出的预期落库状态是否成立
+- `write_*_content` 已接入 content transition verification，会验证 replace / append 模式下的正文迁移是否符合预期
 - 执行完成后会验证：
   - 目标对象存在
   - 摘要与预览一致
   - 内容 hash 与 planning 阶段一致
-  - 结构化更新字段与预期值一致
-  - snapshot linkage 有效
+  - create/update 字段与预期值一致
+  - snapshot linkage 与 snapshot-derived semantics 有效
+  - content transition 与 write mode 语义一致
   - continuity gate 未阻断
 
 后续收口：
 
-- 把当前字段级 verification 从结构化 `update_*` 扩展到更多对象与更细粒度结果
-- 把当前 snapshot linkage 从存在性校验推进到变更前后语义校验
+- 把当前字段级 verification 从 create/update 扩展到更多对象与更细粒度结果
+- 把当前 snapshot semantic verification 与 content transition verification 从稳定字段比对推进到更细的 domain-level 语义校验
 - 在前端提供更清晰的“执行成功但建议人工复核”的分类展示
 
 ### Phase 5: 上下文压缩与长期线程

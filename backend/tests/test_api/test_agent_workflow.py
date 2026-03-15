@@ -139,6 +139,15 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert confirmed_run["status"] == "completed"
     assert confirmed_run["meta"]["hook_trace"][-1]["hook_name"] == "RunStop"
     assert confirmed_run["meta"]["hook_trace"][-1]["status"] == "completed"
+    assert confirmed_run["operations"][0]["execution_result"]["field_verification"]["matched_fields"] == [
+        "name",
+        "role",
+        "profile",
+        "relationships",
+        "arc_state",
+        "notes",
+    ]
+    assert confirmed_run["operations"][0]["execution_result"]["field_verification"]["mismatched_fields"] == []
 
     characters_response = await client.get(f"/api/v1/characters/project/{project_id}")
     assert characters_response.status_code == 200
@@ -234,11 +243,12 @@ async def test_revision_supersedes_previous_run_and_updates_setting(
     assert confirmed_run["verification_status"] == "passed"
     assert (
         confirmed_run["operations"][0]["verification_summary"]
-        == "预览与落库结果一致；字段验证通过：content；快照联动已校验：pre_update。"
+        == "预览与落库结果一致；字段验证通过：content；快照联动已校验：pre_update；快照语义已校验：pre_update。"
     )
     assert confirmed_run["operations"][0]["execution_result"]["field_verification"]["matched_fields"] == ["content"]
     assert confirmed_run["operations"][0]["execution_result"]["snapshot"]["stage"] == "pre_update"
     assert confirmed_run["operations"][0]["execution_result"]["snapshot_verification"]["status"] == "passed"
+    assert confirmed_run["operations"][0]["execution_result"]["snapshot_verification"]["semantic_status"] == "passed"
 
     settings_response = await client.get(f"/api/v1/world-settings/project/{project_id}")
     assert settings_response.status_code == 200
@@ -306,7 +316,7 @@ async def test_update_character_structured_fields_are_verified(
     assert run["verification_status"] == "passed"
     assert (
         run["operations"][0]["verification_summary"]
-        == "预览与落库结果一致；字段验证通过：role, profile, notes；快照联动已校验：pre_update。"
+        == "预览与落库结果一致；字段验证通过：role, profile, notes；快照联动已校验：pre_update；快照语义已校验：pre_update。"
     )
     assert run["operations"][0]["execution_result"]["field_verification"]["matched_fields"] == [
         "role",
@@ -316,6 +326,7 @@ async def test_update_character_structured_fields_are_verified(
     assert run["operations"][0]["execution_result"]["field_verification"]["mismatched_fields"] == []
     assert run["operations"][0]["execution_result"]["snapshot"]["stage"] == "pre_update"
     assert run["operations"][0]["execution_result"]["snapshot_verification"]["status"] == "passed"
+    assert run["operations"][0]["execution_result"]["snapshot_verification"]["semantic_status"] == "passed"
 
 
 @pytest.mark.asyncio
@@ -455,7 +466,89 @@ async def test_missing_snapshot_linkage_fails_verification(
     assert run["operations"][0]["verification_status"] == "failed"
     assert "快照缺失" in (run["operations"][0]["verification_summary"] or "")
     assert run["operations"][0]["execution_result"]["snapshot_verification"]["status"] == "failed"
+    assert run["operations"][0]["execution_result"]["snapshot_verification"]["semantic_status"] == "skipped"
     assert run["operations"][0]["execution_result"]["snapshot_verification"]["reason"] == "snapshot_missing"
+
+
+@pytest.mark.asyncio
+async def test_snapshot_semantic_verification_blocks_unplanned_side_effects(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RunStop should fail when persisted state diverges from the snapshot-derived expectation."""
+    project_id = await create_project(client, name="Snapshot Semantic Verification")
+    thread_id = await create_thread(client, project_id)
+
+    character_response = await client.post(
+        "/api/v1/characters",
+        json={
+            "project_id": project_id,
+            "name": "顾迟",
+            "role": "幕僚",
+            "profile": {"temper": "克制"},
+            "relationships": {"太子": "旧盟友"},
+            "notes": "旧注记",
+        },
+    )
+    assert character_response.status_code == 201
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会先更新人物注记，再等你确认。",
+                summary="更新人物 顾迟",
+                operations=[
+                    {
+                        "tool_name": "update_character",
+                        "description": "更新顾迟注记",
+                        "reason": "用户要求补充人物近况",
+                        "payload": {
+                            "character_name": "顾迟",
+                            "updates": {
+                                "notes": "已补上新的近况。",
+                            },
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    async def fake_character_update(*args: object, **kwargs: object) -> object:
+        db = args[0]
+        db_obj = kwargs["db_obj"]
+        db_obj.notes = "已补上新的近况。"
+        db_obj.relationships = {"太子": "决裂"}
+        await db.flush()
+        await db.refresh(db_obj)
+        return db_obj
+
+    monkeypatch.setattr(agent_workflow_module.character_service, "update", fake_character_update)
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "给顾迟补一句近况注记"},
+    )
+    assert message.status_code == 200
+
+    confirm = await client.post(f"/api/v1/agent/runs/{message.json()['run']['id']}/confirm")
+    assert confirm.status_code == 200
+    run = confirm.json()["run"]
+
+    assert run["status"] == "failed"
+    assert run["verification_status"] == "failed"
+    assert "快照语义不一致：relationships" in (run["verification_summary"] or "")
+    operation = run["operations"][0]
+    assert operation["verification_status"] == "failed"
+    assert "快照语义不一致：relationships" in (operation["verification_summary"] or "")
+    assert operation["execution_result"]["field_verification"]["matched_fields"] == ["notes"]
+    assert operation["execution_result"]["field_verification"]["mismatched_fields"] == []
+    assert operation["execution_result"]["snapshot_verification"]["status"] == "failed"
+    assert operation["execution_result"]["snapshot_verification"]["semantic_status"] == "failed"
+    assert operation["execution_result"]["snapshot_verification"]["reason"] == "snapshot_semantic_mismatch"
+    assert operation["execution_result"]["snapshot_verification"]["mismatched_fields"] == ["relationships"]
 
 
 @pytest.mark.asyncio
@@ -510,11 +603,93 @@ async def test_write_chapter_content_flow(client: AsyncClient, monkeypatch: pyte
 
     confirm = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
     assert confirm.status_code == 200
-    assert confirm.json()["run"]["warning_message"] is not None
+    confirmed_run = confirm.json()["run"]
+    assert confirmed_run["warning_message"] is not None
+    assert "内容迁移已校验：replace" in (confirmed_run["operations"][0]["verification_summary"] or "")
+    assert confirmed_run["operations"][0]["execution_result"]["content_transition_verification"]["status"] == "passed"
+    assert confirmed_run["operations"][0]["execution_result"]["content_transition_verification"]["mode"] == "replace"
 
     chapter = await client.get(f"/api/v1/chapters/{chapter_id}")
     assert chapter.status_code == 200
     assert chapter.json()["content"] == "雨夜压城，灯影像刀一样切过长街。"
+
+
+@pytest.mark.asyncio
+async def test_append_write_verification_catches_transition_errors(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Append writes should fail verification when the persisted transition drops previous content."""
+    project_id = await create_project(client, name="Append Verification Test")
+    thread_id = await create_thread(client, project_id)
+
+    chapter_response = await client.post(
+        "/api/v1/chapters",
+        json={
+            "project_id": project_id,
+            "chapter_number": 3,
+            "title": "残灯",
+            "content": "旧正文",
+        },
+    )
+    assert chapter_response.status_code == 201
+    chapter_id = chapter_response.json()["id"]
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会给第三章续写一个收束段落。",
+                summary="续写第三章",
+                operations=[
+                    {
+                        "tool_name": "write_chapter_content",
+                        "description": "续写第三章正文",
+                        "reason": "用户要求追加结尾段落",
+                        "payload": {
+                            "chapter_id": chapter_id,
+                            "mode": "append",
+                            "content": "新尾段",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    async def fake_chapter_update(*args: object, **kwargs: object) -> object:
+        db = args[0]
+        db_obj = kwargs["db_obj"]
+        db_obj.content = "新尾段"
+        await db.flush()
+        await db.refresh(db_obj)
+        return db_obj
+
+    monkeypatch.setattr(agent_workflow_module.chapter_service, "update", fake_chapter_update)
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "给第三章补一个收束尾段"},
+    )
+    assert message.status_code == 200
+
+    confirm = await client.post(f"/api/v1/agent/runs/{message.json()['run']['id']}/confirm")
+    assert confirm.status_code == 200
+    run = confirm.json()["run"]
+
+    assert run["status"] == "failed"
+    assert run["verification_status"] == "failed"
+    assert "内容迁移不一致" in (run["verification_summary"] or "")
+    operation = run["operations"][0]
+    assert operation["verification_status"] == "failed"
+    assert "内容迁移不一致" in (operation["verification_summary"] or "")
+    assert operation["execution_result"]["content_transition_verification"]["status"] == "failed"
+    assert operation["execution_result"]["content_transition_verification"]["mode"] == "append"
+    assert operation["execution_result"]["content_transition_verification"]["mismatch_reasons"] == [
+        "expected_content_mismatch",
+        "existing_content_not_retained",
+    ]
 
 
 @pytest.mark.asyncio
