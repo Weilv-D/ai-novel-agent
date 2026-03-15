@@ -9,7 +9,6 @@ from app.api.deps import get_db
 from app.models.dependency import Dependency
 from app.schemas.dependency import (
     DependencyCreate,
-    DependencyEntityTypeLiteral,
     DependencyResponse,
     DependencyUpdate,
     ImpactAnalysisRequest,

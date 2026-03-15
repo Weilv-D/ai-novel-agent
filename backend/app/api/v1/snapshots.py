@@ -14,7 +14,6 @@ from app.schemas.snapshot import (
     RollbackResponse,
     SnapshotCreate,
     SnapshotResponse,
-    SnapshotTargetTypeLiteral,
     SnapshotUpdate,
 )
 from app.services.snapshot import snapshot_service
