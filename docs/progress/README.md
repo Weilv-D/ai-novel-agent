@@ -1,8 +1,7 @@
 # Progress Notes
 
-更完整的当前状态已经收敛到：
+阶段性记录不再作为主文档维护。当前有效文档入口如下：
 
-- [../STATUS.md](../STATUS.md)
-- [../DEVELOPMENT.md](../DEVELOPMENT.md)
-
-这个目录保留为后续阶段性记录入口，不再维护重复的功能矩阵。
+- [项目状态](../STATUS.md)
+- [当前技术实现](../TECH_IMPLEMENTATION.md)
+- [演进计划](../IMPLEMENTATION_PLAN.md)

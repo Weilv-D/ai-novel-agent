@@ -1,25 +1,40 @@
 # AI Novel Agent
 
-AI Novel Agent 是一个面向个人长期创作的 Agent 化长篇小说工作台。它把项目管理、人物设定、世界观、章节场景、记忆检索与导出整合在同一套流程里，但主入口不再是零散表单，而是项目内的 Agent Workspace。
+AI Novel Agent 是一个面向个人长期创作的 Agent 化小说工作台。它把项目、人物、世界观、章节、场景、记忆检索与导出放进同一套工作流里，并以项目内的 Agent Workspace 作为主入口。
 
+这个仓库当前服务于独立实例使用场景。系统不实现用户注册、登录和项目归属用户模型；访问控制保留为实例级 API key。
+
+## 产品形态
+
+AI Novel Agent 由三部分组成：
+
+- 前端工作台：Next.js App Router，负责项目界面、Agent Workspace 和对象编辑页
+- 后端服务：FastAPI，负责数据持久化、Agent 工作流、风险控制、校验与导出
+- 基础设施：PostgreSQL、pgvector、Redis，以及本地 Docker Compose 运行环境
 
 ## 核心能力
 
-- 项目管理：建立作品、维护题材、受众、目标字数与摘要
-- 角色与世界观：沉淀人物档案、设定条目与背景信息
-- 章节与场景：按创作结构推进内容，而不是散落在独立文档里
-- Agent Workspace：用自然语言下达创作与修改指令，先看完整计划与预览，再确认执行
-- Agent Profile：项目可绑定不同写作 profile；当前内置 `default` 与 `xianxia_intrigue`
-- Hook Trace：工作台会显示内部生命周期阶段，便于理解 planning / validation / compaction 状态
-- 长线程压缩：工作台可见 checkpoint、planner window、retained window 与 active bundle 边界
-- 记忆与检索：支持 embedding 驱动的内容记忆
-- 内容导出：导出 TXT 与 Markdown
+- 项目管理：维护作品名称、题材、摘要、目标字数与 profile
+- 人物与世界观：管理角色档案、关系、设定与背景条目
+- 章节与场景：按卷、章、场景组织创作内容
+- Agent Workspace：用自然语言提出创作、修改、续写和重构指令
+- Preview-first 流程：Agent 先生成计划和预览，再确认执行
+- 风险控制：高风险正文覆盖需要二次确认
+- Verification Gate：落库结果经过字段、快照、内容迁移和业务语义校验
+- 长线程压缩：使用 checkpoint、planner window、retained window 和 active bundle contract 管理长期上下文
+- Profile / Skill 体系：项目可绑定不同写作 profile，并用文件化 skill 规范 planner 和 operation
+- 记忆检索与导出：支持 embedding、相似检索、TXT / Markdown 导出
 
-## 推荐运行方式
+## 运行方式
 
-推荐使用 Docker Compose。它会同时启动前端、后端、PostgreSQL 和 Redis，适合作为本地长期使用环境。
+推荐使用 Docker Compose。它会同时启动：
 
-### 运行前准备
+- 前端 `frontend`
+- 后端 `backend`
+- PostgreSQL
+- Redis
+
+### 前置条件
 
 - Docker
 - Docker Compose
@@ -35,7 +50,7 @@ cd backend
 cp .env.example .env
 ```
 
-至少需要确认以下配置：
+至少确认以下配置：
 
 ```env
 LLM_API_KEY=你的聊天模型API_KEY
@@ -47,19 +62,16 @@ EMBEDDING_BASE_URL=
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSION=1536
 
-PERSONAL_USER_EMAIL=writer@local
-PERSONAL_USER_NAME=Personal Writer
 ADMIN_API_KEY=
 ```
 
-配置要点：
+配置说明：
 
-- `LLM_*` 用于聊天与生成
-- `AGENT_SKILLS_DIR` 可选；留空时使用内置 profiles，指向自定义目录后可新增或覆盖某个 profile
+- `LLM_*` 用于对话、规划和正文生成
 - `EMBEDDING_*` 留空时，会复用聊天模型的 `API_KEY` 与 `BASE_URL`
-- `EMBEDDING_DIMENSION` 必须与 embedding 模型真实输出维度一致
-- `PERSONAL_USER_*` 定义本地单用户身份
-- `ADMIN_API_KEY` 可选；启用后，前端首页会提供本地保存入口
+- `EMBEDDING_DIMENSION` 必须和 embedding 模型真实输出维度一致
+- `ADMIN_API_KEY` 可选；配置后，业务接口要求客户端在指定请求头中携带它
+- `AGENT_SKILLS_DIR` 可选；用于新增或覆盖 profile 根目录
 
 ### 2. 启动服务
 
@@ -68,56 +80,50 @@ cd infra
 docker compose up -d
 ```
 
-如果你的环境仍使用旧命令，也可以执行：
-
-```bash
-docker-compose up -d
-```
-
-### 3. 访问服务
+### 3. 打开工作台
 
 - 前端：`http://localhost:3000`
 - 后端文档：`http://localhost:8000/docs`
 - 健康检查：`http://localhost:8000/api/v1/health`
-- PostgreSQL（宿主机访问）：`localhost:5433`
+- PostgreSQL 宿主机端口：`5433`
 
-说明：
+## 使用流程
 
-- 宿主机数据库端口固定映射到 `5433`，用于避开本机已有的 `5432`
-- 健康检查会返回 API 存活状态，以及数据库和 Redis 的实时连通性
+1. 打开首页。
+2. 如果启用了 `ADMIN_API_KEY`，先在首页保存访问 key。
+3. 创建项目，并为项目选择合适的 Agent profile。
+4. 进入项目详情页，使用 Agent Workspace 提出自然语言指令。
+5. 检查 run 生成的 operation 计划、diff 预览、风险摘要和内部执行摘要。
+6. 完成一次确认，必要时完成高风险二次确认。
+7. 在人物、设定、章节、场景页面做复核或局部手工调整。
 
-## 首次使用流程
+Agent Workspace 适合处理这些任务：
 
-1. 打开首页
-2. 如果启用了 `ADMIN_API_KEY`，先在首页保存 Key
-3. 创建一个项目
-4. 进入项目后维护人物、世界观、章节和场景
-5. 进入项目后的主入口是 Agent Workspace
-6. 直接输入自然语言指令，例如创建人物、修改设定、重写某一章节
-7. 先检查 Agent 生成的执行计划与预览，再确认执行
-8. 如果计划包含高风险正文覆盖，系统会要求二次确认
-9. 需要时再进入人物、世界观、章节、场景页面做手动复核或微调
-10. 线程足够长时，工作台会展示最新 checkpoint 摘要，以及当前 planner 实际保留的历史窗口和上下文边界
+- 创建新人物
+- 修改角色关系或设定条目
+- 创建章节、场景与结构信息
+- 续写或重写章节正文
+- 根据现有上下文进行一致性修订
 
-## Skill 配置
+## Profile 与 Skill
 
-Agent Workspace 默认使用后端内置的 profile-aware skills。
-
-- 通用 profile：`backend/app/agent_skills/`
-- 仙侠权谋 profile：`backend/app/agent_profiles/xianxia_intrigue/`
-
-项目级 profile 在创建项目或编辑项目时选择。当前内置：
+项目级 profile 决定 planner 和 operation skill 的组合。当前内置：
 
 - `default`
 - `xianxia_intrigue`
 
-如果你需要替换其中一部分行为，而不是直接改 Python 代码，可以在 `backend/.env` 中设置：
+默认 skill 位置：
+
+- 通用 skill：`backend/app/agent_skills/`
+- profile 覆盖：`backend/app/agent_profiles/`
+
+如果需要自定义 profile，可在 `backend/.env` 中设置：
 
 ```env
-AGENT_SKILLS_DIR=/absolute/path/to/your/agent_profiles
+AGENT_SKILLS_DIR=/absolute/path/to/custom-agent-profiles
 ```
 
-覆盖目录只需要放你要新增或替换的 profile，未提供的部分会继续使用内置版本。目录结构保持 profile 根目录形式，例如：
+覆盖目录按 profile 根目录组织，例如：
 
 ```text
 custom-agent-profiles/
@@ -129,15 +135,42 @@ custom-agent-profiles/
             └── SKILL.md
 ```
 
-运行中可以通过以下接口检查当前配置：
+运行时可通过以下接口查看实际加载结果：
 
 - `GET /api/v1/agent/profiles`
 - `GET /api/v1/agent/skills`
 - `GET /api/v1/agent/skills?project_id=...`
+- `GET /api/v1/agent/risk-policies`
+
+## 运行检查
+
+启动后建议先检查一次健康接口：
+
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+典型返回：
+
+```json
+{
+  "status": "healthy",
+  "mode": "standalone",
+  "database": "healthy",
+  "redis": "healthy"
+}
+```
+
+说明：
+
+- `status` 表示 API 本身可响应
+- `database` 表示数据库连通性
+- `redis` 表示 Redis 连通性
+- `mode=standalone` 表示当前实例按独立工作台方式运行
 
 ## 本地手动运行
 
-如果你不使用 Docker，需要自行准备 PostgreSQL 与 Redis。
+如果不使用 Docker，需要自行准备 PostgreSQL 与 Redis。
 
 ### 后端
 
@@ -158,31 +191,6 @@ npm install
 npm run dev
 ```
 
-## 运行检查
-
-推荐在启动后先检查一次健康接口：
-
-```bash
-curl http://localhost:8000/api/v1/health
-```
-
-典型返回结构：
-
-```json
-{
-  "status": "healthy",
-  "mode": "single_user",
-  "database": "healthy",
-  "redis": "healthy"
-}
-```
-
-其中：
-
-- `status` 表示 API 本身可响应
-- `database` 表示数据库连通性
-- `redis` 表示 Redis 连通性
-
 ## 常用命令
 
 ```bash
@@ -202,19 +210,19 @@ make verify
 
 ## 常见问题
 
-### 1. 页面能打开，但接口返回 401 / 403
+### 接口返回 401 / 403
 
-通常是已经设置了 `ADMIN_API_KEY`，但浏览器里还没有保存。回到首页保存一次即可。
+通常是实例启用了 `ADMIN_API_KEY`，但浏览器还没有保存 key。回到首页保存一次即可。
 
-### 2. Agent 生成了计划，但没有真正修改数据
+### Agent 已生成计划，但数据没有变化
 
-这是当前设计的正常行为。项目主流程是“先计划、后执行”，所以 Agent 会先生成一组待确认操作；只有你点击确认执行后，数据才会真正写入。
+这是设计使然。系统遵循 preview-first、confirm-then-execute 流程；只有确认执行后，数据才会真正落库。
 
-### 3. 我想替换某个写作或设定 skill
+### 想替换某个写作 skill
 
-优先使用 `AGENT_SKILLS_DIR` 覆盖内置 skill，而不是直接改后端代码。覆盖后可以访问 `GET /api/v1/agent/skills`，确认当前加载的是你自己的文件。
+优先使用 `AGENT_SKILLS_DIR` 覆盖 profile 根目录，再通过 `GET /api/v1/agent/skills` 验证加载结果。
 
-### 4. 记忆或 embedding 功能报错
+### embedding 报维度错误
 
 优先检查：
 
@@ -223,33 +231,34 @@ make verify
 
 如果数据库已经按旧维度初始化，修改模型后需要同步迁移或重建。
 
-### 5. 前端容器运行时出现异常
+### 前端容器运行时报错
 
-Docker 前端 dev server 使用 `frontend/.next-docker` 作为运行目录。这个目录不应在服务运行时手动删除；如果误删，执行一次：
+Docker 前端 dev server 使用 `frontend/.next-docker` 作为运行目录。这个目录不应在服务运行时手动删除；如果误删，执行：
 
 ```bash
 cd infra
 docker compose restart frontend
 ```
 
-即可恢复。
-
-## 项目结构
+## 仓库结构
 
 ```text
 ai-novel-agent/
 ├── backend/      # FastAPI 后端
 ├── frontend/     # Next.js 前端
 ├── infra/        # Docker Compose 配置
-├── docs/         # 开发与状态说明
-└── Makefile      # 常用校验命令
+├── docs/         # 使用、开发、实现与架构文档
+└── Makefile      # 常用验证命令
 ```
 
-## 延伸文档
+## 文档索引
 
-- [开发手册](docs/DEVELOPMENT.md)
-- [项目状态](docs/STATUS.md)
 - [后端手册](backend/README.md)
+- [开发手册](docs/DEVELOPMENT.md)
+- [当前技术实现](docs/TECH_IMPLEMENTATION.md)
+- [目标架构](docs/TECH_ARCH.md)
+- [项目状态](docs/STATUS.md)
+- [演进计划](docs/IMPLEMENTATION_PLAN.md)
 
 ## License
 

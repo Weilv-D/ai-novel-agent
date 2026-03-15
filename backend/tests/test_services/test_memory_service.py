@@ -1,7 +1,5 @@
 """Integration tests for Memory service layer with real DB."""
 
-from uuid import uuid4
-
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,11 +19,9 @@ class TestMemoryServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_empty(self, db_session: AsyncSession):
         """Test get_by_project returns empty list when no memories exist."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         result = await memory_service.get_by_project(db_session, project_id=project.id)
@@ -34,16 +30,13 @@ class TestMemoryServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_memories(self, db_session: AsyncSession):
         """Test get_by_project returns memories for specific project."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
-        other_project = await project_service.create_with_user(
+        other_project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Other Project", genre="Sci-Fi"),
-            user_id=user_id,
         )
 
         # Create memories for different projects
@@ -85,11 +78,9 @@ class TestMemoryServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_type_filter(self, db_session: AsyncSession):
         """Test get_by_project filtered by memory type."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create memories of different types
@@ -126,11 +117,9 @@ class TestMemoryServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_valid(self, db_session: AsyncSession):
         """Test creating a memory with valid data."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         mem_in = MemoryCreate(
@@ -155,11 +144,9 @@ class TestMemoryServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_embedding(self, db_session: AsyncSession):
         """Test creating a memory with vector embedding."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         embedding = [0.1] * EMBEDDING_DIMENSION
@@ -186,11 +173,9 @@ class TestMemoryServiceUpdate:
     @pytest.mark.asyncio
     async def test_update_partial(self, db_session: AsyncSession):
         """Test updating specific fields of a memory."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         memory = await memory_service.create_with_project(
@@ -216,11 +201,9 @@ class TestMemoryServiceUpdate:
     @pytest.mark.asyncio
     async def test_update_with_embedding(self, db_session: AsyncSession):
         """Test updating memory with new embedding."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         memory = await memory_service.create_with_project(
@@ -251,11 +234,9 @@ class TestMemoryServiceCount:
     @pytest.mark.asyncio
     async def test_count_by_project(self, db_session: AsyncSession):
         """Test counting memories for a project."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create some memories
@@ -276,11 +257,9 @@ class TestMemoryServiceCount:
     @pytest.mark.asyncio
     async def test_count_by_project_with_type_filter(self, db_session: AsyncSession):
         """Test counting memories filtered by type."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create memories of different types
@@ -324,11 +303,9 @@ class TestMemoryServiceSearchByEmbedding:
     @pytest.mark.asyncio
     async def test_search_by_embedding_invalid_dimension(self, db_session: AsyncSession):
         """Test search with invalid embedding dimension (no pgvector required)."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         with pytest.raises(BadRequestException) as exc_info:

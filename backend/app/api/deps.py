@@ -6,7 +6,6 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.personal import PersonalUser, get_personal_user
 from app.db import async_session_maker
 
 
@@ -23,8 +22,8 @@ async def get_db() -> AsyncIterator[AsyncSession]:
             await session.close()
 
 
-async def get_current_user(request: Request) -> PersonalUser:
-    """Return the configured single user, optionally enforcing API key access."""
+async def require_api_access(request: Request) -> None:
+    """Enforce configured API key access for protected routes."""
     settings = get_settings()
     expected_api_key = settings.admin_api_key.strip()
     if expected_api_key:
@@ -39,4 +38,3 @@ async def get_current_user(request: Request) -> PersonalUser:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid API key",
             )
-    return get_personal_user()

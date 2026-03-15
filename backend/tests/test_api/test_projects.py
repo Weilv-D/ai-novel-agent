@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, patch
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from app.core.personal import PERSONAL_USER_ID
 from app.main import app
 from app.schemas.project import ProjectResponse
 
@@ -19,14 +18,13 @@ class TestListProjects:
         """Test listing projects when none exist."""
         client = TestClient(app)
 
-        with patch("app.api.v1.projects.project_service.get_by_user", new_callable=AsyncMock) as mock_get:
+        with patch("app.api.v1.projects.project_service.list_projects", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = []
 
             response = client.get("/api/v1/projects")
 
             assert response.status_code == status.HTTP_200_OK
             assert response.json() == []
-            assert mock_get.await_args.kwargs["user_id"] == PERSONAL_USER_ID
 
     def test_list_projects_with_data(self):
         """Test listing projects with existing data."""
@@ -35,7 +33,6 @@ class TestListProjects:
         # Use actual ProjectResponse for mock
         mock_response = ProjectResponse(
             id=uuid.uuid4(),
-            user_id=uuid.uuid4(),
             name="Test Novel",
             genre="Fantasy",
             status="drafting",
@@ -43,7 +40,7 @@ class TestListProjects:
             updated_at=datetime.now(),
         )
 
-        with patch("app.api.v1.projects.project_service.get_by_user", new_callable=AsyncMock) as mock_get:
+        with patch("app.api.v1.projects.project_service.list_projects", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = [mock_response]
 
             response = client.get("/api/v1/projects")
@@ -52,7 +49,6 @@ class TestListProjects:
             data = response.json()
             assert len(data) == 1
             assert data[0]["name"] == "Test Novel"
-            assert mock_get.await_args.kwargs["user_id"] == PERSONAL_USER_ID
 
 
 class TestCreateProject:
@@ -71,7 +67,6 @@ class TestCreateProject:
 
         mock_response = ProjectResponse(
             id=uuid.uuid4(),
-            user_id=uuid.uuid4(),
             name="My Novel",
             genre="Fantasy",
             status="drafting",
@@ -80,7 +75,7 @@ class TestCreateProject:
         )
 
         with patch(
-            "app.api.v1.projects.project_service.create_with_user", new_callable=AsyncMock
+            "app.api.v1.projects.project_service.create_project", new_callable=AsyncMock
         ) as mock_create:
             mock_create.return_value = mock_response
 
@@ -89,7 +84,6 @@ class TestCreateProject:
             assert response.status_code == status.HTTP_201_CREATED
             data = response.json()
             assert data["name"] == "My Novel"
-            assert mock_create.await_args.kwargs["user_id"] == PERSONAL_USER_ID
 
     def test_create_project_accepts_agent_profile_id(self):
         """Project creation should carry the selected agent profile."""
@@ -103,7 +97,6 @@ class TestCreateProject:
 
         mock_response = ProjectResponse(
             id=uuid.uuid4(),
-            user_id=uuid.uuid4(),
             name="My Novel",
             genre="Fantasy",
             agent_profile_id="xianxia_intrigue",
@@ -113,7 +106,7 @@ class TestCreateProject:
         )
 
         with patch(
-            "app.api.v1.projects.project_service.create_with_user", new_callable=AsyncMock
+            "app.api.v1.projects.project_service.create_project", new_callable=AsyncMock
         ) as mock_create:
             mock_create.return_value = mock_response
 
@@ -156,7 +149,7 @@ class TestCreateProject:
             mock_settings.return_value.admin_api_key = "secret-key"
             mock_settings.return_value.api_key_header = "X-API-Key"
 
-            with patch("app.api.v1.projects.project_service.get_by_user", new_callable=AsyncMock) as mock_get:
+            with patch("app.api.v1.projects.project_service.list_projects", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = []
 
                 response = client.get("/api/v1/projects", headers={"X-API-Key": "secret-key"})
@@ -174,7 +167,6 @@ class TestGetProject:
 
         mock_response = ProjectResponse(
             id=project_id,
-            user_id=uuid.uuid4(),
             name="Test Novel",
             genre="Fantasy",
             status="drafting",
@@ -217,7 +209,6 @@ class TestUpdateProject:
 
         mock_response = ProjectResponse(
             id=project_id,
-            user_id=uuid.uuid4(),
             name="Updated Name",
             genre="Fantasy",
             status="drafting",
@@ -245,7 +236,6 @@ class TestUpdateProject:
 
         mock_response = ProjectResponse(
             id=project_id,
-            user_id=uuid.uuid4(),
             name="Updated Name",
             genre="Fantasy",
             agent_profile_id="xianxia_intrigue",
@@ -279,7 +269,6 @@ class TestDeleteProject:
 
         mock_response = ProjectResponse(
             id=project_id,
-            user_id=uuid.uuid4(),
             name="Test Novel",
             genre="Fantasy",
             status="drafting",

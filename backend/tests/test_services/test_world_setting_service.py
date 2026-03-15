@@ -1,7 +1,5 @@
 """Integration tests for WorldSetting service layer with real DB."""
 
-from uuid import uuid4
-
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,12 +15,9 @@ class TestWorldSettingServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_empty(self, db_session: AsyncSession):
         """Test get_by_project returns empty list when no settings exist."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         result = await world_setting_service.get_by_project(db_session, project_id=project.id)
@@ -31,17 +26,13 @@ class TestWorldSettingServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_settings(self, db_session: AsyncSession):
         """Test get_by_project returns settings for specific project."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
-        other_project = await project_service.create_with_user(
+        other_project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Other Project", genre="Sci-Fi"),
-            user_id=user_id,
         )
 
         # Create settings for different projects
@@ -71,12 +62,9 @@ class TestWorldSettingServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_pagination(self, db_session: AsyncSession):
         """Test get_by_project with skip and limit parameters."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create 5 settings
@@ -104,12 +92,9 @@ class TestWorldSettingServiceGetByCategory:
     @pytest.mark.asyncio
     async def test_get_by_category_empty(self, db_session: AsyncSession):
         """Test get_by_category returns empty list when no settings exist."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         result = await world_setting_service.get_by_category(
@@ -120,12 +105,9 @@ class TestWorldSettingServiceGetByCategory:
     @pytest.mark.asyncio
     async def test_get_by_category_filters_correctly(self, db_session: AsyncSession):
         """Test get_by_category filters by category correctly."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create settings with different categories
@@ -166,12 +148,9 @@ class TestWorldSettingServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_valid(self, db_session: AsyncSession):
         """Test creating a world setting with valid data."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         setting_in = WorldSettingCreate(
@@ -196,12 +175,9 @@ class TestWorldSettingServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_minimal(self, db_session: AsyncSession):
         """Test creating a world setting with minimal required fields."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         setting_in = WorldSettingCreate(name="Basic Setting", category="geography", project_id=project.id)
@@ -224,12 +200,9 @@ class TestWorldSettingServiceUpdate:
     @pytest.mark.asyncio
     async def test_update_partial(self, db_session: AsyncSession):
         """Test updating specific fields of a world setting."""
-
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         setting = await world_setting_service.create_with_project(

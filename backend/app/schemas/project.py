@@ -61,7 +61,6 @@ class ProjectResponse(ProjectBase):
     """Schema for project response."""
 
     id: UUID
-    user_id: UUID
     status: ProjectStatusLiteral
     created_at: datetime
     updated_at: datetime

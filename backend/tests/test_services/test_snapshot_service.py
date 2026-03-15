@@ -16,12 +16,9 @@ from app.services.snapshot import snapshot_service
 async def test_project(db_session: AsyncSession) -> Project:
     """Create a test project for snapshot tests."""
     from app.schemas.project import ProjectCreate
-
-    user_id = uuid4()
-    return await project_service.create_with_user(
+    return await project_service.create_project(
         db_session,
         obj_in=ProjectCreate(name="Test Novel", genre="Fantasy"),
-        user_id=user_id,
     )
 
 

@@ -1,279 +1,189 @@
-# Agent Workflow 实施路线图
+# Agent Workflow 演进计划
 
 最后更新：2026-03-15
 
+## 文档目的
+
+本文档给出 Agent Workflow 的长期演进顺序。它不重复描述已经落地的全部实现细节，而是定义：
+
+- 当前基线不变的约束
+- 后续扩展的优先级
+- 各主题的验收标准
+
+当前系统已经具备完整可用的独立实例创作闭环。下面的计划用于控制未来扩展方向，避免破坏现有 contract。
+
 ## 当前基线
 
-当前仓库已经把 Agent 主流程稳定在 `thread / run / operation` 这一层，不再回到旧的“单一大 prompt + suggestion 状态机”。
+以下约束视为稳定基线：
 
-对当前单用户本地创作范围来说，这条路线已经收敛成一个可交付的完整产品：主流程、风险分级、verification gate、checkpoint compact flow 和前端工作台都已闭环。本文保留的“后续收口”与“演进”内容，应理解为 VNext 方向，而不是当前交付缺口。
+- 主流程是项目级 `thread / run / operation`
+- 主交互入口是项目详情页内的 `AgentWorkspace`
+- 写入遵循 preview-first、confirm-then-execute
+- 高风险正文覆盖需要二次确认
+- 执行完成前必须经过 verification gate
+- 长线程上下文通过 checkpoint compact flow 管理
+- Profile / Skill、Risk、Execution、Verification、Compact 都以显式 contract 对外暴露
 
-当前已落地的公共工作流是：
+## 规划原则
 
-1. 项目级默认 `AgentThread`
-2. 用户消息生成一个 `AgentRun`
-3. `AgentRun` 先返回可见的 operation 预览
-4. 用户确认后再执行写入
-5. 执行前创建 snapshot
-6. 执行后经过 verification gate 才能进入 `completed`
+后续演进遵循这些原则：
 
-本轮已经补上的基础能力：
+- 保持公开 contract 稳定
+- 优先增强内部层次，而不是增加无约束的功能面
+- 先保证可解释性，再增加自动化程度
+- 新能力应复用现有 CRUD、snapshot、risk 和 verification 基础设施
 
-- 项目级 `agent_profile_id`
-- 内置 `default` 与 `xianxia_intrigue` 两个 profile
-- profile-aware skill registry
-- `AgentSubtask`
-- `AgentThreadCheckpoint`
-- operation 风险分级与二次确认
-- run / operation verification 字段
-- 长线程压缩的 checkpoint 基础设施
-- 前端项目创建、编辑、工作台对 profile / risk / verification / subtask 的可见支持
+## 主题一：Profile 与 Skill 体系
 
-## 目标工作流
+### 目标
 
-目标不是“聊天后给一段建议”，而是“项目内的可验证 Agent 执行系统”。
+让项目级 profile 成为稳定的策略入口，而不是一次性的 prompt 选择器。
 
-完整目标流程如下：
+### 当前基线
 
-1. 用户在项目工作台提出自然语言指令
-2. 系统按项目级 profile 装配技能与上下文
-3. planner 生成用户可见 operations 与内部 subtasks
-4. 前端展示计划、风险等级、diff 预览与内部执行摘要
-5. 用户完成一次或两次确认
-6. executor 复用现有 CRUD service 落库
-7. verification gate 校验落库结果与预览一致
-8. 长线程在阈值到达后生成 checkpoint，后续规划改用压缩上下文
+- 项目支持 `agent_profile_id`
+- 内置 `default` 与 `xianxia_intrigue`
+- `AGENT_SKILLS_DIR` 可覆盖 profile 根目录
+- 运行期可查看 profile / skill catalog
 
-## 分阶段计划
+### 规划方向
 
-### Phase 1: 项目级 Skill Profile
+- 为 profile 建立更清晰的 reference catalog
+- 在保持当前加载模型的前提下增加更多风格 profile
+- 为 profile 切换定义更严格的兼容策略和运行期说明
 
-目标：把 skill 选择从“全局默认”提升到“项目级绑定”。
+### 验收标准
 
-当前实现：
+- 新 profile 不破坏现有 project-level binding
+- skill catalog 仍能按项目返回真实生效结果
+- 历史 run 的 profile snapshot 保持稳定可追溯
 
-- `Project.meta.agent_profile_id` 已启用
-- 新建/编辑项目可以选择 profile
-- 内置 profile：
-  - `default`
-  - `xianxia_intrigue`
-- `xianxia_intrigue` 的 planner 与 operation skills 已直接引用 `others/大纲设计提示词.txt`、`others/章纲细纲设计提示词.txt`、`others/写作提示词.txt`
-- `GET /api/v1/agent/profiles` 已可用
-- `GET /api/v1/agent/skills?project_id=...` 已按项目返回有效 profile
+## 主题二：内部执行层
 
-后续收口：
+### 目标
 
-- 为 profile 增加更细的 reference catalog，而不只是 skill 列表
-- 允许 `AGENT_SKILLS_DIR` 以 profile 根目录方式覆盖单个 profile
-- 增加更多风格 profile 前，先把 profile 选择和迁移约束写清楚
+把当前显式 child unit contract 继续推进成更独立的内部执行结构。
 
-### Phase 2: 内部子代理与 Hook 编排
+### 当前基线
 
-目标：从单个 planner 演进到内部可编排的多角色执行层。
+- `planner / researcher / writer / editor / continuity / executor` 已显式建模
+- subtask、child trace、recovery boundary、hook trace 已可见
+- child unit 仍在 workflow 内部执行
 
-当前实现：
+### 规划方向
 
-- `AgentSubtask` 已持久化
-- 工作台已展示 planner / researcher / writer / editor / continuity 摘要
-- 每个角色的 subtask unit 已有独立的服务端合成逻辑
-- planner 如果提供了不合法的 subtask，系统会按角色回退到服务端安全版本
-- unrecoverable 的 subtask unit 会在 blueprint 阶段直接拒绝，不会生成可执行 run
-- 每个 subtask 已带出 child execution trace，记录依赖、输入摘要、重试策略与尝试结果
-- `PrePlan` 等价能力已经存在于 workflow service：
-  - profile 选择
-  - context bundle 装配
-  - subtask 合成
-- run metadata 已记录 `PreCompact / PrePlan / SubagentStop / RunStop` hook trace
-- `RunStop` 的基础语义已经落在 verification gate
-- `PreCompact` 的基础语义已经落在线程 checkpoint
+- 细化各角色的输入输出 schema
+- 把 trace 推进为更完整的 execution record
+- 在不破坏现有 run contract 的前提下提高 child unit 独立性
 
-后续收口：
+### 验收标准
 
-- 把 planner、writer、editor、continuity 从“服务端合成 + child trace”的内部层升级为真正独立的 child execution unit
-- 给每个 subtask 建立更完整的输入/输出 schema，并把当前 trace 升级为可重放的执行记录
-- 明确 hook 生命周期：
-  - `PrePlan`
-  - `SubagentStop`
-  - `RunStop`
-  - `PreCompact`
+- child unit contract 继续保持显式字段
+- workflow service 不重新退回到单块 prompt 编排
+- 内部失败边界和重试边界可独立观察
 
-### Phase 3: 权限分级与确认模型
+## 主题三：权限与风险
 
-目标：把所有写入从统一确认，升级为按风险分层确认。
+### 目标
 
-当前实现：
+保持 Plan / Build 分层清晰，并继续强化 capability policy。
 
-- operation 已带有：
-  - `permission_level`
-  - `risk_level`
-  - `requires_secondary_confirmation`
-- run metadata 已带出 `Plan / Build` 权限矩阵
-- `researcher` 子任务已切到内部 `read/search` 工具层，不再把这类能力暴露成用户可确认 operation
-- `AgentRunResponse.execution_contract` 与 `AgentSubtaskResponse.child_trace` 已成为显式响应字段
-- `execution_contract.capabilities[*].execution_record` 已记录 capability 的真实执行状态与输出摘要
-- capability 已分成 `registry / policy / execution_record` 三层，`GET /api/v1/agent/capabilities` 可独立查看 registry
-- 风险分类已分成 `registry / applied_policies / run summary` 三层，`GET /api/v1/agent/risk-policies` 可独立查看 registry
-- 风险分类实现已从 workflow 内部规则提取为独立 classifier service，当前入口是 `app/services/agent_risk.py`
-- classifier 已支持 profile-aware override，当前 `xianxia_intrigue` 会使用更保守的长正文覆盖阈值，同时保持原有 risk policy contract 不变
-- `AgentRunResponse.risk_summary` 已提供稳定的 run 级风险聚合与命中策略，前端不再需要从 operation 列表和 run 状态机自行推断整体风险
-- `execution_contract.phases[*].child_units` 已把 `planner / researcher / writer / editor / continuity / executor` 收敛为显式 child unit contract
-- phase contract 与 child unit contract 的装配已提取到独立服务，当前入口是 `app/services/agent_contract.py`
-- run 状态机已扩展出 `awaiting_high_risk_confirmation`
-- `POST /api/v1/agent/runs/{run_id}/confirm-high-risk` 已可用
-- 前端已展示高风险提示与二次确认入口
+### 当前基线
 
-当前分级规则：
+- `read/search` 只在内部 capability 层自动执行
+- `standard_write` 需要一次确认
+- `high_risk_write` 需要二次确认
+- risk policy registry、applied policy 和 run risk summary 已稳定
 
-- `standard_write`：普通创建、更新、续写
-- `high_risk_write`：长文本覆盖或多对象正文重写
+### 规划方向
 
-后续收口：
+- 丰富 capability policy，而不改变当前 run 风险 contract
+- 让 profile 对风险策略的影响继续保持可解释和可追踪
+- 提升高风险正文操作的分类精度
 
-- 继续把 Plan / Build 权限边界推进成可复用的 child capability policy，而不是只停留在 run 级 contract
+### 验收标准
 
-### Phase 4: 完成校验与落库一致性
+- `risk_summary` 结构保持稳定
+- 前端不需要根据 operation 列表自行推断整体风险
+- 高风险分类可通过 registry 和 applied policy 解释
 
-目标：不允许 run 在“实际没写对”的情况下标记为成功。
+## 主题四：Verification Gate
 
-当前实现：
+### 目标
 
-- `AgentRun` / `AgentOperation` 已有：
-  - `verification_status`
-  - `verification_summary`
-- 内容型 operation 已记录：
-  - `preview_content_hash`
-  - `persisted_content_hash`
-- `create_*` 与非正文类 `update_*` 已接入字段级 verification，会按 payload 对落库结果逐字段比对
-- operation 的 `execution_result` 已记录 snapshot linkage，verification 会校验 snapshot 是否真实存在、与目标对象一致，并验证从 snapshot 推导出的预期落库状态是否成立
-- `write_*_content` 已接入 content transition verification，会验证 replace / append 模式下的正文迁移是否符合预期
-- chapter / scene 已接入 domain-level semantic verification，会校验章节序号、场景序号、卷归属与 POV 人物归属这类业务约束
-- 长线程已经切换到 checkpoint-based compact flow；当 checkpoint 可用时，planner history 改为 `checkpoint + delta history`，而不是继续读取固定窗口历史
-- compact policy、planner window、retained window 与 active bundle contract 已作为显式 contract 暴露，不再要求前端或测试从 `meta` 与 hook trace 推断 compact 行为
-- 执行完成后会验证：
-  - 目标对象存在
-  - 摘要与预览一致
-  - 内容 hash 与 planning 阶段一致
-  - create/update 字段与预期值一致
-  - snapshot linkage 与 snapshot-derived semantics 有效
-  - content transition 与 write mode 语义一致
-  - 领域约束与对象归属一致
-  - continuity gate 未阻断
+继续强化“计划正确”和“落库正确”的一致性保证。
 
-后续收口：
+### 当前基线
 
-- 把当前字段级 verification 从 create/update 扩展到更多对象与更细粒度结果
-- 把当前 domain-level semantic verification 从章节/场景约束推进到更多对象与更细的业务规则
-- 在保持当前 contract 稳定的前提下，继续细化 retained window 与 active bundle policy
-- 在前端提供更清晰的“执行成功但建议人工复核”的分类展示
+- 已有字段级、snapshot、content transition、domain semantic 校验
+- run 只有在通过 verification gate 后才会完成
 
-### Phase 5: 上下文压缩与长期线程
+### 规划方向
 
-目标：让单项目长期工作线程可以持续运行，而不是历史越长越不可用。
+- 将 domain-level semantic verification 扩展到更多对象和更细粒度业务规则
+- 细化 create / update / write 的差异化验证策略
+- 为需要人工复核但无需失败的结果提供更明确的分类
 
-当前实现：
+### 验收标准
 
-- `AgentThreadCheckpoint` 已持久化
-- 压缩触发条件已存在：
-  - 消息数阈值
-  - run 数阈值
-  - 上下文字符总量阈值
-- checkpoint 当前保存：
-  - `thread_summary`
-  - `active_object_bundle`
-  - `recent_run_digest`
-  - `profile_id`
-- planner 已切换到 `checkpoint + delta history` 输入模式；当 checkpoint 可用时，不再继续回灌固定窗口历史
-- `PreCompact / PrePlan` hook metadata 已显式记录 compact mode 与 delta history 状态
+- verification contract 继续显式、稳定
+- 新的语义校验不会破坏现有已通过链路
+- 故障用例能区分字段错误、快照错误、内容迁移错误和业务语义错误
 
-后续收口：
+## 主题五：长期线程与压缩
 
-- 把当前 compact flow 从固定规则推进到更完整的 compact policy
-- 把 planner 输入 contract 从当前的 `checkpoint + delta history` 推进到更清晰的 compact policy / retained window / active bundle 约束
-- 为 long-running thread 增加压缩后的可追踪性说明
+### 目标
 
-## 公共接口变更
+让长期线程在可解释前提下持续可用。
 
-当前已纳入公共接口的新增内容：
+### 当前基线
 
-- `ProjectCreate / ProjectUpdate / ProjectResponse.agent_profile_id`
-- `GET /api/v1/agent/profiles`
-- `GET /api/v1/agent/risk-policies`
-- `GET /api/v1/agent/skills?project_id=...`
-- `POST /api/v1/agent/runs/{run_id}/confirm-high-risk`
-- `AgentRunResponse.subtasks`
-- `AgentRunResponse.risk_summary`
-- `AgentRunResponse.compact_policy`
-- `AgentRunResponse.planner_window`
-- `AgentRunResponse.retained_window`
-- `AgentRunResponse.active_bundle_contract`
-- `AgentExecutionPhaseResponse.child_units`
-- `AgentRunResponse.verification_status`
-- `AgentRunResponse.verification_summary`
-- `AgentOperationResponse.permission_level`
-- `AgentOperationResponse.risk_level`
-- `AgentOperationResponse.requires_secondary_confirmation`
-- `AgentOperationResponse.verification_status`
-- `AgentOperationResponse.verification_summary`
-- `AgentThreadCheckpointResponse.compact_policy`
-- `AgentThreadCheckpointResponse.compaction_boundary`
-- `AgentThreadCheckpointResponse.active_bundle_contract`
+- checkpoint 已持久化
+- planner 已支持 `recent_window` 和 `checkpoint_delta`
+- compact policy、planner window、retained window、active bundle contract 已显式返回
 
-以下接口继续保留为兼容层：
+### 规划方向
 
-- `/api/v1/agent/chat`
-- `/api/v1/agent/chat/stream`
-- `/api/v1/agent/auto-summarize`
-- `/api/v1/agent/continuity-check`
+- 细化 retained window 规则
+- 细化 active bundle 选择策略
+- 增加更明确的压缩可追踪说明
 
-## 测试门与验收标准
+### 验收标准
 
-当前最低质量门：
+- compact contract 保持稳定
+- planner 输入边界始终可解释
+- 前端和测试不需要解析非结构化 metadata
 
-- `ruff check app tests`
+## 公共接口约束
+
+以下接口与结构视为公开稳定面：
+
+- `Project.agent_profile_id`
+- `AgentThread / AgentRun / AgentOperation`
+- `execution_contract`
+- `risk_summary`
+- `verification_status / verification_summary`
+- `compact_policy / planner_window / retained_window / active_bundle_contract`
+- checkpoint 响应中的 compact contract
+
+未来扩展应以增量字段和新增接口为主，不推翻这些核心结构。
+
+## 质量门
+
+Agent Workflow 相关变更至少应保持以下命令通过：
+
+- `ruff check app tests scripts`
 - `mypy app`
 - `pytest`
 - `npm run lint`
 - `npm run build`
 
-本轮新增的重点覆盖：
-
-- profile registry 加载与覆盖
-- `xianxia_intrigue` profile 的 canonical source 引用
-- 项目级 profile round-trip
-- skill catalog 按项目返回有效 profile
-- 高风险二次确认链路
-- subtask recovery / unrecoverable failure 边界
-- subtask child execution trace
-- run-level permission matrix 与 internal read/search layer
-- explicit execution contract / child trace response schema
-- capability execution record
-- capability registry / policy layering
-- run-level risk summary for normal and high-risk plans
-- risk policy registry and applied policy snapshots
-- replaceable classifier service
-- explicit child unit contract inside execution phases
-- subtask 与 verification 字段的 API 暴露
-
-## 兼容与迁移策略
-
-- `AgentThread / AgentRun / AgentOperation` 继续视为公共稳定接口，只增量扩展，不推翻重做
-- 项目级 profile 继续存储在 `Project.meta`，避免新增数据库列
-- legacy chat 与 suggestion 兼容路径继续保留，但不再作为主流程继续扩展
-- 新 profile 只影响新 run；历史 run 保留自己的 `profile_id` 与 skill snapshot
-
 ## 参考模式
 
-- Claude Code：
-  - 子代理
-  - hooks
-  - 独立上下文与权限边界
-- OpenCode：
-  - Plan / Build 分层
-  - child sessions
-  - permission matrix
-- OpenClaw：
-  - 长线程隔离
-  - session pruning
-  - workflow / skills 思路
+后续演进继续借鉴这些实现思路：
 
-本项目后续主要吸收 Claude Code 与 OpenCode 的编排方式，OpenClaw 主要借鉴长期会话和压缩策略，不照搬其聊天网关形态。
+- Claude Code：子代理、hook、上下文与权限边界
+- OpenCode：Plan / Build 分层、child session、permission matrix
+- OpenClaw：长期线程隔离、session pruning、workflow / skills
+
+借鉴的重点是编排方式和上下文治理，而不是照搬其产品交互形态。

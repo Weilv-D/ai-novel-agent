@@ -18,8 +18,9 @@ VERIFICATION STATUS:
 """
 
 import sys
-import httpx
 from typing import Any
+
+import httpx
 
 API_BASE_URL = "http://localhost:8000"
 VERBOSE = True
@@ -344,10 +345,10 @@ async def main() -> int:
             print(f"    - {error}")
 
     if results["failed"] > 0:
-        print(f"\n  Some tests failed. Please check the backend server and database connection.")
+        print("\n  Some tests failed. Please check the backend server and database connection.")
         return 1
     else:
-        print(f"\n  All tests passed! The API is working correctly.")
+        print("\n  All tests passed! The API is working correctly.")
         return 0
 
 

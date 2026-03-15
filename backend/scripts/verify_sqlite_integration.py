@@ -73,7 +73,7 @@ def curl_request(method: str, url: str, data: dict[str, Any] | None = None) -> t
     return -1, output
 
 
-def start_server() -> subprocess.Popen:
+def start_server() -> subprocess.Popen[str] | None:
     """Start the FastAPI server with SQLite database."""
     print_section("Starting Server")
 
@@ -102,21 +102,6 @@ def start_server() -> subprocess.Popen:
         return None
 
     print("  ✓ Migrations complete")
-
-    # Create test user
-    print("  Creating test user...")
-    create_user_script = Path(__file__).parent / "create_test_user.py"
-    create_user_result = subprocess.run(
-        [sys.executable, str(create_user_script), str(TEST_DB_PATH)],
-        cwd=Path(__file__).parent.parent,
-        env=env,
-        capture_output=True,
-        text=True
-    )
-    if create_user_result.returncode == 0:
-        print(f"  ✓ {create_user_result.stdout.strip()}")
-    else:
-        print(f"  ! Warning: Could not create test user: {create_user_result.stderr}")
 
     # Start server
     print(f"  Starting server on {API_BASE_URL}...")
@@ -905,10 +890,10 @@ def main() -> int:
                 print(f"    - {error}")
 
         if results["failed"] > 0:
-            print(f"\n  Some tests failed. Please check the logs above.")
+            print("\n  Some tests failed. Please check the logs above.")
             return 1
         else:
-            print(f"\n  All tests passed! The API is working correctly.")
+            print("\n  All tests passed! The API is working correctly.")
             return 0
     finally:
         # Always stop the server

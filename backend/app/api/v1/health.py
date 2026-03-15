@@ -57,10 +57,9 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="healthy",
         version=settings.app_version,
-        mode="single_user",
+        mode="standalone",
         auth_required=bool(settings.admin_api_key),
         api_key_header=settings.api_key_header if settings.admin_api_key else None,
-        personal_user_email=settings.personal_user_email,
         database=database_status,
         redis=redis_status,
     )

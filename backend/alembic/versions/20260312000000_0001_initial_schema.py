@@ -47,24 +47,10 @@ def upgrade() -> None:
         json_type = sa.JSON()  # SQLite maps JSON to TEXT
         timestamp_default = sa.text("CURRENT_TIMESTAMP")
 
-    # Create users table
-    op.create_table(
-        "users",
-        sa.Column("id", uuid_type, primary_key=True, nullable=False),
-        sa.Column("email", sa.String(255), nullable=False),
-        sa.Column("api_key_hash", sa.String(255), nullable=True),
-        sa.Column("name", sa.String(255), nullable=True),
-        sa.Column("metadata", json_type, nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
-    )
-    op.create_index("ix_users_email", "users", ["email"], unique=True)
-
     # Create projects table
     op.create_table(
         "projects",
         sa.Column("id", uuid_type, primary_key=True, nullable=False),
-        sa.Column("user_id", uuid_type, nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("genre", sa.String(100), nullable=True),
         sa.Column("target_audience", sa.String(100), nullable=True),
@@ -75,9 +61,7 @@ def upgrade() -> None:
         sa.Column("metadata", json_type, nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=timestamp_default),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
     )
-    op.create_index("ix_projects_user_id", "projects", ["user_id"])
 
     # Create characters table
     op.create_table(
@@ -290,8 +274,4 @@ def downgrade() -> None:
     op.drop_index("ix_characters_project_id", table_name="characters")
     op.drop_table("characters")
 
-    op.drop_index("ix_projects_user_id", table_name="projects")
     op.drop_table("projects")
-
-    op.drop_index("ix_users_email", table_name="users")
-    op.drop_table("users")

@@ -1,11 +1,9 @@
 """Project model - the main container for a novel."""
 
-import uuid
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -26,11 +24,6 @@ class Project(Base, UUIDMixin, TimestampMixin):
     """Project model representing a novel project."""
 
     __tablename__ = "projects"
-
-    # Foreign key to user (owner)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
 
     # Basic info
     name: Mapped[str] = mapped_column(String(255), nullable=False)

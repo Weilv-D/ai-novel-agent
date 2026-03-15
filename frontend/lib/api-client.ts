@@ -87,7 +87,6 @@ export interface HealthResponse {
   mode: string;
   auth_required: boolean;
   api_key_header?: string | null;
-  personal_user_email?: string | null;
 }
 
 function cacheHealthApiHeader(health: Partial<HealthResponse> | null): void {

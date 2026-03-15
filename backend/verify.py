@@ -12,10 +12,7 @@ def check_imports() -> bool:
     print("Checking imports...")
     try:
         from app.main import app
-        from app.models import Base, User, Project, Character
-        from app.api.v1 import router
-        from app.core.config import get_settings
-        from app.db import engine
+        from app.models import Base, Character, Project
         print("  ✓ All core imports successful")
         return True
     except ImportError as e:
@@ -66,9 +63,11 @@ def check_models_metadata() -> bool:
         tables = Base.metadata.tables.keys()
         table_names = sorted(tables)
         expected_tables = [
-            "users", "projects", "characters", "world_settings",
+            "projects", "characters", "world_settings",
             "volumes", "chapters", "scenes",
-            "memories", "suggestions", "snapshots", "dependencies"
+            "memories", "suggestions", "snapshots", "dependencies",
+            "agent_threads", "agent_messages", "agent_runs", "agent_operations",
+            "agent_subtasks", "agent_thread_checkpoints",
         ]
 
         missing = set(expected_tables) - set(table_names)

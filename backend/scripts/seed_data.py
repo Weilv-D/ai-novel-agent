@@ -2,38 +2,16 @@
 """Seed development data for testing."""
 
 import asyncio
-from uuid import uuid4
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import async_session_maker
-from app.models import Character, Project, User, WorldSetting
+from app.models import Character, Project, WorldSetting
 
 
-async def create_test_user(session: AsyncSession) -> User:
-    """Create a test user."""
-    result = await session.execute(select(User).where(User.email == "test@example.com"))
-    existing = result.scalar_one_or_none()
-
-    if existing:
-        return existing
-
-    user = User(
-        email="test@example.com",
-        name="Test User",
-        api_key_hash="test_hash",
-    )
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    return user
-
-
-async def create_test_project(session: AsyncSession, user_id: str) -> Project:
+async def create_test_project(session: AsyncSession) -> Project:
     """Create a test project."""
     project = Project(
-        user_id=user_id,
         name="Test Novel",
         genre="Fantasy",
         target_audience="Young Adult",
@@ -95,10 +73,7 @@ async def main() -> None:
     async with async_session_maker() as session:
         print("Creating test data...")
 
-        user = await create_test_user(session)
-        print(f"Created user: {user.email}")
-
-        project = await create_test_project(session, str(user.id))
+        project = await create_test_project(session)
         print(f"Created project: {project.name}")
 
         characters = await create_test_characters(session, str(project.id))

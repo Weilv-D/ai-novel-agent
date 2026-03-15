@@ -2,81 +2,98 @@
 
 最后更新：2026-03-15
 
-## 当前已完成
+## 交付定位
 
-AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主交互模型明确为项目内 Agent Workspace，而不是旧的 suggestion 导向聊天面板。
+AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。它已经具备完整的本地创作闭环：项目管理、结构化内容维护、Agent 规划与执行、风险控制、落库校验、长期线程压缩，以及与这些能力对应的前端工作台。
 
-在当前单用户本地创作范围内，项目已经形成完整可交付形态：主流程、验证门、压缩上下文、profile-aware skill 与前端工作台都已闭环。下面的“边界”和“后续”是刻意保留的产品边界与可选扩展，不再属于当前交付缺口。
+当前状态适合个人长期使用，也适合作为继续演进 Agent 工作流的稳定基线。
 
-当前稳定能力包括：
+## 当前能力面
 
-- 项目、人物、世界观、卷、章、场景的完整 CRUD
-- Snapshot、Memory、Dependency、导出能力
-- 项目级 `thread / run / operation` Agent 工作流
-- preview-first、confirm-then-execute 的执行模式
-- 项目级 `agent_profile_id`
-- 内置 `default` 与 `xianxia_intrigue` profile
-- profile-aware planner / operation skills
-- run 级 subtask 摘要
-- run 级 subtask recovery / failure boundary
-- run 级 subtask child execution trace
-- run 级 hook trace
-- run 级 Plan / Build 权限矩阵
-- researcher 内部 read/search 工具层
-- 显式 `execution_contract` / `child_trace` 接口字段
-- capability execution record
-- capability registry / policy layering
-- operation 风险分级与高风险二次确认
-- run 级 risk summary
-- risk policy registry / applied policy snapshot
-- replaceable risk classifier service
-- profile-aware risk classifier override
-- explicit child unit contract
-- independent execution contract assembly layer
-- 执行后 verification gate
-- create/update field-level verification
-- snapshot semantic verification
-- content transition verification
-- domain-level semantic verification
+### 创作对象
+
+- 项目
+- 人物
+- 世界观
+- 卷、章、场景
+- Snapshot、Dependency、Memory、Suggestion、Export
+
+### Agent 工作流
+
+- 项目级 `thread / run / operation`
+- preview-first、confirm-then-execute
+- 项目级 profile
+- 文件化 planner / operation skills
+- 风险摘要与高风险二次确认
+- execution contract、child unit contract、capability record
+- hook trace、subtask trace、checkpoint trace
+
+### 执行保障
+
+- 字段级校验
+- snapshot linkage 与 snapshot-derived semantic 校验
+- content transition 校验
+- domain-level semantic 校验
 - checkpoint-based compact flow
-- explicit compact policy / planner window contract
-- explicit retained window / active bundle contract
-- 工作台可见的 latest checkpoint 摘要
+- planner window、retained window、active bundle contract
 
-## 当前质量状态
+### 前端工作台
+
+- 项目页内 Agent Workspace
+- run 计划预览
+- diff 展示
+- 风险与确认面板
+- verification 与 compact contract 展示
+- 项目、人物、设定、章节、场景的辅助编辑页
+
+## 质量状态
+
+当前仓库质量门如下：
+
+- 后端 `ruff check app tests scripts`
+- 后端 `mypy app`
+- 后端 `pytest`
+- 前端 `npm run lint`
+- 前端 `npm run build`
+
+当前实测结果：
 
 - 后端测试：`433 passed / 2 skipped`
 - 后端 lint：通过
 - 后端类型检查：通过
 - 前端 lint：通过
-- 前端 build：通过
+- 前端构建：通过
 
-当前仓库可以通过：
+## 交付边界
 
-- `ruff check app tests`
-- `mypy app`
-- `pytest`
-- `npm run lint`
-- `npm run build`
+以下内容不属于当前交付范围：
 
-## 当前边界
-
-以下内容仍不在当前交付范围内：
-
-- 多用户注册、登录、组织与权限体系
+- 多实例协作、组织和权限体系
 - 浏览器自动化 e2e 测试
-- 真正独立执行的内部子代理
-- 面向公网部署的完整安全加固方案
+- 真正独立运行的内部 child agent session
+- 面向公网部署的完整安全加固
 
-这些边界是当前产品定位与当前实施顺序的一部分，不是遗漏说明。
+这些边界来自产品定位和实施顺序，不是已知缺口。
 
-## 可选后续演进
+## 架构成熟度
 
-如果后续继续扩展，而不是维持当前稳定交付范围，优先方向如下：
+当前系统在以下方面已经形成稳定接口和清晰分层：
 
-- 把 subtask 从“摘要记录”升级为真正独立的内部执行单元
-- 把当前 `Plan / Build` 权限矩阵继续推进为更强的 child capability policy
-- 把 field-level / domain-level verification 扩展到更多对象与更细的业务规则
-- 在不破坏现有 contract 的前提下，继续细化 retained window 与 active bundle policy
+- Profile / Skill：项目级绑定与运行期可见性
+- Risk：policy registry、applied policy、run risk summary
+- Execution：phase、child unit、capability execution record
+- Verification：字段、快照、内容迁移、业务语义
+- Compact：checkpoint、planner window、retained window、active bundle contract
 
-详细路线见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)。
+这意味着前端、测试和脚本不再依赖解析非结构化 `meta` 来理解 Agent 行为。
+
+## 演进方向
+
+项目后续扩展应优先保持现有 contract 稳定，再继续推进以下方向：
+
+- 把内部 child unit 继续升级为更独立的执行单元
+- 扩展 domain-level semantic verification 到更多对象和业务规则
+- 细化 compact policy、retained window 和 active bundle 策略
+- 在不改变当前主流程的前提下，继续增强 profile 与 skill 体系
+
+详细规划见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)。

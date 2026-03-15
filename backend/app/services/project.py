@@ -13,37 +13,34 @@ from app.services.base import CRUDBase
 class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
     """CRUD operations for Project model."""
 
-    async def get_by_user(
+    async def list_projects(
         self,
         db: AsyncSession,
         *,
-        user_id: Any,
         skip: int = 0,
         limit: int = 100,
     ) -> list[Project]:
-        """Get all projects for a specific user."""
+        """Get all projects ordered by most recently updated."""
         result = await db.execute(
             select(Project)
-            .where(Project.user_id == user_id)
             .order_by(desc(Project.updated_at))
             .offset(skip)
             .limit(limit)
         )
         return list(result.scalars().all())
 
-    async def create_with_user(
+    async def create_project(
         self,
         db: AsyncSession,
         *,
         obj_in: ProjectCreate,
-        user_id: Any,
     ) -> Project:
-        """Create a new project for a specific user."""
+        """Create a new project."""
         obj_dict = obj_in.model_dump()
         profile_id = str(obj_dict.pop("agent_profile_id", DEFAULT_AGENT_PROFILE_ID))
         meta = dict(obj_dict.pop("meta", {}) or {})
         meta.setdefault("agent_profile_id", profile_id)
-        db_obj = Project(**obj_dict, meta=meta, user_id=user_id)
+        db_obj = Project(**obj_dict, meta=meta)
         db_obj.agent_profile_id = profile_id
         db.add(db_obj)
         await db.flush()

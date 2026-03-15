@@ -19,9 +19,8 @@ async def test_health_check(client: AsyncClient) -> None:
     data = response.json()
     assert data["status"] == "healthy"
     assert "version" in data
-    assert data["mode"] == "single_user"
+    assert data["mode"] == "standalone"
     assert data["auth_required"] is False
-    assert data["personal_user_email"] == "writer@local"
     assert data["database"] == "healthy"
     assert data["redis"] == "unavailable"
 
@@ -37,7 +36,6 @@ async def test_health_check_uses_current_settings(client: AsyncClient) -> None:
         mock_get_settings.return_value.app_version = "9.9.9"
         mock_get_settings.return_value.admin_api_key = "secret-key"
         mock_get_settings.return_value.api_key_header = "X-Personal-Key"
-        mock_get_settings.return_value.personal_user_email = "me@example.com"
 
         response = await client.get("/api/v1/health")
 
@@ -46,7 +44,6 @@ async def test_health_check_uses_current_settings(client: AsyncClient) -> None:
     assert data["version"] == "9.9.9"
     assert data["auth_required"] is True
     assert data["api_key_header"] == "X-Personal-Key"
-    assert data["personal_user_email"] == "me@example.com"
     assert data["database"] == "healthy"
     assert data["redis"] == "healthy"
 

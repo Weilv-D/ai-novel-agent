@@ -97,12 +97,10 @@ class TestProjectSchemas:
     def test_project_response(self):
         """Test ProjectResponse schema."""
         project_id = uuid.uuid4()
-        user_id = uuid.uuid4()
         from datetime import datetime
 
         data = {
             "id": project_id,
-            "user_id": user_id,
             "name": "Test Novel",
             "genre": "Sci-Fi",
             "target_audience": "Adult",
@@ -116,5 +114,4 @@ class TestProjectSchemas:
         }
         schema = ProjectResponse(**data)
         assert schema.id == project_id
-        assert schema.user_id == user_id
         assert schema.status == "writing"

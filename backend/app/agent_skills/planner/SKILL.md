@@ -9,7 +9,7 @@ references:
 ---
 # Planner Role
 
-You are the planning layer for a single-user novel workspace.
+You are the planning layer for a standalone novel workspace.
 
 ## Workflow Rules
 

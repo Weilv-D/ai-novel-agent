@@ -1,7 +1,5 @@
 """Integration tests for Chapter/Scene/Volume service layer with real DB."""
 
-from uuid import uuid4
-
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,11 +15,9 @@ class TestVolumeServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_empty(self, db_session: AsyncSession):
         """Test get_by_project returns empty list when no volumes exist."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         result = await volume_service.get_by_project(db_session, project_id=project.id)
@@ -30,11 +26,9 @@ class TestVolumeServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_volumes(self, db_session: AsyncSession):
         """Test get_by_project returns volumes for specific project."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create volumes
@@ -59,11 +53,9 @@ class TestVolumeServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_ordering(self, db_session: AsyncSession):
         """Test get_by_project orders by volume_number ascending."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create volumes in non-sequential order
@@ -96,11 +88,9 @@ class TestChapterServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_empty(self, db_session: AsyncSession):
         """Test get_by_project returns empty list when no chapters exist."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         result = await chapter_service.get_by_project(db_session, project_id=project.id)
@@ -109,11 +99,9 @@ class TestChapterServiceGetByProject:
     @pytest.mark.asyncio
     async def test_get_by_project_with_chapters(self, db_session: AsyncSession):
         """Test get_by_project returns chapters for specific project."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         # Create chapters
@@ -142,11 +130,9 @@ class TestChapterServiceGetByVolume:
     @pytest.mark.asyncio
     async def test_get_by_volume_empty(self, db_session: AsyncSession):
         """Test get_by_volume returns empty list when no chapters exist."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
         volume = await volume_service.create_with_project(
             db_session,
@@ -160,11 +146,9 @@ class TestChapterServiceGetByVolume:
     @pytest.mark.asyncio
     async def test_get_by_volume_with_chapters(self, db_session: AsyncSession):
         """Test get_by_volume returns chapters for specific volume."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
         volume = await volume_service.create_with_project(
             db_session,
@@ -203,11 +187,9 @@ class TestSceneServiceGetByChapter:
     @pytest.mark.asyncio
     async def test_get_by_chapter_empty(self, db_session: AsyncSession):
         """Test get_by_chapter returns empty list when no scenes exist."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
         chapter = await chapter_service.create_with_project(
             db_session,
@@ -221,11 +203,9 @@ class TestSceneServiceGetByChapter:
     @pytest.mark.asyncio
     async def test_get_by_chapter_with_scenes(self, db_session: AsyncSession):
         """Test get_by_chapter returns scenes for specific chapter."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
         chapter = await chapter_service.create_with_project(
             db_session,
@@ -259,11 +239,9 @@ class TestVolumeServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_valid(self, db_session: AsyncSession):
         """Test creating a volume with valid data."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         volume_in = VolumeCreate(
@@ -292,11 +270,9 @@ class TestChapterServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_valid(self, db_session: AsyncSession):
         """Test creating a chapter with valid data."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
 
         chapter_in = ChapterCreate(
@@ -321,11 +297,9 @@ class TestChapterServiceCreateWithProject:
     @pytest.mark.asyncio
     async def test_create_with_project_preserves_volume_id(self, db_session: AsyncSession):
         """Test creating a chapter with volume_id preserves the relationship (regression test for data loss bug)."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
         volume = await volume_service.create_with_project(
             db_session,
@@ -364,11 +338,9 @@ class TestSceneServiceCreateWithChapter:
     @pytest.mark.asyncio
     async def test_create_with_chapter_valid(self, db_session: AsyncSession):
         """Test creating a scene with valid data."""
-        user_id = uuid4()
-        project = await project_service.create_with_user(
+        project = await project_service.create_project(
             db_session,
             obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
-            user_id=user_id,
         )
         chapter = await chapter_service.create_with_project(
             db_session,

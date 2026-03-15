@@ -24,7 +24,6 @@ from app.models.memory import Memory, MemoryType
 from app.models.project import Project, ProjectStatus
 from app.models.snapshot import Snapshot
 from app.models.suggestion import Suggestion, SuggestionStatus, SuggestionType
-from app.models.user import User
 from app.models.world_setting import WorldSetting, WorldSettingCategory
 
 __all__ = [
@@ -45,7 +44,6 @@ __all__ = [
     "AgentPermissionLevel",
     "AgentRiskLevel",
     "AgentVerificationStatus",
-    "User",
     "Project",
     "ProjectStatus",
     "Character",

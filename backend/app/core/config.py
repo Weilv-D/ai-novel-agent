@@ -41,8 +41,6 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-in-production-min-32-chars-long"
     api_key_header: str = "X-API-Key"
     admin_api_key: str = ""
-    personal_user_email: str = "writer@local"
-    personal_user_name: str = "Personal Writer"
 
     # LLM (Chat)
     llm_api_key: str = ""

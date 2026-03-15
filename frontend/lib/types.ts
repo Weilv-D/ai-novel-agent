@@ -27,7 +27,6 @@ export interface Project {
   notes?: string;
   agent_profile_id: string;
   meta?: Record<string, unknown>;
-  user_id: string;
   status: ProjectStatus;
   created_at: string;
   updated_at: string;

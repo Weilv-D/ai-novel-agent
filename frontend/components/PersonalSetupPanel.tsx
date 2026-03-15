@@ -87,8 +87,7 @@ export function PersonalSetupPanel() {
                   <span className="w-1.5 h-1.5 rounded-full bg-seal shadow-[0_0_8px_rgba(200,70,57,0.6)]"></span>
                   砚台状态
                 </div>
-                <p className="mt-1 transition-opacity">气象：{health.mode === "personal" ? "个人独享" : health.mode}</p>
-                <p className="mt-1">笔名：{health.personal_user_email || "未题名"}</p>
+                <p className="mt-1 transition-opacity">气象：{health.mode === "standalone" ? "独立实例" : health.mode}</p>
                 <p className="mt-1">
                   印信保护：
                   {health.auth_required
