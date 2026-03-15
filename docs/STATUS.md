@@ -19,6 +19,8 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - run 级 subtask recovery / failure boundary
 - run 级 subtask child execution trace
 - run 级 hook trace
+- run 级 Plan / Build 权限矩阵
+- researcher 内部 read/search 工具层
 - operation 风险分级与高风险二次确认
 - 执行后 verification gate
 - 长线程 checkpoint 基础设施

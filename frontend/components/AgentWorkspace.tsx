@@ -71,6 +71,21 @@ function getHookTrace(run: AgentRun | null): AgentHookTraceEntry[] {
   });
 }
 
+function getPermissionMatrix(run: AgentRun | null): Array<Record<string, unknown>> {
+  if (!run) {
+    return [];
+  }
+  const raw = run.meta["permission_matrix"];
+  if (!raw || typeof raw !== "object") {
+    return [];
+  }
+  const phases = (raw as Record<string, unknown>).phases;
+  if (!Array.isArray(phases)) {
+    return [];
+  }
+  return phases.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"));
+}
+
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("zh-CN", {
     hour: "2-digit",
@@ -248,6 +263,7 @@ export function AgentWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const hookTrace = getHookTrace(currentRun);
+  const permissionMatrix = getPermissionMatrix(currentRun);
 
   async function loadThreadState(existingThreadId?: string) {
     setError(null);
@@ -435,6 +451,56 @@ export function AgentWorkspace({
                     {currentRun.subtasks.map((subtask) => (
                       <SubtaskCard key={subtask.id} subtask={subtask} />
                     ))}
+                  </div>
+                )}
+                {permissionMatrix.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">
+                      Permission Matrix
+                    </div>
+                    {permissionMatrix.map((phase) => {
+                      const phaseName = typeof phase.phase === "string" ? phase.phase : "unknown";
+                      const mode = typeof phase.mode === "string" ? phase.mode : "unknown";
+                      const levels = Array.isArray(phase.allowed_permission_levels)
+                        ? phase.allowed_permission_levels.filter((item): item is string => typeof item === "string")
+                        : [];
+                      const tools = Array.isArray(phase.tool_scope)
+                        ? phase.tool_scope.filter((item): item is string => typeof item === "string")
+                        : [];
+                      return (
+                        <div
+                          key={phaseName}
+                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
+                              {phaseName.toUpperCase()} / {mode}
+                            </div>
+                            <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-600))]">
+                              {typeof phase.operation_count === "number" ? `${phase.operation_count} ops` : null}
+                            </div>
+                          </div>
+                          {levels.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                              {levels.map((level) => (
+                                <span key={level} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                                  level:{level}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {tools.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                              {tools.slice(0, 5).map((tool) => (
+                                <span key={tool} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
+                                  {tool}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {hookTrace.length > 0 && (

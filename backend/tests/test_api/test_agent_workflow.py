@@ -95,12 +95,21 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert run["meta"]["skill_snapshot"]["planner"]["name"] == "novel-agent-planner"
     assert run["meta"]["skill_snapshot"]["profile_id"] == "default"
     assert run["meta"]["skill_snapshot"]["operations"][0]["tool_name"] == "create_character"
+    permission_matrix = run["meta"]["permission_matrix"]
+    assert permission_matrix["phases"][0]["phase"] == "plan"
+    assert permission_matrix["phases"][0]["allowed_permission_levels"] == ["read_search"]
+    assert "list_project_characters" in permission_matrix["phases"][0]["tool_scope"]
+    assert permission_matrix["phases"][1]["phase"] == "build"
+    assert permission_matrix["phases"][1]["allowed_permission_levels"] == ["standard_write"]
     planner_subtask = next(subtask for subtask in run["subtasks"] if subtask["role"] == "planner")
     planner_trace = planner_subtask["meta"]["child_trace"]
     assert planner_subtask["meta"]["retry_strategy"] == "service_only"
     assert planner_trace["depends_on"] == []
     assert planner_trace["attempts"][0]["source"] == "service"
     assert planner_trace["attempts"][0]["accepted"] is True
+    researcher_subtask = next(subtask for subtask in run["subtasks"] if subtask["role"] == "researcher")
+    assert "resolve_current_character" in researcher_subtask["meta"]["child_trace"]["tool_scope"]
+    assert researcher_subtask["meta"]["child_trace"]["execution_phase"] == "plan"
 
     confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
     assert confirm_response.status_code == 200
@@ -563,6 +572,10 @@ async def test_high_risk_run_requires_second_confirmation(client: AsyncClient, m
     run = message.json()["run"]
     assert run["operations"][0]["requires_secondary_confirmation"] is True
     assert run["operations"][0]["risk_level"] == "high"
+    build_phase = next(phase for phase in run["meta"]["permission_matrix"]["phases"] if phase["phase"] == "build")
+    assert build_phase["requires_confirmation"] is True
+    assert build_phase["requires_secondary_confirmation"] is True
+    assert build_phase["allowed_permission_levels"] == ["high_risk_write"]
 
     confirm = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
     assert confirm.status_code == 200

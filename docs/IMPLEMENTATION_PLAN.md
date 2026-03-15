@@ -105,6 +105,8 @@
   - `permission_level`
   - `risk_level`
   - `requires_secondary_confirmation`
+- run metadata 已带出 `Plan / Build` 权限矩阵
+- `researcher` 子任务已切到内部 `read/search` 工具层，不再把这类能力暴露成用户可确认 operation
 - run 状态机已扩展出 `awaiting_high_risk_confirmation`
 - `POST /api/v1/agent/runs/{run_id}/confirm-high-risk` 已可用
 - 前端已展示高风险提示与二次确认入口
@@ -116,9 +118,9 @@
 
 后续收口：
 
-- 增加真正的 `read_search` 内部工具层，并从用户可见 operation 中剥离
 - 把“高风险”从当前规则判断升级到更稳定的 classifier
 - 增加批量修改时的 run 级风险摘要
+- 把当前 `Plan / Build` 权限矩阵进一步收敛为明确的 child unit contract
 
 ### Phase 4: 完成校验与落库一致性
 
@@ -214,6 +216,7 @@
 - 高风险二次确认链路
 - subtask recovery / unrecoverable failure 边界
 - subtask child execution trace
+- run-level permission matrix 与 internal read/search layer
 - subtask 与 verification 字段的 API 暴露
 
 ## 兼容与迁移策略

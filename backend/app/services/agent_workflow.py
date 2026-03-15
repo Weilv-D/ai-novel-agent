@@ -88,6 +88,17 @@ COMPACTION_MESSAGE_THRESHOLD = 24
 COMPACTION_RUN_THRESHOLD = 10
 COMPACTION_CHAR_THRESHOLD = 9000
 HOOK_NAMES = ("PreCompact", "PrePlan", "SubagentStop", "RunStop")
+INTERNAL_READ_SEARCH_TOOLS = (
+    "list_project_characters",
+    "list_project_world_settings",
+    "list_project_chapters",
+    "list_project_scenes",
+    "resolve_current_character",
+    "resolve_current_world_setting",
+    "resolve_current_chapter",
+    "resolve_current_scene",
+    "load_latest_checkpoint",
+)
 
 
 class PlannedOperationSpec(BaseModel):
@@ -166,12 +177,33 @@ class SubtaskExecutionTrace(BaseModel):
 
     unit_id: str
     role: Literal["planner", "researcher", "writer", "editor", "continuity"]
+    execution_phase: Literal["plan", "build_validation"]
     retry_strategy: Literal["service_only", "planner_then_service_fallback"]
     depends_on: list[str] = Field(default_factory=list)
     operation_positions: list[int] = Field(default_factory=list)
+    tool_scope: list[str] = Field(default_factory=list)
     input_summary: str | None = None
     output_summary: str | None = None
     attempts: list[SubtaskExecutionAttempt] = Field(default_factory=list)
+
+
+class PermissionPhaseSummary(BaseModel):
+    """Serializable summary for one workflow permission phase."""
+
+    phase: Literal["plan", "build"]
+    mode: Literal["restricted", "gated"]
+    allowed_permission_levels: list[str] = Field(default_factory=list)
+    tool_scope: list[str] = Field(default_factory=list)
+    role_scope: list[str] = Field(default_factory=list)
+    requires_confirmation: bool = False
+    requires_secondary_confirmation: bool = False
+    operation_count: int = 0
+
+
+class RunPermissionMatrix(BaseModel):
+    """Permission summary for the current run."""
+
+    phases: list[PermissionPhaseSummary] = Field(default_factory=list)
 
 
 class CRUDAgentThread:
@@ -770,6 +802,10 @@ class AgentWorkflowService:
             context_data=context_data,
             latest_checkpoint=checkpoint,
         )
+        permission_matrix = self._build_permission_matrix(
+            operations=classified_operations,
+            subtasks=planned_subtasks,
+        )
         subagent_stop_hook = self._validate_blueprint(
             operations=classified_operations,
             subtasks=planned_subtasks,
@@ -799,6 +835,7 @@ class AgentWorkflowService:
                 "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
                 "skill_snapshot": self._build_skill_snapshot(skill_bundle, blueprint.user_visible_operations),
                 "hook_trace": [entry.model_dump(mode="json") for entry in blueprint.hook_trace],
+                "permission_matrix": permission_matrix.model_dump(mode="json"),
                 "blueprint": {
                     "operation_count": len(blueprint.user_visible_operations),
                     "subtask_count": len(blueprint.internal_subtasks),
@@ -2442,9 +2479,11 @@ class AgentWorkflowService:
         return SubtaskExecutionTrace(
             unit_id=f"{role}-{uuid.uuid4().hex[:10]}",
             role=cast(Any, role),
+            execution_phase="build_validation" if role == AgentSubtaskRole.CONTINUITY.value else "plan",
             retry_strategy=retry_strategy,
             depends_on=depends_on,
             operation_positions=operation_positions,
+            tool_scope=self._subtask_tool_scope(role=role),
             input_summary=self._build_subtask_input_summary(
                 role=role,
                 operations=operations,
@@ -2455,6 +2494,52 @@ class AgentWorkflowService:
             output_summary=summary,
             attempts=attempts,
         )
+
+    def _subtask_tool_scope(self, *, role: str) -> list[str]:
+        """Return the internal tool scope for one child unit."""
+        if role == AgentSubtaskRole.RESEARCHER.value:
+            return list(INTERNAL_READ_SEARCH_TOOLS)
+        if role == AgentSubtaskRole.PLANNER.value:
+            return ["compose_run_blueprint", "classify_operation_risk"]
+        if role == AgentSubtaskRole.WRITER.value:
+            return ["draft_prose_candidate", "stage_content_preview"]
+        if role == AgentSubtaskRole.EDITOR.value:
+            return ["build_structured_diff", "stage_patch_preview"]
+        return ["verify_preview_consistency", "check_target_resolution", "detect_multi_step_conflict"]
+
+    def _build_permission_matrix(
+        self,
+        *,
+        operations: list[dict[str, Any]],
+        subtasks: list[dict[str, Any]],
+    ) -> RunPermissionMatrix:
+        """Build the run-level Plan/Build permission matrix."""
+        build_levels = sorted({str(operation["permission_level"]) for operation in operations})
+        high_risk_count = sum(
+            1 for operation in operations if str(operation["permission_level"]) == AgentPermissionLevel.HIGH_RISK_WRITE.value
+        )
+        role_scope = [str(subtask["role"]) for subtask in subtasks]
+        plan_phase = PermissionPhaseSummary(
+            phase="plan",
+            mode="restricted",
+            allowed_permission_levels=[AgentPermissionLevel.READ_SEARCH.value],
+            tool_scope=list(INTERNAL_READ_SEARCH_TOOLS),
+            role_scope=role_scope,
+            requires_confirmation=False,
+            requires_secondary_confirmation=False,
+            operation_count=0,
+        )
+        build_phase = PermissionPhaseSummary(
+            phase="build",
+            mode="gated",
+            allowed_permission_levels=build_levels,
+            tool_scope=[str(operation["tool_name"]) for operation in operations],
+            role_scope=role_scope,
+            requires_confirmation=bool(operations),
+            requires_secondary_confirmation=high_risk_count > 0,
+            operation_count=len(operations),
+        )
+        return RunPermissionMatrix(phases=[plan_phase, build_phase])
 
     def _build_subtask_input_summary(
         self,
