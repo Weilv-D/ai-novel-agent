@@ -772,6 +772,23 @@ export interface AgentThreadMessageResponse {
   run?: AgentRun | null;
 }
 
+export type AgentStreamEventType =
+  | "status"
+  | "thinking"
+  | "operation_progress"
+  | "verification"
+  | "message_chunk"
+  | "result"
+  | "error";
+
+export interface AgentStreamEvent {
+  type: AgentStreamEventType;
+  timestamp: string;
+  stage: string | null;
+  message: string | null;
+  detail: Record<string, unknown>;
+}
+
 export interface AgentProfile {
   id: string;
   name: string;

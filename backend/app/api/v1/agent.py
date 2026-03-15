@@ -2,7 +2,6 @@
 
 import json
 from collections.abc import AsyncIterator
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -103,28 +102,34 @@ async def create_thread_message(
     req: AgentThreadMessageRequest,
 ) -> AgentThreadMessageResponse | StreamingResponse:
     """Send a message into an agent thread and receive a planned run."""
-    response = await agent_workflow_service.create_planned_run(
-        db,
-        thread_id=thread_id,
-        content=req.content,
-        context=req.context,
-    )
     if not req.stream:
+        response = await agent_workflow_service.create_planned_run(
+            db,
+            thread_id=thread_id,
+            content=req.content,
+            context=req.context,
+        )
         return response
 
     async def event_generator() -> AsyncIterator[str]:
-        for chunk in _chunk_text(response.assistant_message.content):
-            payload: dict[str, Any] = {"type": "message_chunk", "content": chunk}
-            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-        payload = {
-            "type": "result",
-            "thread": response.thread.model_dump(mode="json"),
-            "user_message": response.user_message.model_dump(mode="json"),
-            "assistant_message": response.assistant_message.model_dump(mode="json"),
-            "run": response.run.model_dump(mode="json") if response.run else None,
-        }
-        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            async for event in agent_workflow_service.stream_planned_run(
+                db,
+                thread_id=thread_id,
+                content=req.content,
+                context=req.context,
+            ):
+                payload = event.model_dump(mode="json")
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            error_payload = {
+                "type": "error",
+                "message": str(e),
+                "detail": {},
+            }
+            yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         event_generator(),

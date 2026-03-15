@@ -11,6 +11,7 @@ import type {
   AgentOperation,
   AgentRun,
   AgentRunRiskSummary,
+  AgentStreamEvent,
   AgentSubtask,
   AgentThread,
   AgentThreadCheckpoint,
@@ -384,6 +385,8 @@ export function AgentWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [streamingEvents, setStreamingEvents] = useState<AgentStreamEvent[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
   const hookTrace = getHookTrace(currentRun);
   const permissionMatrix = currentRun?.execution_contract?.phases || [];
 
@@ -432,27 +435,63 @@ export function AgentWorkspace({
 
   async function handleSend() {
     const content = input.trim();
-    if (!thread?.id || !content || isPending) {
+    if (!thread?.id || !content || isPending || isStreaming) {
       return;
     }
     setError(null);
     setInput("");
-    startTransition(async () => {
-      try {
-        const response = await agentWorkflowApi.sendMessage(thread.id, {
-          content,
-          context: {},
-        });
-        setMessages((prev) => [...prev, response.user_message, response.assistant_message]);
-        if (response.run) {
-          setCurrentRun(response.run);
-          setRecentRuns((prev) => [response.run!, ...prev.filter((run) => run.id !== response.run!.id)].slice(0, 8));
+    setStreamingEvents([]);
+    setIsStreaming(true);
+
+    try {
+      const userMessage: AgentThreadMessage = {
+        id: `temp-${Date.now()}`,
+        thread_id: thread.id,
+        role: "user",
+        content,
+        meta: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      for await (const event of agentWorkflowApi.sendMessageStream(thread.id, {
+        content,
+        context: {},
+      })) {
+        setStreamingEvents((prev) => [...prev, event]);
+
+        if (event.type === "error") {
+          setError(event.message || "处理过程中发生错误");
+          break;
         }
-      } catch (err) {
-        const message = err instanceof ApiError ? err.detail : "发送指令失败";
-        setError(message);
+
+        if (event.type === "result") {
+          const detail = event.detail as {
+            thread: AgentThread;
+            user_message: AgentThreadMessage;
+            assistant_message: AgentThreadMessage;
+            run?: AgentRun;
+          };
+          setMessages((prev) => [
+            ...prev.filter((m) => m.id !== userMessage.id),
+            detail.user_message,
+            detail.assistant_message,
+          ]);
+          if (detail.run) {
+            setCurrentRun(detail.run);
+            setRecentRuns((prev) =>
+              [detail.run!, ...prev.filter((run) => run.id !== detail.run!.id)].slice(0, 8)
+            );
+          }
+        }
       }
-    });
+    } catch (err) {
+      const message = err instanceof ApiError ? err.detail : "发送指令失败";
+      setError(message);
+    } finally {
+      setIsStreaming(false);
+    }
   }
 
   async function handleRunAction(action: "confirm" | "confirm_high_risk" | "cancel") {
@@ -506,6 +545,57 @@ export function AgentWorkspace({
             ) : (
               messages.map((message) => <MessageBubble key={message.id} message={message} />)
             )}
+            {isStreaming && streamingEvents.length > 0 && (
+              <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.14)] bg-[rgba(255,255,255,0.62)] px-5 py-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-[rgb(var(--jade))]" />
+                  <span className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">Agent 思考过程</span>
+                </div>
+                <div className="space-y-2">
+                  {streamingEvents.map((event, index) => (
+                    <div key={index} className="flex items-start gap-3 text-sm">
+                      <span
+                        className={`mt-0.5 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                          event.type === "thinking"
+                            ? "bg-[rgb(var(--jade))]"
+                            : event.type === "status"
+                              ? "bg-[rgb(var(--ink-500))]"
+                              : event.type === "operation_progress"
+                                ? "bg-[rgb(var(--amber))]"
+                                : event.type === "error"
+                                  ? "bg-[rgb(var(--danger))]"
+                                  : "bg-[rgb(var(--ink-400))]"
+                        }`}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-[rgb(var(--ink-900))]">
+                            {event.stage || event.type}
+                          </span>
+                          {event.message && (
+                            <span className="text-[rgb(var(--ink-600))]">{event.message}</span>
+                          )}
+                        </div>
+                        {event.type === "thinking" && typeof event.detail.operations === "object" && (
+                          <div className="mt-2 space-y-1">
+                            {Array.isArray(event.detail.operations) && (event.detail.operations as Array<{tool_name: string; description: string}>).map((op, opIndex) => (
+                              <div key={opIndex} className="text-xs text-[rgb(var(--ink-500))]">
+                                • {TOOL_LABELS[op.tool_name as string] || op.tool_name}: {op.description}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {event.type === "operation_progress" && typeof event.detail.target_display === "string" && (
+                          <div className="mt-1 text-xs text-[rgb(var(--ink-500))]">
+                            目标: {event.detail.target_display as string}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="border-t border-[rgba(var(--line),0.12)] pt-4">
             <Textarea
@@ -518,10 +608,10 @@ export function AgentWorkspace({
             />
             <div className="mt-4 flex items-center justify-between gap-3">
               <p className="text-sm text-[rgb(var(--ink-600))]">
-                Agent 会先生成完整计划和预览，确认后才真正写入数据。
+                {isStreaming ? "Agent 正在思考，请稍候..." : "Agent 会先生成完整计划和预览，确认后才真正写入数据。"}
               </p>
-              <Button onClick={handleSend} disabled={!input.trim() || isPending} testId="agent-send-btn">
-                {isPending ? "处理中..." : "生成计划"}
+              <Button onClick={handleSend} disabled={!input.trim() || isPending || isStreaming} testId="agent-send-btn">
+                {isStreaming ? "思考中..." : isPending ? "处理中..." : "生成计划"}
               </Button>
             </div>
             {error && <p className="mt-3 text-sm text-[rgb(var(--danger))]">{error}</p>}

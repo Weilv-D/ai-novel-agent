@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from textwrap import dedent
 from typing import Any, Literal, cast
@@ -60,6 +61,7 @@ from app.schemas.agent import (
     AgentRunRiskSummaryResponse,
     AgentSkillCatalogResponse,
     AgentSkillSummaryResponse,
+    AgentStreamEvent,
     AgentSubtaskAttemptResponse,
     AgentSubtaskResponse,
     AgentSubtaskTraceResponse,
@@ -969,6 +971,269 @@ class AgentWorkflowService:
             user_message=self._message_response(user_message),
             assistant_message=self._message_response(assistant_message),
             run=await self._run_response(db, run),
+        )
+
+    async def stream_planned_run(
+        self,
+        db: AsyncSession,
+        *,
+        thread_id: uuid.UUID,
+        content: str,
+        context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Stream agent planning process with real-time status updates."""
+        yield AgentStreamEvent(
+            type="status",
+            stage="init",
+            message="正在初始化 Agent 工作流...",
+            detail={"thread_id": str(thread_id)},
+        )
+
+        thread = await self.thread_store.get(db, thread_id)
+        project = await project_service.get(db, id=thread.project_id)
+        request_context = context or {}
+
+        yield AgentStreamEvent(
+            type="status",
+            stage="load_context",
+            message="正在加载项目上下文...",
+            detail={"project_id": str(project.id), "project_name": project.name},
+        )
+
+        prior_run = await self.run_store.get_latest_pending(db, thread_id=thread.id)
+        full_history = await self.message_store.list_by_thread(db, thread_id=thread.id, limit=60)
+        recent_runs = await self.run_store.list_recent_by_thread(db, thread_id=thread.id, limit=20)
+        profile_id = project.agent_profile_id
+        skill_bundle = agent_skill_service.load_bundle(profile_id=profile_id)
+
+        user_message = await self.message_store.create(
+            db,
+            thread_id=thread.id,
+            role=AgentMessageRole.USER.value,
+            content=content,
+            meta={"context": request_context},
+        )
+
+        checkpoint, precompact_hook = await self._maybe_compact_thread(
+            db,
+            thread=thread,
+            project=project,
+            profile_id=profile_id,
+            history=full_history,
+            recent_runs=recent_runs,
+            request_context=request_context,
+        )
+
+        yield AgentStreamEvent(
+            type="status",
+            stage="compact_check",
+            message="线程压缩检查完成",
+            detail={
+                "checkpoint_id": str(checkpoint.id) if checkpoint else None,
+                "precompact_status": precompact_hook.status,
+            },
+        )
+
+        history, history_mode = await self._planner_history(
+            db,
+            thread_id=thread.id,
+            latest_checkpoint=checkpoint,
+            current_user_message_id=user_message.id,
+        )
+        context_data = await self._load_project_context(
+            db,
+            project=project,
+            request_context=request_context,
+            latest_checkpoint=checkpoint,
+        )
+        context_data["retained_window"] = self._retained_window_payload(
+            history=history,
+            history_mode=history_mode,
+            latest_checkpoint=checkpoint,
+        )
+        context_data["planner_window"] = {
+            "history_mode": history_mode,
+            "history_message_count": len(history),
+            "retained_message_limit": (
+                CHECKPOINT_DELTA_HISTORY_LIMIT if history_mode == "checkpoint_delta" else RECENT_HISTORY_WINDOW_LIMIT
+            ),
+            "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
+            "checkpoint_available": checkpoint is not None,
+            "compact_policy_version": COMPACT_POLICY_VERSION,
+        }
+        context_data["active_bundle_contract"] = self._active_bundle_contract_payload_for_run(
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
+        )
+        preplan_hook = self._build_pre_plan_hook(
+            project=project,
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
+            history=history,
+            history_mode=history_mode,
+        )
+
+        yield AgentStreamEvent(
+            type="thinking",
+            stage="planning",
+            message="Agent 正在分析您的请求并规划操作...",
+            detail={
+                "history_count": len(history),
+                "history_mode": history_mode,
+                "profile_id": profile_id,
+            },
+        )
+
+        planner_output = await self._plan_with_llm(
+            user_message=content,
+            context_data=context_data,
+            history=history,
+            prior_run=prior_run,
+            skill_bundle=skill_bundle,
+        )
+
+        yield AgentStreamEvent(
+            type="thinking",
+            stage="plan_complete",
+            message=f"规划完成，共 {len(planner_output.operations)} 个操作",
+            detail={
+                "summary": planner_output.summary,
+                "operation_count": len(planner_output.operations),
+                "operations": [
+                    {"tool_name": op.tool_name, "description": op.description}
+                    for op in planner_output.operations
+                ],
+            },
+        )
+
+        assistant_message = await self.message_store.create(
+            db,
+            thread_id=thread.id,
+            role=AgentMessageRole.ASSISTANT.value,
+            content=planner_output.assistant_message,
+            meta={"summary": planner_output.summary},
+        )
+
+        yield AgentStreamEvent(
+            type="status",
+            stage="prepare_operations",
+            message="正在准备操作预览...",
+            detail={"operation_count": len(planner_output.operations)},
+        )
+
+        planned_operations = await self._prepare_operations(
+            db,
+            project_id=thread.project_id,
+            request_context=request_context,
+            operations=planner_output.operations,
+        )
+
+        for i, operation in enumerate(planned_operations):
+            yield AgentStreamEvent(
+                type="operation_progress",
+                stage="prepare",
+                message=f"准备操作 {i + 1}/{len(planned_operations)}: {operation.get('tool_name', 'unknown')}",
+                detail={
+                    "position": i + 1,
+                    "total": len(planned_operations),
+                    "tool_name": operation.get("tool_name"),
+                    "target_display": operation.get("target_display"),
+                },
+            )
+
+        classified_operations = self._classify_operations(planned_operations, profile_id=profile_id)
+        risk_summary = agent_risk_service.build_run_risk_summary(
+            classified_operations,
+            profile_id=profile_id,
+        )
+
+        yield AgentStreamEvent(
+            type="status",
+            stage="risk_assessment",
+            message=f"风险评估完成: {risk_summary.overall_risk_level} 风险",
+            detail={
+                "overall_risk_level": risk_summary.overall_risk_level,
+                "total_operations": risk_summary.total_operations,
+                "high_risk_count": risk_summary.high_risk_operation_count,
+                "confirmation_gate": risk_summary.confirmation_gate,
+            },
+        )
+
+        planned_subtasks = self._build_subtasks(
+            planner_output=planner_output,
+            operations=classified_operations,
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
+        )
+        execution_contract_payload = self._build_execution_contract_payload(
+            operations=classified_operations,
+            subtasks=planned_subtasks,
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
+        )
+        subagent_stop_hook = self._validate_blueprint(
+            operations=classified_operations,
+            subtasks=planned_subtasks,
+        )
+        blueprint = RunBlueprint(
+            assistant_message=planner_output.assistant_message,
+            summary=planner_output.summary,
+            warning_message=planner_output.warning_message,
+            user_visible_operations=classified_operations,
+            internal_subtasks=planned_subtasks,
+            hook_trace=[precompact_hook, preplan_hook, subagent_stop_hook],
+        )
+
+        run = await self.run_store.create(
+            db,
+            thread_id=thread.id,
+            project_id=thread.project_id,
+            user_message_id=user_message.id,
+            assistant_message_id=assistant_message.id,
+            revision_of_run_id=prior_run.id if prior_run is not None else None,
+            summary=blueprint.summary,
+            warning_message=blueprint.warning_message,
+            meta={
+                "request_context": request_context,
+                "raw_operation_count": len(blueprint.user_visible_operations),
+                "profile_id": profile_id,
+                "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
+                "compact_policy": self._compact_policy_payload(),
+                "planner_window": context_data["planner_window"],
+                "retained_window": context_data["retained_window"],
+                "active_bundle_contract": context_data["active_bundle_contract"],
+                "skill_snapshot": self._build_skill_snapshot(skill_bundle, blueprint.user_visible_operations),
+                "hook_trace": [entry.model_dump(mode="json") for entry in blueprint.hook_trace],
+                "permission_matrix": execution_contract_payload,
+                "risk_summary": risk_summary.model_dump(mode="json"),
+                "blueprint": {
+                    "operation_count": len(blueprint.user_visible_operations),
+                    "subtask_count": len(blueprint.internal_subtasks),
+                    "subtask_roles": [str(subtask["role"]) for subtask in blueprint.internal_subtasks],
+                },
+            },
+        )
+        await self.operation_store.create_many(db, run_id=run.id, operations=blueprint.user_visible_operations)
+        await self.subtask_store.create_many(db, run_id=run.id, subtasks=blueprint.internal_subtasks)
+        await self.run_store.supersede_pending_runs(db, thread_id=thread.id, keep_run_id=run.id)
+
+        yield AgentStreamEvent(
+            type="message_chunk",
+            stage="assistant_message",
+            message=planner_output.assistant_message,
+            detail={},
+        )
+
+        yield AgentStreamEvent(
+            type="result",
+            stage="complete",
+            message="Agent 规划完成，等待用户确认",
+            detail={
+                "thread": self._thread_response(thread).model_dump(mode="json"),
+                "user_message": self._message_response(user_message).model_dump(mode="json"),
+                "assistant_message": self._message_response(assistant_message).model_dump(mode="json"),
+                "run": (await self._run_response(db, run)).model_dump(mode="json"),
+            },
         )
 
     async def get_run_response(self, db: AsyncSession, *, run_id: uuid.UUID) -> AgentRunResponse:

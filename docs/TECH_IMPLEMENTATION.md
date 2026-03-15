@@ -268,6 +268,81 @@
 - 项目详情页：导出按钮
 - 项目列表页：导入入口和上传确认按钮
 
+## Agent 流式事件系统
+
+系统支持实时显示 Agent 思考过程与执行状态，通过 Server-Sent Events (SSE) 实现。
+
+### 事件类型
+
+| 类型 | 阶段 | 说明 |
+|------|------|------|
+| `status` | init, load_context, compact_check, prepare_operations, risk_assessment | 状态更新 |
+| `thinking` | planning, plan_complete | Agent 思考过程 |
+| `operation_progress` | prepare | 操作准备进度 |
+| `message_chunk` | assistant_message | 助手消息分块 |
+| `result` | complete | 最终执行结果 |
+| `error` | - | 错误信息 |
+
+### 流式接口
+
+```
+POST /api/v1/agent/threads/{thread_id}/messages
+Content-Type: application/json
+
+{
+  "content": "创建一个人物",
+  "context": {},
+  "stream": true
+}
+```
+
+响应使用 SSE 格式：
+
+```
+data: {"type": "status", "stage": "init", "message": "正在初始化 Agent 工作流...", "timestamp": "..."}
+
+data: {"type": "thinking", "stage": "planning", "message": "Agent 正在分析您的请求并规划操作...", "detail": {...}}
+
+data: {"type": "thinking", "stage": "plan_complete", "message": "规划完成，共 1 个操作", "detail": {...}}
+
+data: {"type": "result", "stage": "complete", "message": "Agent 规划完成，等待用户确认", "detail": {...}}
+
+data: [DONE]
+```
+
+### 前端实时显示
+
+`AgentWorkspace.tsx` 组件在流式请求期间显示实时事件面板：
+
+- 思考中状态指示器（脉冲动画）
+- 当前处理阶段显示
+- 操作列表预览
+- 错误信息展示
+
+### 事件流程
+
+```
+用户发送消息
+    ↓
+[status:init] 初始化
+    ↓
+[status:load_context] 加载项目上下文
+    ↓
+[status:compact_check] 压缩检查
+    ↓
+[thinking:planning] 分析请求并规划
+    ↓
+[thinking:plan_complete] 规划完成
+    ↓
+[status:prepare_operations] 准备操作预览
+    ↓
+[operation_progress] 逐个准备操作
+    ↓
+[status:risk_assessment] 风险评估
+    ↓
+[result] 等待用户确认
+```
+
 ## 项目包导出导入
 
 系统支持完整项目数据的打包导出与恢复导入。

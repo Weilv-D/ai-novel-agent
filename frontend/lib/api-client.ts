@@ -427,6 +427,7 @@ import type {
   AgentRiskPolicyRegistry,
   AgentRun,
   AgentSkillCatalog,
+  AgentStreamEvent,
   AgentThread,
   AgentThreadMessageRequest,
   AgentThreadMessageResponse,
@@ -538,6 +539,54 @@ export const agentWorkflowApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  sendMessageStream: async function* (
+    threadId: string,
+    data: AgentThreadMessageRequest
+  ): AsyncGenerator<AgentStreamEvent, void, unknown> {
+    const url = `${API_BASE_URL}/api/v1/agent/threads/${threadId}/messages`;
+    const headers = await buildAuthenticatedHeaders({
+      "Content-Type": "application/json",
+    });
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...data, stream: true }),
+    });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, "Stream request failed");
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) return;
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") return;
+          try {
+            const parsed = JSON.parse(data) as AgentStreamEvent;
+            yield parsed;
+          } catch {
+            // skip malformed data
+          }
+        }
+      }
+    }
+  },
 
   getRun: (runId: string) =>
     fetchApi<AgentRun>(`/api/v1/agent/runs/${runId}`),

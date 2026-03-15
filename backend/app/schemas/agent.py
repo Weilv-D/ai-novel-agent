@@ -1,11 +1,12 @@
 """Schemas for the agent workflow and legacy chat endpoints."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+# Backend schema additions for agent workflow
 RunStatusLiteral = Literal[
     "draft",
     "awaiting_confirmation",
@@ -42,6 +43,26 @@ RiskPolicyScopeLiteral = Literal["operation", "run"]
 ChildUnitRoleLiteral = Literal["planner", "researcher", "writer", "editor", "continuity", "executor"]
 ChildUnitStageLiteral = Literal["preview", "pre_execution", "execution"]
 PlannerHistoryModeLiteral = Literal["recent_window", "checkpoint_delta"]
+
+AgentStreamEventTypeLiteral = Literal[
+    "status",
+    "thinking",
+    "operation_progress",
+    "verification",
+    "message_chunk",
+    "result",
+    "error",
+]
+
+
+class AgentStreamEvent(BaseModel):
+    """SSE event payload for real-time agent process streaming."""
+
+    type: AgentStreamEventTypeLiteral
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    stage: str | None = None
+    message: str | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
 
 
 class OperationPreview(BaseModel):
