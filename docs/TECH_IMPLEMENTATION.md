@@ -420,6 +420,73 @@ compact 行为通过以下 contract 对外可见：
 - `active_bundle_contract`
 - `compaction_boundary`
 
+## 用户体验优化
+
+### 状态持久化
+
+用户偏好设置通过 Zustand persist middleware 自动持久化到 localStorage：
+
+| 存储键 | 内容 |
+|--------|------|
+| `user-preferences` | 主题、字体大小、语言、侧边栏状态等 |
+| `form-draft-*` | 表单草稿自动保存 |
+| `api_key` | API 认证密钥 |
+| `api_key_header` | API Key header 名称 |
+
+### 全局组件
+
+| 组件 | 功能 |
+|------|------|
+| `GlobalProgressBar` | 页面切换时的顶部进度条 |
+| `NetworkStatusIndicator` | 网络断开时的底部提示条 |
+| `ToastProvider` | 全局通知系统（成功/错误/警告/信息） |
+| `MobileNav` | 移动端底部导航菜单 |
+| `PreferencesInit` | 初始化用户偏好设置（主题、字体大小） |
+
+### 骨架屏组件
+
+为提升感知性能，提供多种骨架屏组件：
+
+- `Skeleton` - 基础骨架屏
+- `SkeletonText` - 文本占位
+- `SkeletonCard` - 卡片占位
+- `SkeletonList` - 列表占位
+- `SkeletonProjectCard` - 项目卡片占位
+- `SkeletonCharacterCard` - 人物卡片占位
+- `SkeletonChapterCard` - 章节卡片占位
+- `SkeletonAgentWorkspace` - Agent 工作区占位
+
+### 性能优化 Hooks
+
+| Hook | 功能 |
+|------|------|
+| `useDebounce` | 防抖值 |
+| `useDebouncedCallback` | 防抖回调 |
+| `useThrottle` | 节流值 |
+| `useLocalStorage` | localStorage 状态管理 |
+| `useMediaQuery` | 媒体查询响应 |
+| `useIsMobile` | 移动端检测 |
+| `useIsTablet` | 平板检测 |
+| `useIsDesktop` | 桌面端检测 |
+| `useOnline` | 网络状态检测 |
+| `useIntersectionObserver` | 元素可见性检测 |
+| `usePrevious` | 获取前一个值 |
+
+### CSS 优化
+
+- 硬件加速：`transform: translateZ(0)`, `will-change`
+- 动画支持：Toast 滑入、按钮加载旋转
+- 减少动画模式：`prefers-reduced-motion`
+- 触摸设备优化：增大触摸目标、禁用 hover 效果
+- 打印样式：隐藏非必要元素
+
+### 无障碍支持
+
+- 语义化 HTML 标签
+- ARIA 属性（`role`, `aria-label`, `aria-busy`）
+- 键盘导航支持
+- 焦点可见性样式（`focus-visible`）
+
 ## 前端工作台
 
 当前 `AgentWorkspace` 不是简单聊天框，它承担这些职责：

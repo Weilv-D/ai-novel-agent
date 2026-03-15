@@ -2194,7 +2194,7 @@ class AgentWorkflowService:
             updated_chapter = await chapter_service.update(
                 db,
                 db_obj=chapter,
-                obj_in=ChapterUpdate(content=next_content),
+                obj_in=ChapterUpdate(content=next_content),  # type: ignore[call-arg]
             )
             operation.target_id = updated_chapter.id
             operation.target_display = f"第{updated_chapter.chapter_number}章 {updated_chapter.title or ''}".strip()
@@ -2257,7 +2257,7 @@ class AgentWorkflowService:
             updated_scene = await scene_service.update(
                 db,
                 db_obj=scene,
-                obj_in=SceneUpdate(content=next_content),
+                obj_in=SceneUpdate(content=next_content),  # type: ignore[call-arg]
             )
             operation.target_id = updated_scene.id
             operation.target_display = f"场景 {updated_scene.scene_order}"

@@ -9,6 +9,7 @@ from app.api.deps import get_db
 from app.models.dependency import Dependency
 from app.schemas.dependency import (
     DependencyCreate,
+    DependencyEntityTypeLiteral,
     DependencyResponse,
     DependencyUpdate,
     ImpactAnalysisRequest,
@@ -137,7 +138,7 @@ async def analyze_reverse_impact(
     )
 
     return ImpactAnalysisResponse(
-        source_type=target_type,
+        source_type=target_type,  # type: ignore[arg-type]
         source_id=target_id,
         impacted_objects=impacts,
         total_count=len(impacts),
