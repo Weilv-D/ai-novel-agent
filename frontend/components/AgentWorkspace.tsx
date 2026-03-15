@@ -566,6 +566,81 @@ export function AgentWorkspace({
                   </div>
                 )}
                 {currentRun.risk_summary && <RiskSummaryCard riskSummary={currentRun.risk_summary} />}
+                {(currentRun.planner_window || currentRun.compact_policy || currentRun.retained_window || currentRun.active_bundle_contract) && (
+                  <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.48)] px-4 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">
+                          Planner Window
+                        </div>
+                        <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">当前规划输入窗口</div>
+                      </div>
+                      {currentRun.planner_window && (
+                        <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                          mode:{currentRun.planner_window.history_mode}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                      {currentRun.planner_window && (
+                        <>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            history:{currentRun.planner_window.history_message_count}
+                          </span>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            retained:{currentRun.planner_window.retained_message_limit}
+                          </span>
+                          {currentRun.planner_window.checkpoint_id && (
+                            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                              checkpoint:attached
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {currentRun.compact_policy && (
+                        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                          policy:{currentRun.compact_policy.policy_version}
+                        </span>
+                      )}
+                      {currentRun.retained_window && (
+                        <>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            retained-msgs:{currentRun.retained_window.message_count}
+                          </span>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            retained-chars:{currentRun.retained_window.character_count}
+                          </span>
+                          {currentRun.retained_window.roles.length > 0 && (
+                            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                              roles:{currentRun.retained_window.roles.join("/")}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {currentRun.active_bundle_contract && (
+                        <>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            bundle:{currentRun.active_bundle_contract.source}
+                          </span>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            sections:{currentRun.active_bundle_contract.included_sections.length}
+                          </span>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            chars:{currentRun.active_bundle_contract.collections.characters_count}/{currentRun.active_bundle_contract.collections.characters_limit}
+                          </span>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            chapters:{currentRun.active_bundle_contract.collections.chapters_count}/{currentRun.active_bundle_contract.collections.chapters_limit}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    {currentRun.active_bundle_contract?.focused_object_types.length ? (
+                      <div className="mt-3 text-sm leading-7 text-[rgb(var(--ink-700))]">
+                        当前聚焦对象：{currentRun.active_bundle_contract.focused_object_types.join(" / ")}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
                 {currentRun.subtasks.length > 0 && (
                   <div className="space-y-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">
@@ -771,6 +846,44 @@ export function AgentWorkspace({
                   <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.source_run_count}</div>
                 </div>
               </div>
+              {(latestCheckpoint.compact_policy || latestCheckpoint.compaction_boundary || latestCheckpoint.active_bundle_contract) && (
+                <div className="flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                  {latestCheckpoint.compact_policy && (
+                    <>
+                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                        policy:{latestCheckpoint.compact_policy.policy_version}
+                      </span>
+                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                        recent:{latestCheckpoint.compact_policy.recent_window_limit}
+                      </span>
+                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                        delta:{latestCheckpoint.compact_policy.checkpoint_delta_limit}
+                      </span>
+                    </>
+                  )}
+                  {latestCheckpoint.compaction_boundary && (
+                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                      boundary:{latestCheckpoint.compaction_boundary.history_mode}
+                    </span>
+                  )}
+                  {latestCheckpoint.active_bundle_contract && (
+                    <>
+                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                        bundle:{latestCheckpoint.active_bundle_contract.source}
+                      </span>
+                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                        digest:{latestCheckpoint.active_bundle_contract.collections.recent_run_digest_count}/
+                        {latestCheckpoint.active_bundle_contract.collections.recent_run_digest_limit}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+              {latestCheckpoint.active_bundle_contract?.focused_object_types.length ? (
+                <div className="text-sm leading-7 text-[rgb(var(--ink-700))]">
+                  压缩时的聚焦对象：{latestCheckpoint.active_bundle_contract.focused_object_types.join(" / ")}
+                </div>
+              ) : null}
               <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-4">
                 <div className="mb-2 text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-600))]">Summary</div>
                 <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{latestCheckpoint.thread_summary}</p>

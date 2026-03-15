@@ -11,6 +11,7 @@ AI Novel Agent 是一个面向个人长期创作的 Agent 化长篇小说工作�
 - Agent Workspace：用自然语言下达创作与修改指令，先看完整计划与预览，再确认执行
 - Agent Profile：项目可绑定不同写作 profile；当前内置 `default` 与 `xianxia_intrigue`
 - Hook Trace：工作台会显示内部生命周期阶段，便于理解 planning / validation / compaction 状态
+- 长线程压缩：工作台可见 checkpoint、planner window、retained window 与 active bundle 边界
 - 记忆与检索：支持 embedding 驱动的内容记忆
 - 内容导出：导出 TXT 与 Markdown
 
@@ -96,7 +97,7 @@ docker-compose up -d
 7. 先检查 Agent 生成的执行计划与预览，再确认执行
 8. 如果计划包含高风险正文覆盖，系统会要求二次确认
 9. 需要时再进入人物、世界观、章节、场景页面做手动复核或微调
-10. 线程足够长时，工作台会展示最新 checkpoint 摘要，帮助你理解压缩后的上下文
+10. 线程足够长时，工作台会展示最新 checkpoint 摘要，以及当前 planner 实际保留的历史窗口和上下文边界
 
 ## Skill 配置
 

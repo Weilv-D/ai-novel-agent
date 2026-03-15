@@ -39,16 +39,21 @@ from app.models.project import Project
 from app.models.snapshot import Snapshot
 from app.models.world_setting import WorldSetting
 from app.schemas.agent import (
+    AgentActiveBundleContractResponse,
     AgentCapabilityExecutionRecordResponse,
     AgentCapabilityPolicyResponse,
     AgentCapabilityRegistryResponse,
     AgentCapabilityResponse,
+    AgentCompactionBoundaryResponse,
+    AgentCompactPolicyResponse,
     AgentExecutionChildUnitResponse,
     AgentExecutionContractResponse,
     AgentExecutionPhaseResponse,
     AgentMessageResponse,
     AgentOperationResponse,
+    AgentPlannerWindowResponse,
     AgentProfileResponse,
+    AgentRetainedWindowResponse,
     AgentRiskPolicyRegistryResponse,
     AgentRunActionResponse,
     AgentRunResponse,
@@ -101,6 +106,15 @@ SUBTASK_SUMMARY_LIMIT = 180
 COMPACTION_MESSAGE_THRESHOLD = 24
 COMPACTION_RUN_THRESHOLD = 10
 COMPACTION_CHAR_THRESHOLD = 9000
+RECENT_HISTORY_WINDOW_LIMIT = 12
+CHECKPOINT_DELTA_HISTORY_LIMIT = 12
+COMPACT_POLICY_VERSION = "2026-03-15.1"
+ACTIVE_BUNDLE_CONTRACT_VERSION = "2026-03-15.1"
+CHARACTER_CONTEXT_LIMIT = 20
+WORLD_SETTING_CONTEXT_LIMIT = 20
+CHAPTER_CONTEXT_LIMIT = 40
+SCENE_CONTEXT_LIMIT = 20
+RECENT_RUN_DIGEST_LIMIT = 6
 HOOK_NAMES = ("PreCompact", "PrePlan", "SubagentStop", "RunStop")
 CAPABILITY_REGISTRY_VERSION = "2026-03-15.1"
 INTERNAL_READ_SEARCH_TOOLS = (
@@ -839,11 +853,25 @@ class AgentWorkflowService:
             request_context=request_context,
             latest_checkpoint=checkpoint,
         )
+        context_data["retained_window"] = self._retained_window_payload(
+            history=history,
+            history_mode=history_mode,
+            latest_checkpoint=checkpoint,
+        )
         context_data["planner_window"] = {
             "history_mode": history_mode,
             "history_message_count": len(history),
+            "retained_message_limit": (
+                CHECKPOINT_DELTA_HISTORY_LIMIT if history_mode == "checkpoint_delta" else RECENT_HISTORY_WINDOW_LIMIT
+            ),
             "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
+            "checkpoint_available": checkpoint is not None,
+            "compact_policy_version": COMPACT_POLICY_VERSION,
         }
+        context_data["active_bundle_contract"] = self._active_bundle_contract_payload_for_run(
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
+        )
         preplan_hook = self._build_pre_plan_hook(
             project=project,
             context_data=context_data,
@@ -917,6 +945,10 @@ class AgentWorkflowService:
                 "raw_operation_count": len(blueprint.user_visible_operations),
                 "profile_id": profile_id,
                 "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
+                "compact_policy": self._compact_policy_payload(),
+                "planner_window": context_data["planner_window"],
+                "retained_window": context_data["retained_window"],
+                "active_bundle_contract": context_data["active_bundle_contract"],
                 "skill_snapshot": self._build_skill_snapshot(skill_bundle, blueprint.user_visible_operations),
                 "hook_trace": [entry.model_dump(mode="json") for entry in blueprint.hook_trace],
                 "permission_matrix": execution_contract_payload,
@@ -1149,9 +1181,21 @@ class AgentWorkflowService:
         request_context: dict[str, Any],
         latest_checkpoint: AgentThreadCheckpoint | None = None,
     ) -> dict[str, Any]:
-        characters = await character_service.get_by_project(db, project_id=project.id, limit=20)
-        world_settings = await world_setting_service.get_by_project(db, project_id=project.id, limit=20)
-        chapters = await chapter_service.get_by_project(db, project_id=project.id, limit=40)
+        characters = await character_service.get_by_project(
+            db,
+            project_id=project.id,
+            limit=CHARACTER_CONTEXT_LIMIT,
+        )
+        world_settings = await world_setting_service.get_by_project(
+            db,
+            project_id=project.id,
+            limit=WORLD_SETTING_CONTEXT_LIMIT,
+        )
+        chapters = await chapter_service.get_by_project(
+            db,
+            project_id=project.id,
+            limit=CHAPTER_CONTEXT_LIMIT,
+        )
 
         context_data: dict[str, Any] = {
             "project": {
@@ -1200,7 +1244,11 @@ class AgentWorkflowService:
         if chapter_id:
             try:
                 chapter = await chapter_service.get(db, id=uuid.UUID(str(chapter_id)))
-                scenes = await scene_service.get_by_chapter(db, chapter_id=chapter.id, limit=20)
+                scenes = await scene_service.get_by_chapter(
+                    db,
+                    chapter_id=chapter.id,
+                    limit=SCENE_CONTEXT_LIMIT,
+                )
                 context_data["current_chapter"] = {
                     "id": str(chapter.id),
                     "chapter_number": chapter.chapter_number,
@@ -1254,7 +1302,11 @@ class AgentWorkflowService:
         current_user_message_id: uuid.UUID,
     ) -> tuple[list[AgentMessage], Literal["recent_window", "checkpoint_delta"]]:
         if latest_checkpoint is None:
-            history = await self.message_store.list_recent_history(db, thread_id=thread_id, limit=12)
+            history = await self.message_store.list_recent_history(
+                db,
+                thread_id=thread_id,
+                limit=RECENT_HISTORY_WINDOW_LIMIT,
+            )
             history = [message for message in history if message.id != current_user_message_id]
             return history, "recent_window"
 
@@ -1262,7 +1314,7 @@ class AgentWorkflowService:
             db,
             thread_id=thread_id,
             offset=latest_checkpoint.source_message_count,
-            limit=max(COMPACTION_MESSAGE_THRESHOLD, 12),
+            limit=CHECKPOINT_DELTA_HISTORY_LIMIT,
         )
         history = [message for message in history if message.id != current_user_message_id]
         return history, "checkpoint_delta"
@@ -1290,7 +1342,14 @@ class AgentWorkflowService:
                 hook_name="PreCompact",
                 status="skipped",
                 summary="线程尚未达到压缩阈值。",
-                meta={"message_count": len(history), "run_count": len(recent_runs), "total_context_characters": total_chars},
+                meta={
+                    "message_count": len(history),
+                    "run_count": len(recent_runs),
+                    "total_context_characters": total_chars,
+                    "compact_policy_version": COMPACT_POLICY_VERSION,
+                    "recent_window_limit": RECENT_HISTORY_WINDOW_LIMIT,
+                    "checkpoint_delta_limit": CHECKPOINT_DELTA_HISTORY_LIMIT,
+                },
             )
 
         if latest_checkpoint is not None:
@@ -1303,17 +1362,29 @@ class AgentWorkflowService:
                     hook_name="PreCompact",
                     status="completed",
                     summary="沿用现有 checkpoint，无需重新压缩。",
-                    meta={"checkpoint_id": str(latest_checkpoint.id)},
+                    meta={
+                        "checkpoint_id": str(latest_checkpoint.id),
+                        "compact_policy_version": COMPACT_POLICY_VERSION,
+                        "history_mode": "checkpoint_delta",
+                        "recent_window_limit": RECENT_HISTORY_WINDOW_LIMIT,
+                        "checkpoint_delta_limit": CHECKPOINT_DELTA_HISTORY_LIMIT,
+                    },
                 )
 
         compact_context = {
             "project": {"name": project.name, "genre": project.genre, "summary": project.summary},
             "request_context": request_context,
+            "compact_policy": self._compact_policy_payload(),
             "compaction_boundary": {
                 "history_mode": "checkpoint_delta",
                 "source_message_count": len(history),
                 "source_run_count": len(recent_runs),
             },
+            "active_bundle_contract": self._active_bundle_contract_payload_for_checkpoint(
+                request_context=request_context,
+                latest_checkpoint=latest_checkpoint,
+                recent_runs=recent_runs,
+            ),
         }
         thread_summary = self._summarize_thread(history=history, recent_runs=recent_runs)
         recent_run_digest = {
@@ -1324,7 +1395,7 @@ class AgentWorkflowService:
                     "summary": run.summary,
                     "updated_at": run.updated_at.isoformat(),
                 }
-                for run in recent_runs[:6]
+                for run in recent_runs[:RECENT_RUN_DIGEST_LIMIT]
             ]
         }
         created_checkpoint = await self.checkpoint_store.create(
@@ -1347,6 +1418,9 @@ class AgentWorkflowService:
                 "history_mode": "checkpoint_delta",
                 "source_message_count": len(history),
                 "source_run_count": len(recent_runs),
+                "compact_policy_version": COMPACT_POLICY_VERSION,
+                "recent_window_limit": RECENT_HISTORY_WINDOW_LIMIT,
+                "checkpoint_delta_limit": CHECKPOINT_DELTA_HISTORY_LIMIT,
             },
         )
 
@@ -2191,6 +2265,126 @@ class AgentWorkflowService:
         except ValidationError as exc:
             raise BadRequestException(f"Invalid planner payload for {schema.__name__}: {exc}") from exc
 
+    def _compact_policy_payload(self) -> dict[str, Any]:
+        return {
+            "policy_version": COMPACT_POLICY_VERSION,
+            "message_threshold": COMPACTION_MESSAGE_THRESHOLD,
+            "run_threshold": COMPACTION_RUN_THRESHOLD,
+            "char_threshold": COMPACTION_CHAR_THRESHOLD,
+            "recent_window_limit": RECENT_HISTORY_WINDOW_LIMIT,
+            "checkpoint_delta_limit": CHECKPOINT_DELTA_HISTORY_LIMIT,
+        }
+
+    def _retained_window_payload(
+        self,
+        *,
+        history: list[AgentMessage],
+        history_mode: Literal["recent_window", "checkpoint_delta"],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+    ) -> dict[str, Any]:
+        return {
+            "history_mode": history_mode,
+            "message_count": len(history),
+            "character_count": sum(len(message.content) for message in history),
+            "retained_message_limit": (
+                CHECKPOINT_DELTA_HISTORY_LIMIT if history_mode == "checkpoint_delta" else RECENT_HISTORY_WINDOW_LIMIT
+            ),
+            "oldest_message_id": str(history[0].id) if history else None,
+            "newest_message_id": str(history[-1].id) if history else None,
+            "checkpoint_id": str(latest_checkpoint.id) if latest_checkpoint is not None else None,
+            "compact_policy_version": COMPACT_POLICY_VERSION,
+            "roles": list(dict.fromkeys(str(message.role) for message in history)),
+        }
+
+    def _focused_object_types_from_request_context(self, request_context: dict[str, Any]) -> list[str]:
+        return [
+            name
+            for key, name in (
+                ("character_id", "character"),
+                ("world_setting_id", "world_setting"),
+                ("chapter_id", "chapter"),
+                ("scene_id", "scene"),
+            )
+            if request_context.get(key)
+        ]
+
+    def _active_bundle_contract_payload_for_checkpoint(
+        self,
+        *,
+        request_context: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+        recent_runs: list[AgentRun],
+    ) -> dict[str, Any]:
+        return {
+            "contract_version": ACTIVE_BUNDLE_CONTRACT_VERSION,
+            "source": "checkpoint_snapshot",
+            "included_sections": [
+                "project",
+                "request_context",
+                "thread_summary",
+                "recent_run_digest",
+                "compact_policy",
+                "compaction_boundary",
+            ],
+            "focused_object_types": self._focused_object_types_from_request_context(request_context),
+            "checkpoint_id": str(latest_checkpoint.id) if latest_checkpoint is not None else None,
+            "includes_thread_summary": True,
+            "includes_recent_run_digest": bool(recent_runs),
+            "collections": {
+                "characters_count": 0,
+                "characters_limit": CHARACTER_CONTEXT_LIMIT,
+                "world_settings_count": 0,
+                "world_settings_limit": WORLD_SETTING_CONTEXT_LIMIT,
+                "chapters_count": 0,
+                "chapters_limit": CHAPTER_CONTEXT_LIMIT,
+                "current_scenes_count": 0,
+                "current_scenes_limit": SCENE_CONTEXT_LIMIT,
+                "recent_run_digest_count": min(len(recent_runs), RECENT_RUN_DIGEST_LIMIT),
+                "recent_run_digest_limit": RECENT_RUN_DIGEST_LIMIT,
+            },
+        }
+
+    def _active_bundle_contract_payload_for_run(
+        self,
+        *,
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+    ) -> dict[str, Any]:
+        latest_checkpoint_data = cast(dict[str, Any], context_data.get("latest_checkpoint") or {})
+        recent_run_digest = cast(dict[str, Any], latest_checkpoint_data.get("recent_run_digest") or {})
+        current_scenes = cast(list[Any], context_data.get("current_scenes") or [])
+        included_sections = sorted(
+            key
+            for key, value in context_data.items()
+            if key not in {"planner_window", "retained_window", "active_bundle_contract"} and value not in (None, [], {})
+        )
+        focused_object_types = sorted(
+            key.removeprefix("current_")
+            for key, value in context_data.items()
+            if key.startswith("current_") and value not in (None, [], {})
+        )
+        return {
+            "contract_version": ACTIVE_BUNDLE_CONTRACT_VERSION,
+            "source": "checkpoint_plus_live_context" if latest_checkpoint is not None else "live_context",
+            "included_sections": included_sections,
+            "focused_object_types": focused_object_types,
+            "checkpoint_id": str(latest_checkpoint.id) if latest_checkpoint is not None else None,
+            "includes_thread_summary": latest_checkpoint is not None,
+            "includes_recent_run_digest": bool(recent_run_digest.get("runs")),
+            "collections": {
+                "characters_count": len(cast(list[Any], context_data.get("characters", []))),
+                "characters_limit": CHARACTER_CONTEXT_LIMIT,
+                "world_settings_count": len(cast(list[Any], context_data.get("world_settings", []))),
+                "world_settings_limit": WORLD_SETTING_CONTEXT_LIMIT,
+                "chapters_count": len(cast(list[Any], context_data.get("chapters", []))),
+                "chapters_limit": CHAPTER_CONTEXT_LIMIT,
+                "current_scenes_count": len(current_scenes),
+                "current_scenes_limit": SCENE_CONTEXT_LIMIT,
+                "recent_run_digest_count": len(cast(list[Any], recent_run_digest.get("runs", []))),
+                "recent_run_digest_limit": RECENT_RUN_DIGEST_LIMIT,
+            },
+        }
+
     async def _run_response(self, db: AsyncSession, run: AgentRun) -> AgentRunResponse:
         operations = await self.operation_store.list_by_run(db, run_id=run.id)
         subtasks = await self.subtask_store.list_by_run(db, run_id=run.id)
@@ -2210,6 +2404,10 @@ class AgentWorkflowService:
             verification_summary=run.verification_summary,
             execution_contract=self._execution_contract_response(meta),
             risk_summary=self._run_risk_summary_response(meta=meta, operations=operations),
+            compact_policy=self._compact_policy_response(meta),
+            planner_window=self._planner_window_response(meta),
+            retained_window=self._retained_window_response(meta),
+            active_bundle_contract=self._active_bundle_contract_response(meta),
             meta=meta,
             confirmed_at=run.confirmed_at,
             secondary_confirmed_at=run.secondary_confirmed_at,
@@ -2239,6 +2437,48 @@ class AgentWorkflowService:
             operations,
             profile_id=str(meta.get("profile_id") or "default"),
         )
+
+    def _compact_policy_response(self, meta: dict[str, Any]) -> AgentCompactPolicyResponse:
+        raw = meta.get("compact_policy")
+        if isinstance(raw, dict):
+            try:
+                return AgentCompactPolicyResponse.model_validate(raw)
+            except ValidationError:
+                logger.warning("Skipping invalid compact_policy payload during response serialization.")
+        return AgentCompactPolicyResponse.model_validate(self._compact_policy_payload())
+
+    def _planner_window_response(self, meta: dict[str, Any]) -> AgentPlannerWindowResponse | None:
+        raw = meta.get("planner_window")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return AgentPlannerWindowResponse.model_validate(raw)
+        except ValidationError:
+            logger.warning("Skipping invalid planner_window payload during response serialization.")
+            return None
+
+    def _retained_window_response(self, meta: dict[str, Any]) -> AgentRetainedWindowResponse | None:
+        raw = meta.get("retained_window")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return AgentRetainedWindowResponse.model_validate(raw)
+        except ValidationError:
+            logger.warning("Skipping invalid retained_window payload during response serialization.")
+            return None
+
+    def _active_bundle_contract_response(
+        self,
+        meta: dict[str, Any],
+    ) -> AgentActiveBundleContractResponse | None:
+        raw = meta.get("active_bundle_contract")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return AgentActiveBundleContractResponse.model_validate(raw)
+        except ValidationError:
+            logger.warning("Skipping invalid active_bundle_contract payload during response serialization.")
+            return None
 
     def _thread_response(self, thread: AgentThread) -> AgentThreadResponse:
         return AgentThreadResponse.model_validate(thread)
@@ -2409,16 +2649,37 @@ class AgentWorkflowService:
         self,
         checkpoint: AgentThreadCheckpoint,
     ) -> AgentThreadCheckpointResponse:
+        active_object_bundle = checkpoint.active_object_bundle or {}
+        compact_policy = active_object_bundle.get("compact_policy")
+        compaction_boundary = active_object_bundle.get("compaction_boundary")
+        active_bundle_contract = active_object_bundle.get("active_bundle_contract")
+        if isinstance(active_bundle_contract, dict) and not active_bundle_contract.get("checkpoint_id"):
+            active_bundle_contract = {**active_bundle_contract, "checkpoint_id": str(checkpoint.id)}
         return AgentThreadCheckpointResponse(
             id=checkpoint.id,
             thread_id=checkpoint.thread_id,
             profile_id=checkpoint.profile_id,
             thread_summary=checkpoint.thread_summary,
-            active_object_bundle=checkpoint.active_object_bundle or {},
+            active_object_bundle=active_object_bundle,
             recent_run_digest=checkpoint.recent_run_digest or {},
             source_message_count=checkpoint.source_message_count,
             source_run_count=checkpoint.source_run_count,
             total_context_characters=checkpoint.total_context_characters,
+            compact_policy=(
+                AgentCompactPolicyResponse.model_validate(compact_policy)
+                if isinstance(compact_policy, dict)
+                else AgentCompactPolicyResponse.model_validate(self._compact_policy_payload())
+            ),
+            compaction_boundary=(
+                AgentCompactionBoundaryResponse.model_validate(compaction_boundary)
+                if isinstance(compaction_boundary, dict)
+                else None
+            ),
+            active_bundle_contract=(
+                AgentActiveBundleContractResponse.model_validate(active_bundle_contract)
+                if isinstance(active_bundle_contract, dict)
+                else None
+            ),
             created_at=checkpoint.created_at,
             updated_at=checkpoint.updated_at,
         )
@@ -3107,6 +3368,18 @@ class AgentWorkflowService:
                 "profile_id": project.agent_profile_id,
                 "history_mode": history_mode,
                 "history_messages": len(history),
+                "retained_message_limit": (
+                    CHECKPOINT_DELTA_HISTORY_LIMIT if history_mode == "checkpoint_delta" else RECENT_HISTORY_WINDOW_LIMIT
+                ),
+                "compact_policy_version": COMPACT_POLICY_VERSION,
+                "active_bundle_source": cast(
+                    dict[str, Any],
+                    context_data.get("active_bundle_contract") or {},
+                ).get("source"),
+                "focused_object_types": cast(
+                    dict[str, Any],
+                    context_data.get("active_bundle_contract") or {},
+                ).get("focused_object_types", []),
                 "checkpoint_id": str(latest_checkpoint.id) if latest_checkpoint is not None else None,
             },
         )

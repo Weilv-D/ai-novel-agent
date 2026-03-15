@@ -49,6 +49,7 @@ cp .env.example .env
 - `AGENT_SKILLS_DIR` 作为 profile 根目录覆盖入口，可新增或替换 profile
 - 覆盖后，可通过 `GET /api/v1/agent/profiles` 和 `GET /api/v1/agent/skills?project_id=...` 检查实际加载结果
 - 线程状态接口 `GET /api/v1/agent/threads/{thread_id}` 现在会携带最新 `checkpoint`，用于前端展示压缩摘要
+- run 与 checkpoint 响应会显式返回 `compact_policy / planner_window / retained_window / active_bundle_contract`，不要再从原始 `meta` 或 checkpoint 原始 JSON 反推 planner 输入边界
 - run metadata 记录 hook trace，可用于调试 `PreCompact / PrePlan / SubagentStop / RunStop` 生命周期
 
 ## 前端开发

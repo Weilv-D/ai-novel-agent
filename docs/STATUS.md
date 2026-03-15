@@ -6,6 +6,8 @@
 
 AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主交互模型明确为项目内 Agent Workspace，而不是旧的 suggestion 导向聊天面板。
 
+在当前单用户本地创作范围内，项目已经形成完整可交付形态：主流程、验证门、压缩上下文、profile-aware skill 与前端工作台都已闭环。下面的“边界”和“后续”是刻意保留的产品边界与可选扩展，不再属于当前交付缺口。
+
 当前稳定能力包括：
 
 - 项目、人物、世界观、卷、章、场景的完整 CRUD
@@ -37,6 +39,8 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - content transition verification
 - domain-level semantic verification
 - checkpoint-based compact flow
+- explicit compact policy / planner window contract
+- explicit retained window / active bundle contract
 - 工作台可见的 latest checkpoint 摘要
 
 ## 当前质量状态
@@ -66,14 +70,13 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 
 这些边界是当前产品定位与当前实施顺序的一部分，不是遗漏说明。
 
-## 下一阶段
+## 可选后续演进
 
-后续工作不再推翻现有 `thread / run / operation` 底座，而是沿着以下方向收口：
+如果后续继续扩展，而不是维持当前稳定交付范围，优先方向如下：
 
 - 把 subtask 从“摘要记录”升级为真正独立的内部执行单元
-- 把当前 `Plan / Build` 权限矩阵进一步收敛为明确的 child unit contract
-- 把 field-level verification 从当前的 create/update 扩展到更广的对象类型与更细粒度结果
-- 把当前 domain-level semantic verification 从章节/场景约束扩展到更多对象与更细的业务规则
-- 把当前 checkpoint-based compact flow 从 delta history 切换推进到更完整的 compact policy 与 planner input contract
+- 把当前 `Plan / Build` 权限矩阵继续推进为更强的 child capability policy
+- 把 field-level / domain-level verification 扩展到更多对象与更细的业务规则
+- 在不破坏现有 contract 的前提下，继续细化 retained window 与 active bundle policy
 
 详细路线见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)。

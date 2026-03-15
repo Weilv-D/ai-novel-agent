@@ -85,6 +85,7 @@ make verify
 - run metadata 会记录 `PreCompact / PrePlan / SubagentStop / RunStop` hook trace
 - 高风险正文覆盖会进入二次确认，而不是直接执行
 - 长线程达到阈值后会生成 `AgentThreadCheckpoint`，并切换到 `checkpoint + delta history` 的规划输入模式；线程状态接口会返回最近一条压缩摘要
+- `AgentRunResponse.compact_policy`、`planner_window`、`retained_window` 与 `active_bundle_contract` 共同组成当前稳定 compact contract；`AgentThreadCheckpointResponse` 也会返回 compact policy、compaction boundary 与 active bundle contract
 - 执行阶段复用现有 CRUD service，并在落库前为目标对象创建 snapshot
 - verification gate 现在除了 summary / content hash，也会对 `create_*` / `update_*` 的落库字段做逐字段校验
 - operation `execution_result` 会带出 snapshot linkage，verification 不只校验该 snapshot 是否真实存在并与目标对象一致，还会验证从 snapshot 推导出的预期落库状态是否成立

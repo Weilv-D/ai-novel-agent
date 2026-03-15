@@ -636,6 +636,68 @@ export interface AgentRunRiskSummary {
   summary: string;
 }
 
+export type AgentPlannerHistoryMode = "recent_window" | "checkpoint_delta";
+
+export interface AgentCompactPolicy {
+  policy_version: string;
+  message_threshold: number;
+  run_threshold: number;
+  char_threshold: number;
+  recent_window_limit: number;
+  checkpoint_delta_limit: number;
+}
+
+export interface AgentRetainedWindow {
+  history_mode: AgentPlannerHistoryMode;
+  message_count: number;
+  character_count: number;
+  retained_message_limit: number;
+  oldest_message_id?: string | null;
+  newest_message_id?: string | null;
+  checkpoint_id?: string | null;
+  compact_policy_version?: string | null;
+  roles: string[];
+}
+
+export interface AgentCompactionBoundary {
+  history_mode: AgentPlannerHistoryMode;
+  source_message_count: number;
+  source_run_count: number;
+}
+
+export interface AgentActiveBundleCollections {
+  characters_count: number;
+  characters_limit: number;
+  world_settings_count: number;
+  world_settings_limit: number;
+  chapters_count: number;
+  chapters_limit: number;
+  current_scenes_count: number;
+  current_scenes_limit: number;
+  recent_run_digest_count: number;
+  recent_run_digest_limit: number;
+}
+
+export interface AgentActiveBundleContract {
+  contract_version: string;
+  source: "live_context" | "checkpoint_plus_live_context" | "checkpoint_snapshot";
+  included_sections: string[];
+  focused_object_types: string[];
+  checkpoint_id?: string | null;
+  includes_thread_summary: boolean;
+  includes_recent_run_digest: boolean;
+  collections: AgentActiveBundleCollections;
+}
+
+export interface AgentPlannerWindow {
+  history_mode: AgentPlannerHistoryMode;
+  history_message_count: number;
+  retained_message_limit: number;
+  checkpoint_id?: string | null;
+  checkpoint_available: boolean;
+  compact_policy_version?: string | null;
+}
+
 export interface AgentThreadCheckpoint {
   id: string;
   thread_id: string;
@@ -646,6 +708,9 @@ export interface AgentThreadCheckpoint {
   source_message_count: number;
   source_run_count: number;
   total_context_characters: number;
+  compact_policy?: AgentCompactPolicy | null;
+  compaction_boundary?: AgentCompactionBoundary | null;
+  active_bundle_contract?: AgentActiveBundleContract | null;
   created_at: string;
   updated_at: string;
 }
@@ -672,6 +737,10 @@ export interface AgentRun {
   verification_summary?: string | null;
   execution_contract?: AgentExecutionContract | null;
   risk_summary?: AgentRunRiskSummary | null;
+  compact_policy?: AgentCompactPolicy | null;
+  planner_window?: AgentPlannerWindow | null;
+  retained_window?: AgentRetainedWindow | null;
+  active_bundle_contract?: AgentActiveBundleContract | null;
   meta: Record<string, unknown>;
   confirmed_at?: string | null;
   secondary_confirmed_at?: string | null;

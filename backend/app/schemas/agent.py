@@ -41,6 +41,7 @@ RiskPolicyIdLiteral = Literal[
 RiskPolicyScopeLiteral = Literal["operation", "run"]
 ChildUnitRoleLiteral = Literal["planner", "researcher", "writer", "editor", "continuity", "executor"]
 ChildUnitStageLiteral = Literal["preview", "pre_execution", "execution"]
+PlannerHistoryModeLiteral = Literal["recent_window", "checkpoint_delta"]
 
 
 class OperationPreview(BaseModel):
@@ -205,10 +206,85 @@ class AgentThreadCheckpointResponse(BaseModel):
     source_message_count: int
     source_run_count: int
     total_context_characters: int
+    compact_policy: "AgentCompactPolicyResponse | None" = None
+    compaction_boundary: "AgentCompactionBoundaryResponse | None" = None
+    active_bundle_contract: "AgentActiveBundleContractResponse | None" = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AgentCompactPolicyResponse(BaseModel):
+    """Stable compact policy applied by the thread planner."""
+
+    policy_version: str
+    message_threshold: int
+    run_threshold: int
+    char_threshold: int
+    recent_window_limit: int
+    checkpoint_delta_limit: int
+
+
+class AgentRetainedWindowResponse(BaseModel):
+    """Concrete history slice retained for one planner invocation."""
+
+    history_mode: PlannerHistoryModeLiteral
+    message_count: int
+    character_count: int
+    retained_message_limit: int
+    oldest_message_id: UUID | None = None
+    newest_message_id: UUID | None = None
+    checkpoint_id: UUID | None = None
+    compact_policy_version: str | None = None
+    roles: list[str] = Field(default_factory=list)
+
+
+class AgentCompactionBoundaryResponse(BaseModel):
+    """Boundary metadata captured when a checkpoint was created."""
+
+    history_mode: PlannerHistoryModeLiteral
+    source_message_count: int
+    source_run_count: int
+
+
+class AgentActiveBundleCollectionsResponse(BaseModel):
+    """Collection limits and realized counts included in the planner bundle."""
+
+    characters_count: int = 0
+    characters_limit: int = 0
+    world_settings_count: int = 0
+    world_settings_limit: int = 0
+    chapters_count: int = 0
+    chapters_limit: int = 0
+    current_scenes_count: int = 0
+    current_scenes_limit: int = 0
+    recent_run_digest_count: int = 0
+    recent_run_digest_limit: int = 0
+
+
+class AgentActiveBundleContractResponse(BaseModel):
+    """Stable description of which context sections were assembled for planning."""
+
+    contract_version: str
+    source: Literal["live_context", "checkpoint_plus_live_context", "checkpoint_snapshot"]
+    included_sections: list[str] = Field(default_factory=list)
+    focused_object_types: list[str] = Field(default_factory=list)
+    checkpoint_id: UUID | None = None
+    includes_thread_summary: bool = False
+    includes_recent_run_digest: bool = False
+    collections: AgentActiveBundleCollectionsResponse
+
+
+class AgentPlannerWindowResponse(BaseModel):
+    """Resolved planner input window for one run."""
+
+    history_mode: PlannerHistoryModeLiteral
+    history_message_count: int
+    retained_message_limit: int
+    checkpoint_id: UUID | None = None
+    checkpoint_available: bool = False
+    compact_policy_version: str | None = None
 
 
 class AgentExecutionPhaseResponse(BaseModel):
@@ -328,6 +404,10 @@ class AgentRunResponse(BaseModel):
     verification_summary: str | None = None
     execution_contract: AgentExecutionContractResponse | None = None
     risk_summary: AgentRunRiskSummaryResponse | None = None
+    compact_policy: AgentCompactPolicyResponse | None = None
+    planner_window: AgentPlannerWindowResponse | None = None
+    retained_window: AgentRetainedWindowResponse | None = None
+    active_bundle_contract: AgentActiveBundleContractResponse | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
     confirmed_at: datetime | None = None
     secondary_confirmed_at: datetime | None = None

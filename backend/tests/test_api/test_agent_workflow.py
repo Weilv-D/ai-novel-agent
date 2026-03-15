@@ -95,6 +95,17 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert run["meta"]["skill_snapshot"]["planner"]["name"] == "novel-agent-planner"
     assert run["meta"]["skill_snapshot"]["profile_id"] == "default"
     assert run["meta"]["skill_snapshot"]["operations"][0]["tool_name"] == "create_character"
+    assert run["planner_window"]["history_mode"] == "recent_window"
+    assert run["planner_window"]["history_message_count"] == 0
+    assert run["planner_window"]["retained_message_limit"] == 12
+    assert run["retained_window"]["history_mode"] == "recent_window"
+    assert run["retained_window"]["message_count"] == 0
+    assert run["retained_window"]["character_count"] == 0
+    assert run["retained_window"]["roles"] == []
+    assert run["compact_policy"]["message_threshold"] >= 1
+    assert run["active_bundle_contract"]["source"] == "live_context"
+    assert run["active_bundle_contract"]["collections"]["characters_limit"] == 20
+    assert "project" in run["active_bundle_contract"]["included_sections"]
     permission_matrix = run["execution_contract"]
     risk_summary = run["risk_summary"]
     assert permission_matrix["registry_version"] == "2026-03-15.1"
@@ -1491,9 +1502,19 @@ async def test_thread_state_exposes_latest_checkpoint(
     assert precompact_hook["hook_name"] == "PreCompact"
     assert precompact_hook["meta"]["history_mode"] == "checkpoint_delta"
     assert precompact_hook["meta"]["source_message_count"] >= 2
+    assert precompact_hook["meta"]["checkpoint_delta_limit"] == 12
     assert preplan_hook["hook_name"] == "PrePlan"
     assert preplan_hook["meta"]["history_mode"] == "checkpoint_delta"
     assert preplan_hook["meta"]["history_messages"] == 0
+    assert preplan_hook["meta"]["active_bundle_source"] == "checkpoint_plus_live_context"
+    assert second_run["planner_window"]["history_mode"] == "checkpoint_delta"
+    assert second_run["planner_window"]["history_message_count"] == 0
+    assert second_run["planner_window"]["retained_message_limit"] == 12
+    assert second_run["retained_window"]["history_mode"] == "checkpoint_delta"
+    assert second_run["retained_window"]["message_count"] == 0
+    assert second_run["compact_policy"]["checkpoint_delta_limit"] == 12
+    assert second_run["active_bundle_contract"]["source"] == "checkpoint_plus_live_context"
+    assert second_run["active_bundle_contract"]["collections"]["recent_run_digest_limit"] == 6
 
     state = await client.get(f"/api/v1/agent/threads/{thread_id}")
     assert state.status_code == 200
@@ -1501,6 +1522,10 @@ async def test_thread_state_exposes_latest_checkpoint(
     assert payload["latest_checkpoint"] is not None
     assert payload["latest_checkpoint"]["profile_id"] == "default"
     assert payload["latest_checkpoint"]["source_message_count"] >= 2
+    assert payload["latest_checkpoint"]["compact_policy"]["checkpoint_delta_limit"] == 12
+    assert payload["latest_checkpoint"]["compaction_boundary"]["source_message_count"] >= 2
+    assert payload["latest_checkpoint"]["active_bundle_contract"]["source"] == "checkpoint_snapshot"
+    assert payload["latest_checkpoint"]["active_bundle_contract"]["collections"]["recent_run_digest_limit"] == 6
     assert payload["latest_checkpoint"]["active_object_bundle"]["compaction_boundary"]["history_mode"] == "checkpoint_delta"
 
 

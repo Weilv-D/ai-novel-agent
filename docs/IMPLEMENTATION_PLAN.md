@@ -6,6 +6,8 @@
 
 当前仓库已经把 Agent 主流程稳定在 `thread / run / operation` 这一层，不再回到旧的“单一大 prompt + suggestion 状态机”。
 
+对当前单用户本地创作范围来说，这条路线已经收敛成一个可交付的完整产品：主流程、风险分级、verification gate、checkpoint compact flow 和前端工作台都已闭环。本文保留的“后续收口”与“演进”内容，应理解为 VNext 方向，而不是当前交付缺口。
+
 当前已落地的公共工作流是：
 
 1. 项目级默认 `AgentThread`
@@ -146,6 +148,7 @@
 - `write_*_content` 已接入 content transition verification，会验证 replace / append 模式下的正文迁移是否符合预期
 - chapter / scene 已接入 domain-level semantic verification，会校验章节序号、场景序号、卷归属与 POV 人物归属这类业务约束
 - 长线程已经切换到 checkpoint-based compact flow；当 checkpoint 可用时，planner history 改为 `checkpoint + delta history`，而不是继续读取固定窗口历史
+- compact policy、planner window、retained window 与 active bundle contract 已作为显式 contract 暴露，不再要求前端或测试从 `meta` 与 hook trace 推断 compact 行为
 - 执行完成后会验证：
   - 目标对象存在
   - 摘要与预览一致
@@ -160,7 +163,7 @@
 
 - 把当前字段级 verification 从 create/update 扩展到更多对象与更细粒度结果
 - 把当前 domain-level semantic verification 从章节/场景约束推进到更多对象与更细的业务规则
-- 把当前 checkpoint-based compact flow 从 delta history 切换推进到更完整的 compact policy 与 planner input contract
+- 在保持当前 contract 稳定的前提下，继续细化 retained window 与 active bundle policy
 - 在前端提供更清晰的“执行成功但建议人工复核”的分类展示
 
 ### Phase 5: 上下文压缩与长期线程
@@ -199,6 +202,10 @@
 - `POST /api/v1/agent/runs/{run_id}/confirm-high-risk`
 - `AgentRunResponse.subtasks`
 - `AgentRunResponse.risk_summary`
+- `AgentRunResponse.compact_policy`
+- `AgentRunResponse.planner_window`
+- `AgentRunResponse.retained_window`
+- `AgentRunResponse.active_bundle_contract`
 - `AgentExecutionPhaseResponse.child_units`
 - `AgentRunResponse.verification_status`
 - `AgentRunResponse.verification_summary`
@@ -207,6 +214,9 @@
 - `AgentOperationResponse.requires_secondary_confirmation`
 - `AgentOperationResponse.verification_status`
 - `AgentOperationResponse.verification_summary`
+- `AgentThreadCheckpointResponse.compact_policy`
+- `AgentThreadCheckpointResponse.compaction_boundary`
+- `AgentThreadCheckpointResponse.active_bundle_contract`
 
 以下接口继续保留为兼容层：
 
