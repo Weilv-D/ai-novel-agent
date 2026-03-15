@@ -38,6 +38,9 @@ from app.models.character import Character
 from app.models.project import Project
 from app.models.world_setting import WorldSetting
 from app.schemas.agent import (
+    AgentCapabilityResponse,
+    AgentExecutionContractResponse,
+    AgentExecutionPhaseResponse,
     AgentMessageResponse,
     AgentOperationResponse,
     AgentProfileResponse,
@@ -45,7 +48,9 @@ from app.schemas.agent import (
     AgentRunResponse,
     AgentSkillCatalogResponse,
     AgentSkillSummaryResponse,
+    AgentSubtaskAttemptResponse,
     AgentSubtaskResponse,
+    AgentSubtaskTraceResponse,
     AgentThreadCheckpointResponse,
     AgentThreadMessageResponse,
     AgentThreadResponse,
@@ -187,6 +192,16 @@ class SubtaskExecutionTrace(BaseModel):
     attempts: list[SubtaskExecutionAttempt] = Field(default_factory=list)
 
 
+class CapabilityScopeSummary(BaseModel):
+    """Internal capability grouping used by workflow phases."""
+
+    capability_id: str
+    name: str
+    kind: Literal["read_search", "planning", "writing", "editing", "verification"]
+    description: str
+    tool_scope: list[str] = Field(default_factory=list)
+
+
 class PermissionPhaseSummary(BaseModel):
     """Serializable summary for one workflow permission phase."""
 
@@ -195,9 +210,11 @@ class PermissionPhaseSummary(BaseModel):
     allowed_permission_levels: list[str] = Field(default_factory=list)
     tool_scope: list[str] = Field(default_factory=list)
     role_scope: list[str] = Field(default_factory=list)
+    confirmation_gate: Literal["none", "single", "double"] = "none"
     requires_confirmation: bool = False
     requires_secondary_confirmation: bool = False
     operation_count: int = 0
+    capabilities: list[CapabilityScopeSummary] = Field(default_factory=list)
 
 
 class RunPermissionMatrix(BaseModel):
@@ -2023,6 +2040,7 @@ class AgentWorkflowService:
     async def _run_response(self, db: AsyncSession, run: AgentRun) -> AgentRunResponse:
         operations = await self.operation_store.list_by_run(db, run_id=run.id)
         subtasks = await self.subtask_store.list_by_run(db, run_id=run.id)
+        meta = run.meta or {}
         return AgentRunResponse(
             id=run.id,
             thread_id=run.thread_id,
@@ -2036,7 +2054,8 @@ class AgentWorkflowService:
             warning_message=run.warning_message,
             verification_status=cast(Any, run.verification_status),
             verification_summary=run.verification_summary,
-            meta=run.meta or {},
+            execution_contract=self._execution_contract_response(meta),
+            meta=meta,
             confirmed_at=run.confirmed_at,
             secondary_confirmed_at=run.secondary_confirmed_at,
             started_at=run.started_at,
@@ -2080,6 +2099,7 @@ class AgentWorkflowService:
         )
 
     def _subtask_response(self, subtask: AgentSubtask) -> AgentSubtaskResponse:
+        meta = subtask.meta or {}
         return AgentSubtaskResponse(
             id=subtask.id,
             run_id=subtask.run_id,
@@ -2089,10 +2109,70 @@ class AgentWorkflowService:
             status=cast(Any, subtask.status),
             summary=subtask.summary,
             error_message=subtask.error_message,
-            meta=subtask.meta or {},
+            child_trace=self._subtask_trace_response(meta),
+            meta=meta,
             created_at=subtask.created_at,
             updated_at=subtask.updated_at,
         )
+
+    def _subtask_trace_response(self, meta: dict[str, Any]) -> AgentSubtaskTraceResponse | None:
+        raw = meta.get("child_trace")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            attempts = [
+                AgentSubtaskAttemptResponse.model_validate(attempt)
+                for attempt in cast(list[dict[str, Any]], raw.get("attempts", []))
+            ]
+            return AgentSubtaskTraceResponse(
+                unit_id=str(raw["unit_id"]),
+                role=cast(Any, raw["role"]),
+                execution_phase=cast(Any, raw["execution_phase"]),
+                retry_strategy=cast(Any, raw["retry_strategy"]),
+                depends_on=[str(item) for item in cast(list[Any], raw.get("depends_on", []))],
+                operation_positions=[int(item) for item in cast(list[Any], raw.get("operation_positions", []))],
+                tool_scope=[str(item) for item in cast(list[Any], raw.get("tool_scope", []))],
+                input_summary=cast(str | None, raw.get("input_summary")),
+                output_summary=cast(str | None, raw.get("output_summary")),
+                attempts=attempts,
+            )
+        except (ValidationError, KeyError, TypeError, ValueError):
+            logger.warning("Skipping invalid child_trace payload during response serialization.")
+            return None
+
+    def _execution_contract_response(self, meta: dict[str, Any]) -> AgentExecutionContractResponse | None:
+        raw = meta.get("permission_matrix")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            phases = [
+                AgentExecutionPhaseResponse(
+                    phase=cast(Any, phase["phase"]),
+                    mode=cast(Any, phase["mode"]),
+                    allowed_permission_levels=[cast(Any, item) for item in cast(list[Any], phase.get("allowed_permission_levels", []))],
+                    tool_scope=[str(item) for item in cast(list[Any], phase.get("tool_scope", []))],
+                    role_scope=[cast(Any, item) for item in cast(list[Any], phase.get("role_scope", []))],
+                    confirmation_gate=cast(Any, phase.get("confirmation_gate", "none")),
+                    requires_confirmation=bool(phase.get("requires_confirmation", False)),
+                    requires_secondary_confirmation=bool(phase.get("requires_secondary_confirmation", False)),
+                    operation_count=int(phase.get("operation_count", 0)),
+                    capabilities=[
+                        AgentCapabilityResponse(
+                            capability_id=str(capability["capability_id"]),
+                            name=str(capability["name"]),
+                            kind=cast(Any, capability["kind"]),
+                            description=str(capability["description"]),
+                            tool_scope=[str(item) for item in cast(list[Any], capability.get("tool_scope", []))],
+                        )
+                        for capability in cast(list[dict[str, Any]], phase.get("capabilities", []))
+                    ],
+                )
+                for phase in cast(list[dict[str, Any]], raw.get("phases", []))
+            ]
+            return AgentExecutionContractResponse(phases=phases)
+        except (ValidationError, KeyError, TypeError, ValueError):
+            logger.warning("Skipping invalid execution contract payload during response serialization.")
+            return None
 
     def _checkpoint_response(
         self,
@@ -2507,6 +2587,49 @@ class AgentWorkflowService:
             return ["build_structured_diff", "stage_patch_preview"]
         return ["verify_preview_consistency", "check_target_resolution", "detect_multi_step_conflict"]
 
+    def _read_search_capabilities(
+        self,
+        *,
+        subtasks: list[dict[str, Any]],
+    ) -> list[CapabilityScopeSummary]:
+        """Split the researcher read/search layer into stable internal capabilities."""
+        role_scope = {str(subtask["role"]) for subtask in subtasks}
+        if AgentSubtaskRole.RESEARCHER.value not in role_scope:
+            return []
+        return [
+            CapabilityScopeSummary(
+                capability_id="project_inventory",
+                name="Project Inventory",
+                kind="read_search",
+                description="读取项目内人物、设定、章节与场景的当前清单。",
+                tool_scope=[
+                    "list_project_characters",
+                    "list_project_world_settings",
+                    "list_project_chapters",
+                    "list_project_scenes",
+                ],
+            ),
+            CapabilityScopeSummary(
+                capability_id="focused_object_resolution",
+                name="Focused Object Resolution",
+                kind="read_search",
+                description="根据当前请求解析聚焦对象，命中人物、设定、章节或场景。",
+                tool_scope=[
+                    "resolve_current_character",
+                    "resolve_current_world_setting",
+                    "resolve_current_chapter",
+                    "resolve_current_scene",
+                ],
+            ),
+            CapabilityScopeSummary(
+                capability_id="checkpoint_context",
+                name="Checkpoint Context",
+                kind="read_search",
+                description="读取最近线程 checkpoint，为长期线程提供压缩上下文。",
+                tool_scope=["load_latest_checkpoint"],
+            ),
+        ]
+
     def _build_permission_matrix(
         self,
         *,
@@ -2519,25 +2642,41 @@ class AgentWorkflowService:
             1 for operation in operations if str(operation["permission_level"]) == AgentPermissionLevel.HIGH_RISK_WRITE.value
         )
         role_scope = [str(subtask["role"]) for subtask in subtasks]
+        plan_capabilities = self._read_search_capabilities(subtasks=subtasks)
         plan_phase = PermissionPhaseSummary(
             phase="plan",
             mode="restricted",
             allowed_permission_levels=[AgentPermissionLevel.READ_SEARCH.value],
             tool_scope=list(INTERNAL_READ_SEARCH_TOOLS),
             role_scope=role_scope,
+            confirmation_gate="none",
             requires_confirmation=False,
             requires_secondary_confirmation=False,
             operation_count=0,
+            capabilities=plan_capabilities,
         )
+        confirmation_gate: Literal["none", "single", "double"] = "double" if high_risk_count > 0 else "single"
         build_phase = PermissionPhaseSummary(
             phase="build",
             mode="gated",
             allowed_permission_levels=build_levels,
             tool_scope=[str(operation["tool_name"]) for operation in operations],
             role_scope=role_scope,
+            confirmation_gate=confirmation_gate,
             requires_confirmation=bool(operations),
             requires_secondary_confirmation=high_risk_count > 0,
             operation_count=len(operations),
+            capabilities=[
+                CapabilityScopeSummary(
+                    capability_id="operation_execution",
+                    name="Operation Execution",
+                    kind="planning",
+                    description="按已确认的 operation 执行项目对象写入。",
+                    tool_scope=[str(operation["tool_name"]) for operation in operations],
+                )
+            ]
+            if operations
+            else [],
         )
         return RunPermissionMatrix(phases=[plan_phase, build_phase])
 

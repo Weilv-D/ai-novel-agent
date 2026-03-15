@@ -95,21 +95,22 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert run["meta"]["skill_snapshot"]["planner"]["name"] == "novel-agent-planner"
     assert run["meta"]["skill_snapshot"]["profile_id"] == "default"
     assert run["meta"]["skill_snapshot"]["operations"][0]["tool_name"] == "create_character"
-    permission_matrix = run["meta"]["permission_matrix"]
+    permission_matrix = run["execution_contract"]
     assert permission_matrix["phases"][0]["phase"] == "plan"
     assert permission_matrix["phases"][0]["allowed_permission_levels"] == ["read_search"]
     assert "list_project_characters" in permission_matrix["phases"][0]["tool_scope"]
+    assert permission_matrix["phases"][0]["capabilities"][0]["capability_id"] == "project_inventory"
     assert permission_matrix["phases"][1]["phase"] == "build"
     assert permission_matrix["phases"][1]["allowed_permission_levels"] == ["standard_write"]
     planner_subtask = next(subtask for subtask in run["subtasks"] if subtask["role"] == "planner")
-    planner_trace = planner_subtask["meta"]["child_trace"]
+    planner_trace = planner_subtask["child_trace"]
     assert planner_subtask["meta"]["retry_strategy"] == "service_only"
     assert planner_trace["depends_on"] == []
     assert planner_trace["attempts"][0]["source"] == "service"
     assert planner_trace["attempts"][0]["accepted"] is True
     researcher_subtask = next(subtask for subtask in run["subtasks"] if subtask["role"] == "researcher")
-    assert "resolve_current_character" in researcher_subtask["meta"]["child_trace"]["tool_scope"]
-    assert researcher_subtask["meta"]["child_trace"]["execution_phase"] == "plan"
+    assert "resolve_current_character" in researcher_subtask["child_trace"]["tool_scope"]
+    assert researcher_subtask["child_trace"]["execution_phase"] == "plan"
 
     confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
     assert confirm_response.status_code == 200
@@ -418,10 +419,10 @@ async def test_invalid_planner_subtask_recovers_to_service_unit(
     assert researcher["meta"]["attempt_count"] == 2
     assert researcher["meta"]["validation_status"] == "recovered"
     assert researcher["meta"]["retry_strategy"] == "planner_then_service_fallback"
-    assert researcher["meta"]["child_trace"]["attempts"][0]["source"] == "planner"
-    assert researcher["meta"]["child_trace"]["attempts"][0]["accepted"] is False
-    assert researcher["meta"]["child_trace"]["attempts"][1]["source"] == "service_recovery"
-    assert researcher["meta"]["child_trace"]["attempts"][1]["accepted"] is True
+    assert researcher["child_trace"]["attempts"][0]["source"] == "planner"
+    assert researcher["child_trace"]["attempts"][0]["accepted"] is False
+    assert researcher["child_trace"]["attempts"][1]["source"] == "service_recovery"
+    assert researcher["child_trace"]["attempts"][1]["accepted"] is True
     assert run["meta"]["hook_trace"][-1]["meta"]["recovered_roles"] == ["researcher"]
 
 
@@ -572,10 +573,11 @@ async def test_high_risk_run_requires_second_confirmation(client: AsyncClient, m
     run = message.json()["run"]
     assert run["operations"][0]["requires_secondary_confirmation"] is True
     assert run["operations"][0]["risk_level"] == "high"
-    build_phase = next(phase for phase in run["meta"]["permission_matrix"]["phases"] if phase["phase"] == "build")
+    build_phase = next(phase for phase in run["execution_contract"]["phases"] if phase["phase"] == "build")
     assert build_phase["requires_confirmation"] is True
     assert build_phase["requires_secondary_confirmation"] is True
     assert build_phase["allowed_permission_levels"] == ["high_risk_write"]
+    assert build_phase["confirmation_gate"] == "double"
 
     confirm = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
     assert confirm.status_code == 200

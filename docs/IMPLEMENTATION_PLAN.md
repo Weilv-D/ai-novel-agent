@@ -107,6 +107,7 @@
   - `requires_secondary_confirmation`
 - run metadata 已带出 `Plan / Build` 权限矩阵
 - `researcher` 子任务已切到内部 `read/search` 工具层，不再把这类能力暴露成用户可确认 operation
+- `AgentRunResponse.execution_contract` 与 `AgentSubtaskResponse.child_trace` 已成为显式响应字段
 - run 状态机已扩展出 `awaiting_high_risk_confirmation`
 - `POST /api/v1/agent/runs/{run_id}/confirm-high-risk` 已可用
 - 前端已展示高风险提示与二次确认入口
@@ -217,6 +218,7 @@
 - subtask recovery / unrecoverable failure 边界
 - subtask child execution trace
 - run-level permission matrix 与 internal read/search layer
+- explicit execution contract / child trace response schema
 - subtask 与 verification 字段的 API 暴露
 
 ## 兼容与迁移策略

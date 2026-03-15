@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 
 import { agentWorkflowApi, ApiError } from "@/lib/api-client";
 import type {
+  AgentExecutionContractPhase,
   AgentHookTraceEntry,
   AgentOperation,
   AgentRun,
@@ -71,21 +72,6 @@ function getHookTrace(run: AgentRun | null): AgentHookTraceEntry[] {
   });
 }
 
-function getPermissionMatrix(run: AgentRun | null): Array<Record<string, unknown>> {
-  if (!run) {
-    return [];
-  }
-  const raw = run.meta["permission_matrix"];
-  if (!raw || typeof raw !== "object") {
-    return [];
-  }
-  const phases = (raw as Record<string, unknown>).phases;
-  if (!Array.isArray(phases)) {
-    return [];
-  }
-  return phases.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"));
-}
-
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("zh-CN", {
     hour: "2-digit",
@@ -122,11 +108,8 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
   const attemptCount = typeof subtask.meta.attempt_count === "number" ? subtask.meta.attempt_count : null;
   const maxAttempts = typeof subtask.meta.max_attempts === "number" ? subtask.meta.max_attempts : null;
   const retryStrategy = typeof subtask.meta.retry_strategy === "string" ? subtask.meta.retry_strategy : null;
-  const childTrace = subtask.meta.child_trace && typeof subtask.meta.child_trace === "object"
-    ? (subtask.meta.child_trace as Record<string, unknown>)
-    : null;
-  const dependsOn = childTrace?.depends_on;
-  const dependencyList = Array.isArray(dependsOn) ? dependsOn.filter((item): item is string => typeof item === "string") : [];
+  const childTrace = subtask.child_trace;
+  const dependencyList = childTrace?.depends_on || [];
   return (
     <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.46)] px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -263,7 +246,7 @@ export function AgentWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const hookTrace = getHookTrace(currentRun);
-  const permissionMatrix = getPermissionMatrix(currentRun);
+  const permissionMatrix = currentRun?.execution_contract?.phases || [];
 
   async function loadThreadState(existingThreadId?: string) {
     setError(null);
@@ -458,15 +441,11 @@ export function AgentWorkspace({
                     <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">
                       Permission Matrix
                     </div>
-                    {permissionMatrix.map((phase) => {
-                      const phaseName = typeof phase.phase === "string" ? phase.phase : "unknown";
-                      const mode = typeof phase.mode === "string" ? phase.mode : "unknown";
-                      const levels = Array.isArray(phase.allowed_permission_levels)
-                        ? phase.allowed_permission_levels.filter((item): item is string => typeof item === "string")
-                        : [];
-                      const tools = Array.isArray(phase.tool_scope)
-                        ? phase.tool_scope.filter((item): item is string => typeof item === "string")
-                        : [];
+                    {permissionMatrix.map((phase: AgentExecutionContractPhase) => {
+                      const phaseName = phase.phase;
+                      const mode = phase.mode;
+                      const levels = phase.allowed_permission_levels;
+                      const tools = phase.tool_scope;
                       return (
                         <div
                           key={phaseName}
@@ -477,7 +456,7 @@ export function AgentWorkspace({
                               {phaseName.toUpperCase()} / {mode}
                             </div>
                             <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-600))]">
-                              {typeof phase.operation_count === "number" ? `${phase.operation_count} ops` : null}
+                              {`${phase.operation_count} ops / gate:${phase.confirmation_gate}`}
                             </div>
                           </div>
                           {levels.length > 0 && (
@@ -485,6 +464,15 @@ export function AgentWorkspace({
                               {levels.map((level) => (
                                 <span key={level} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
                                   level:{level}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {phase.capabilities.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-600))]">
+                              {phase.capabilities.map((capability) => (
+                                <span key={capability.capability_id} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                                  capability:{capability.capability_id}
                                 </span>
                               ))}
                             </div>

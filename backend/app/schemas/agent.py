@@ -23,6 +23,11 @@ SubtaskStatusLiteral = Literal["planned", "completed", "failed", "skipped"]
 PermissionLevelLiteral = Literal["read_search", "standard_write", "high_risk_write"]
 RiskLevelLiteral = Literal["low", "medium", "high"]
 VerificationStatusLiteral = Literal["pending", "passed", "failed", "skipped"]
+ExecutionPhaseLiteral = Literal["plan", "build_validation"]
+ExecutionModeLiteral = Literal["restricted", "gated"]
+RetryStrategyLiteral = Literal["service_only", "planner_then_service_fallback"]
+ConfirmationGateLiteral = Literal["none", "single", "double"]
+CapabilityKindLiteral = Literal["read_search", "planning", "writing", "editing", "verification"]
 
 
 class OperationPreview(BaseModel):
@@ -97,6 +102,41 @@ class AgentOperationResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgentCapabilityResponse(BaseModel):
+    """One stable internal capability exposed with the run contract."""
+
+    capability_id: str
+    name: str
+    kind: CapabilityKindLiteral
+    description: str
+    tool_scope: list[str] = Field(default_factory=list)
+
+
+class AgentSubtaskAttemptResponse(BaseModel):
+    """One attempt within a child execution unit."""
+
+    attempt_number: int
+    source: str
+    accepted: bool
+    validation_status: Literal["passed", "recovered", "failed"]
+    summary: str
+
+
+class AgentSubtaskTraceResponse(BaseModel):
+    """Stable child execution trace for one internal subtask."""
+
+    unit_id: str
+    role: SubtaskRoleLiteral
+    execution_phase: ExecutionPhaseLiteral
+    retry_strategy: RetryStrategyLiteral
+    depends_on: list[str] = Field(default_factory=list)
+    operation_positions: list[int] = Field(default_factory=list)
+    tool_scope: list[str] = Field(default_factory=list)
+    input_summary: str | None = None
+    output_summary: str | None = None
+    attempts: list[AgentSubtaskAttemptResponse] = Field(default_factory=list)
+
+
 class AgentSubtaskResponse(BaseModel):
     """Internal subtask summary exposed with a run."""
 
@@ -108,6 +148,7 @@ class AgentSubtaskResponse(BaseModel):
     status: SubtaskStatusLiteral
     summary: str | None = None
     error_message: str | None = None
+    child_trace: AgentSubtaskTraceResponse | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
@@ -133,6 +174,27 @@ class AgentThreadCheckpointResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgentExecutionPhaseResponse(BaseModel):
+    """Stable run-level contract for one workflow phase."""
+
+    phase: Literal["plan", "build"]
+    mode: ExecutionModeLiteral
+    allowed_permission_levels: list[PermissionLevelLiteral] = Field(default_factory=list)
+    tool_scope: list[str] = Field(default_factory=list)
+    role_scope: list[SubtaskRoleLiteral] = Field(default_factory=list)
+    confirmation_gate: ConfirmationGateLiteral
+    requires_confirmation: bool = False
+    requires_secondary_confirmation: bool = False
+    operation_count: int = 0
+    capabilities: list[AgentCapabilityResponse] = Field(default_factory=list)
+
+
+class AgentExecutionContractResponse(BaseModel):
+    """Stable child unit contract surfaced with each run."""
+
+    phases: list[AgentExecutionPhaseResponse] = Field(default_factory=list)
+
+
 class AgentRunResponse(BaseModel):
     """An executable plan generated from one user request."""
 
@@ -148,6 +210,7 @@ class AgentRunResponse(BaseModel):
     warning_message: str | None = None
     verification_status: VerificationStatusLiteral
     verification_summary: str | None = None
+    execution_contract: AgentExecutionContractResponse | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
     confirmed_at: datetime | None = None
     secondary_confirmed_at: datetime | None = None

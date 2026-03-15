@@ -419,6 +419,11 @@ export type AgentPermissionLevel = "read_search" | "standard_write" | "high_risk
 export type AgentRiskLevel = "low" | "medium" | "high";
 export type AgentVerificationStatus = "pending" | "passed" | "failed" | "skipped";
 export type AgentHookName = "PreCompact" | "PrePlan" | "SubagentStop" | "RunStop";
+export type AgentExecutionPhase = "plan" | "build";
+export type AgentExecutionMode = "restricted" | "gated";
+export type AgentRetryStrategy = "service_only" | "planner_then_service_fallback";
+export type AgentConfirmationGate = "none" | "single" | "double";
+export type AgentCapabilityKind = "read_search" | "planning" | "writing" | "editing" | "verification";
 
 export interface OperationPreview {
   changed_fields: string[];
@@ -481,9 +486,56 @@ export interface AgentSubtask {
   status: AgentSubtaskStatus;
   summary?: string | null;
   error_message?: string | null;
+  child_trace?: AgentSubtaskTrace | null;
   meta: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface AgentSubtaskAttempt {
+  attempt_number: number;
+  source: string;
+  accepted: boolean;
+  validation_status: "passed" | "recovered" | "failed";
+  summary: string;
+}
+
+export interface AgentSubtaskTrace {
+  unit_id: string;
+  role: AgentSubtaskRole;
+  execution_phase: "plan" | "build_validation";
+  retry_strategy: AgentRetryStrategy;
+  depends_on: string[];
+  operation_positions: number[];
+  tool_scope: string[];
+  input_summary?: string | null;
+  output_summary?: string | null;
+  attempts: AgentSubtaskAttempt[];
+}
+
+export interface AgentCapability {
+  capability_id: string;
+  name: string;
+  kind: AgentCapabilityKind;
+  description: string;
+  tool_scope: string[];
+}
+
+export interface AgentExecutionContractPhase {
+  phase: AgentExecutionPhase;
+  mode: AgentExecutionMode;
+  allowed_permission_levels: AgentPermissionLevel[];
+  tool_scope: string[];
+  role_scope: AgentSubtaskRole[];
+  confirmation_gate: AgentConfirmationGate;
+  requires_confirmation: boolean;
+  requires_secondary_confirmation: boolean;
+  operation_count: number;
+  capabilities: AgentCapability[];
+}
+
+export interface AgentExecutionContract {
+  phases: AgentExecutionContractPhase[];
 }
 
 export interface AgentThreadCheckpoint {
@@ -520,6 +572,7 @@ export interface AgentRun {
   warning_message?: string | null;
   verification_status: AgentVerificationStatus;
   verification_summary?: string | null;
+  execution_contract?: AgentExecutionContract | null;
   meta: Record<string, unknown>;
   confirmed_at?: string | null;
   secondary_confirmed_at?: string | null;
