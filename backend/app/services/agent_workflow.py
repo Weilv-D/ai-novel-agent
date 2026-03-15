@@ -87,6 +87,7 @@ SUBTASK_SUMMARY_LIMIT = 180
 COMPACTION_MESSAGE_THRESHOLD = 24
 COMPACTION_RUN_THRESHOLD = 10
 COMPACTION_CHAR_THRESHOLD = 9000
+HOOK_NAMES = ("PreCompact", "PrePlan", "SubagentStop", "RunStop")
 
 
 class PlannedOperationSpec(BaseModel):
@@ -117,6 +118,26 @@ class PlannedSubtaskSpec(BaseModel):
     status: Literal["planned", "completed", "failed", "skipped"] = "planned"
     error_message: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class HookTraceEntry(BaseModel):
+    """Internal lifecycle record for one workflow hook."""
+
+    hook_name: Literal["PreCompact", "PrePlan", "SubagentStop", "RunStop"]
+    status: Literal["planned", "completed", "failed", "skipped"] = "planned"
+    summary: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunBlueprint(BaseModel):
+    """Internal blueprint that separates visible operations from internal lifecycle state."""
+
+    assistant_message: str
+    summary: str | None = None
+    warning_message: str | None = None
+    user_visible_operations: list[dict[str, Any]] = Field(default_factory=list)
+    internal_subtasks: list[dict[str, Any]] = Field(default_factory=list)
+    hook_trace: list[HookTraceEntry] = Field(default_factory=list)
 
 
 class CRUDAgentThread:
@@ -660,7 +681,7 @@ class AgentWorkflowService:
             meta={"context": request_context},
         )
 
-        checkpoint = await self._maybe_compact_thread(
+        checkpoint, precompact_hook = await self._maybe_compact_thread(
             db,
             thread=thread,
             project=project,
@@ -679,6 +700,12 @@ class AgentWorkflowService:
             project=project,
             request_context=request_context,
             latest_checkpoint=checkpoint,
+        )
+        preplan_hook = self._build_pre_plan_hook(
+            project=project,
+            context_data=context_data,
+            latest_checkpoint=checkpoint,
+            history=history,
         )
         planner_output = await self._plan_with_llm(
             user_message=content,
@@ -709,6 +736,18 @@ class AgentWorkflowService:
             context_data=context_data,
             latest_checkpoint=checkpoint,
         )
+        subagent_stop_hook = self._validate_blueprint(
+            operations=classified_operations,
+            subtasks=planned_subtasks,
+        )
+        blueprint = RunBlueprint(
+            assistant_message=planner_output.assistant_message,
+            summary=planner_output.summary,
+            warning_message=planner_output.warning_message,
+            user_visible_operations=classified_operations,
+            internal_subtasks=planned_subtasks,
+            hook_trace=[precompact_hook, preplan_hook, subagent_stop_hook],
+        )
 
         run = await self.run_store.create(
             db,
@@ -717,18 +756,24 @@ class AgentWorkflowService:
             user_message_id=user_message.id,
             assistant_message_id=assistant_message.id,
             revision_of_run_id=prior_run.id if prior_run is not None else None,
-            summary=planner_output.summary,
-            warning_message=planner_output.warning_message,
+            summary=blueprint.summary,
+            warning_message=blueprint.warning_message,
             meta={
                 "request_context": request_context,
-                "raw_operation_count": len(classified_operations),
+                "raw_operation_count": len(blueprint.user_visible_operations),
                 "profile_id": profile_id,
                 "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
-                "skill_snapshot": self._build_skill_snapshot(skill_bundle, classified_operations),
+                "skill_snapshot": self._build_skill_snapshot(skill_bundle, blueprint.user_visible_operations),
+                "hook_trace": [entry.model_dump(mode="json") for entry in blueprint.hook_trace],
+                "blueprint": {
+                    "operation_count": len(blueprint.user_visible_operations),
+                    "subtask_count": len(blueprint.internal_subtasks),
+                    "subtask_roles": [str(subtask["role"]) for subtask in blueprint.internal_subtasks],
+                },
             },
         )
-        await self.operation_store.create_many(db, run_id=run.id, operations=classified_operations)
-        await self.subtask_store.create_many(db, run_id=run.id, subtasks=planned_subtasks)
+        await self.operation_store.create_many(db, run_id=run.id, operations=blueprint.user_visible_operations)
+        await self.subtask_store.create_many(db, run_id=run.id, subtasks=blueprint.internal_subtasks)
         await self.run_store.supersede_pending_runs(db, thread_id=thread.id, keep_run_id=run.id)
 
         return AgentThreadMessageResponse(
@@ -856,6 +901,18 @@ class AgentWorkflowService:
                 operations,
                 continuity_subtask=continuity_subtask,
             )
+            self._upsert_run_hook_trace(
+                run,
+                HookTraceEntry(
+                    hook_name="RunStop",
+                    status="completed",
+                    summary=run.verification_summary,
+                    meta={
+                        "verification_status": run.verification_status,
+                        "operation_count": len(operations),
+                    },
+                ),
+            )
             if run.verification_status != AgentVerificationStatus.PASSED.value:
                 raise BadRequestException(run.verification_summary or "Run verification failed")
             await db.flush()
@@ -868,6 +925,15 @@ class AgentWorkflowService:
             failed_run.completed_at = datetime.now(UTC)
             failed_run.verification_status = AgentVerificationStatus.FAILED.value
             failed_run.verification_summary = str(exc)
+            self._upsert_run_hook_trace(
+                failed_run,
+                HookTraceEntry(
+                    hook_name="RunStop",
+                    status="failed",
+                    summary=str(exc),
+                    meta={"operation_id": str(failing_operation_id) if failing_operation_id is not None else None},
+                ),
+            )
             if failing_operation_id is not None:
                 failed_operation = await self._safe_get_operation(db, operation_id=failing_operation_id)
                 if failed_operation is not None:
@@ -1013,7 +1079,7 @@ class AgentWorkflowService:
         history: list[AgentMessage],
         recent_runs: list[AgentRun],
         request_context: dict[str, Any],
-    ) -> AgentThreadCheckpoint | None:
+    ) -> tuple[AgentThreadCheckpoint | None, HookTraceEntry]:
         latest_checkpoint = await self.checkpoint_store.latest_by_thread(db, thread_id=thread.id)
         total_chars = sum(len(message.content) for message in history) + sum(len(run.summary or "") for run in recent_runs)
         should_compact = (
@@ -1022,7 +1088,12 @@ class AgentWorkflowService:
             or total_chars >= COMPACTION_CHAR_THRESHOLD
         )
         if not should_compact:
-            return latest_checkpoint
+            return latest_checkpoint, HookTraceEntry(
+                hook_name="PreCompact",
+                status="skipped",
+                summary="线程尚未达到压缩阈值。",
+                meta={"message_count": len(history), "run_count": len(recent_runs), "total_context_characters": total_chars},
+            )
 
         if latest_checkpoint is not None:
             if (
@@ -1030,7 +1101,12 @@ class AgentWorkflowService:
                 and latest_checkpoint.source_run_count >= len(recent_runs)
                 and latest_checkpoint.total_context_characters >= total_chars
             ):
-                return latest_checkpoint
+                return latest_checkpoint, HookTraceEntry(
+                    hook_name="PreCompact",
+                    status="completed",
+                    summary="沿用现有 checkpoint，无需重新压缩。",
+                    meta={"checkpoint_id": str(latest_checkpoint.id)},
+                )
 
         compact_context = {
             "project": {"name": project.name, "genre": project.genre, "summary": project.summary},
@@ -1048,7 +1124,7 @@ class AgentWorkflowService:
                 for run in recent_runs[:6]
             ]
         }
-        return await self.checkpoint_store.create(
+        created_checkpoint = await self.checkpoint_store.create(
             db,
             thread_id=thread.id,
             profile_id=profile_id,
@@ -1058,6 +1134,12 @@ class AgentWorkflowService:
             source_message_count=len(history),
             source_run_count=len(recent_runs),
             total_context_characters=total_chars,
+        )
+        return created_checkpoint, HookTraceEntry(
+            hook_name="PreCompact",
+            status="completed",
+            summary="线程达到阈值，已生成新的上下文压缩 checkpoint。",
+            meta={"checkpoint_id": str(created_checkpoint.id)},
         )
 
     async def _plan_with_llm(
@@ -2114,6 +2196,83 @@ class AgentWorkflowService:
             )
         return merged
 
+    def _build_pre_plan_hook(
+        self,
+        *,
+        project: Project,
+        context_data: dict[str, Any],
+        latest_checkpoint: AgentThreadCheckpoint | None,
+        history: list[AgentMessage],
+    ) -> HookTraceEntry:
+        """Record the pre-plan hook that assembled project context and profile state."""
+        focused_objects = sorted(
+            key.removeprefix("current_")
+            for key in context_data
+            if key.startswith("current_")
+        )
+        summary = (
+            f"已装配 profile={project.agent_profile_id} 的规划上下文，"
+            f"人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
+            f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
+            f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
+        )
+        if focused_objects:
+            summary += f" 聚焦对象：{', '.join(focused_objects)}。"
+        if latest_checkpoint is not None:
+            summary += " 已引入最近 checkpoint。"
+        return HookTraceEntry(
+            hook_name="PrePlan",
+            status="completed",
+            summary=_excerpt(summary, length=SUBTASK_SUMMARY_LIMIT),
+            meta={
+                "profile_id": project.agent_profile_id,
+                "history_messages": len(history),
+                "checkpoint_id": str(latest_checkpoint.id) if latest_checkpoint is not None else None,
+            },
+        )
+
+    def _validate_blueprint(
+        self,
+        *,
+        operations: list[dict[str, Any]],
+        subtasks: list[dict[str, Any]],
+    ) -> HookTraceEntry:
+        """Validate the internal blueprint before persisting a new run."""
+        roles = [str(subtask["role"]) for subtask in subtasks]
+        if len(roles) != len(set(roles)):
+            raise BadRequestException("Blueprint contains duplicate subtask roles")
+        if AgentSubtaskRole.PLANNER.value not in roles:
+            raise BadRequestException("Blueprint is missing planner subtask")
+        if AgentSubtaskRole.RESEARCHER.value not in roles:
+            raise BadRequestException("Blueprint is missing researcher subtask")
+        if AgentSubtaskRole.CONTINUITY.value not in roles:
+            raise BadRequestException("Blueprint is missing continuity subtask")
+
+        writer_required_tools = {"write_chapter_content", "write_scene_content", "create_chapter", "create_scene"}
+        writer_required = any(
+            operation["tool_name"] in writer_required_tools and self._operation_content_candidate(operation)
+            for operation in operations
+        )
+        editor_required = any(
+            operation["tool_name"] in {"update_character", "update_world_setting", "update_chapter", "update_scene"}
+            for operation in operations
+        )
+        subtask_by_role = {str(subtask["role"]): subtask for subtask in subtasks}
+        if writer_required and subtask_by_role.get(AgentSubtaskRole.WRITER.value, {}).get("status") == "skipped":
+            raise BadRequestException("Writer subtask cannot be skipped when content candidates exist")
+        if editor_required and subtask_by_role.get(AgentSubtaskRole.EDITOR.value, {}).get("status") == "skipped":
+            raise BadRequestException("Editor subtask cannot be skipped when structured edits exist")
+
+        return HookTraceEntry(
+            hook_name="SubagentStop",
+            status="completed",
+            summary=_excerpt(
+                f"Blueprint 校验通过：{len(operations)} 个 operation，角色 {', '.join(sorted(roles))}。",
+                length=SUBTASK_SUMMARY_LIMIT,
+            ),
+            meta={"operation_count": len(operations), "roles": sorted(roles)},
+        )
+
     def _operation_content_candidate(self, operation: dict[str, Any]) -> str | None:
         """Return the full candidate content represented by an operation, if any."""
         tool_name = str(operation["tool_name"])
@@ -2278,6 +2437,25 @@ class AgentWorkflowService:
         if not operations:
             return AgentVerificationStatus.SKIPPED.value, "No stateful operations to verify."
         return AgentVerificationStatus.PASSED.value, "All operations were verified against persisted results."
+
+    def _upsert_run_hook_trace(
+        self,
+        run: AgentRun,
+        entry: HookTraceEntry,
+    ) -> None:
+        """Insert or replace one hook lifecycle entry inside run metadata."""
+        next_meta = dict(run.meta or {})
+        raw_trace = cast(list[dict[str, Any]], next_meta.get("hook_trace", []))
+        trace: list[dict[str, Any]] = [dict(item) for item in raw_trace]
+        serialized = entry.model_dump(mode="json")
+        for index, existing in enumerate(trace):
+            if existing.get("hook_name") == entry.hook_name:
+                trace[index] = serialized
+                break
+        else:
+            trace.append(serialized)
+        next_meta["hook_trace"] = trace
+        run.meta = next_meta
 
     async def _safe_get_operation(
         self,

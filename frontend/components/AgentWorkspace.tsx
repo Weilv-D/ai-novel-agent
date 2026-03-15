@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 
 import { agentWorkflowApi, ApiError } from "@/lib/api-client";
 import type {
+  AgentHookTraceEntry,
   AgentOperation,
   AgentRun,
   AgentSubtask,
@@ -51,6 +52,24 @@ const VERIFICATION_META: Record<string, { label: string; className: string }> = 
   failed: { label: "校验失败", className: "ink-badge ink-badge-rust" },
   skipped: { label: "已跳过", className: "ink-badge ink-badge-smoke" },
 };
+
+function getHookTrace(run: AgentRun | null): AgentHookTraceEntry[] {
+  if (!run) {
+    return [];
+  }
+  const raw = run.meta["hook_trace"];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((entry): entry is AgentHookTraceEntry => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+    const hook = (entry as Record<string, unknown>).hook_name;
+    const status = (entry as Record<string, unknown>).status;
+    return typeof hook === "string" && typeof status === "string";
+  });
+}
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("zh-CN", {
@@ -185,6 +204,7 @@ export function AgentWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const hookTrace = getHookTrace(currentRun);
 
   async function loadThreadState(existingThreadId?: string) {
     setError(null);
@@ -372,6 +392,38 @@ export function AgentWorkspace({
                     {currentRun.subtasks.map((subtask) => (
                       <SubtaskCard key={subtask.id} subtask={subtask} />
                     ))}
+                  </div>
+                )}
+                {hookTrace.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-600))]">
+                      Hook Trace
+                    </div>
+                    {hookTrace.map((entry) => {
+                      const meta = VERIFICATION_META[
+                        entry.status === "completed"
+                          ? "passed"
+                          : entry.status === "failed"
+                            ? "failed"
+                            : entry.status === "skipped"
+                              ? "skipped"
+                              : "pending"
+                      ];
+                      return (
+                        <div
+                          key={entry.hook_name}
+                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{entry.hook_name}</div>
+                            <span className={meta.className}>{meta.label}</span>
+                          </div>
+                          {entry.summary && (
+                            <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{entry.summary}</p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 <div className="space-y-3">

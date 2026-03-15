@@ -77,12 +77,13 @@
   - profile 选择
   - context bundle 装配
   - subtask 合成
+- run metadata 已记录 `PreCompact / PrePlan / SubagentStop / RunStop` hook trace
 - `RunStop` 的基础语义已经落在 verification gate
 - `PreCompact` 的基础语义已经落在线程 checkpoint
 
 后续收口：
 
-- 把 planner、writer、editor、continuity 从“同一次 planning 的结构化摘要”升级为真正独立的内部执行单元
+- 把 planner、writer、editor、continuity 从“带 hook trace 的结构化内部层”升级为真正独立的执行单元
 - 给每个 subtask 建立独立 schema 和失败重试边界
 - 明确 hook 生命周期：
   - `PrePlan`

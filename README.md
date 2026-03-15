@@ -10,6 +10,7 @@ AI Novel Agent 是一个面向个人长期创作的 Agent 化长篇小说工作�
 - 章节与场景：按创作结构推进内容，而不是散落在独立文档里
 - Agent Workspace：用自然语言下达创作与修改指令，先看完整计划与预览，再确认执行
 - Agent Profile：项目可绑定不同写作 profile；当前内置 `default` 与 `xianxia_intrigue`
+- Hook Trace：工作台会显示内部生命周期阶段，便于理解 planning / validation / compaction 状态
 - 记忆与检索：支持 embedding 驱动的内容记忆
 - 内容导出：导出 TXT 与 Markdown
 

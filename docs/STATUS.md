@@ -16,6 +16,7 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - 内置 `default` 与 `xianxia_intrigue` profile
 - profile-aware planner / operation skills
 - run 级 subtask 摘要
+- run 级 hook trace
 - operation 风险分级与高风险二次确认
 - 执行后 verification gate
 - 长线程 checkpoint 基础设施

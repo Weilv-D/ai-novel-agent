@@ -418,6 +418,7 @@ export type AgentSubtaskStatus = "planned" | "completed" | "failed" | "skipped";
 export type AgentPermissionLevel = "read_search" | "standard_write" | "high_risk_write";
 export type AgentRiskLevel = "low" | "medium" | "high";
 export type AgentVerificationStatus = "pending" | "passed" | "failed" | "skipped";
+export type AgentHookName = "PreCompact" | "PrePlan" | "SubagentStop" | "RunStop";
 
 export interface OperationPreview {
   changed_fields: string[];
@@ -497,6 +498,13 @@ export interface AgentThreadCheckpoint {
   total_context_characters: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface AgentHookTraceEntry {
+  hook_name: AgentHookName;
+  status: AgentSubtaskStatus;
+  summary?: string | null;
+  meta: Record<string, unknown>;
 }
 
 export interface AgentRun {

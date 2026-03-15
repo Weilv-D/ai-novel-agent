@@ -82,6 +82,8 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert run["status"] == "awaiting_confirmation"
     assert run["operations"][0]["tool_name"] == "create_character"
     assert run["subtasks"]
+    hook_names = [entry["hook_name"] for entry in run["meta"]["hook_trace"]]
+    assert hook_names == ["PreCompact", "PrePlan", "SubagentStop"]
     assert run["meta"]["skill_snapshot"]["planner"]["name"] == "novel-agent-planner"
     assert run["meta"]["skill_snapshot"]["profile_id"] == "default"
     assert run["meta"]["skill_snapshot"]["operations"][0]["tool_name"] == "create_character"
@@ -90,6 +92,8 @@ async def test_create_character_run_flow(client: AsyncClient, monkeypatch: pytes
     assert confirm_response.status_code == 200
     confirmed_run = confirm_response.json()["run"]
     assert confirmed_run["status"] == "completed"
+    assert confirmed_run["meta"]["hook_trace"][-1]["hook_name"] == "RunStop"
+    assert confirmed_run["meta"]["hook_trace"][-1]["status"] == "completed"
 
     characters_response = await client.get(f"/api/v1/characters/project/{project_id}")
     assert characters_response.status_code == 200
