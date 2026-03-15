@@ -258,3 +258,79 @@ a {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Toast slide-in animation */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Button loading spinner */
+@keyframes button-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-button-spin {
+  animation: button-spin 1s linear infinite;
+}
+
+/* Focus ring for accessibility */
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid rgb(var(--jade));
+  outline-offset: 2px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) {
+  .hover\:bg-\[rgba\(var\(--ink-950\)\,0\.04\)\]:hover {
+    background-color: transparent;
+  }
+  
+  /* Increase touch target size */
+  button, 
+  a, 
+  input, 
+  select, 
+  textarea {
+    min-height: 44px;
+  }
+}
+
+/* Print styles */
+@media print {
+  body::before,
+  body::after {
+    display: none;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}
