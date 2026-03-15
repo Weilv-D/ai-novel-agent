@@ -70,7 +70,7 @@ from app.schemas.world_setting import WorldSettingCreate, WorldSettingUpdate
 from app.services.agent_contract import agent_contract_service
 from app.services.agent_risk import agent_risk_service
 from app.services.agent_skill import AgentSkillBundle, agent_skill_service
-from app.services.chapter import chapter_service, scene_service
+from app.services.chapter import chapter_service, scene_service, volume_service
 from app.services.character import character_service
 from app.services.llm import LLMService, llm_service
 from app.services.project import project_service
@@ -342,6 +342,23 @@ class CRUDAgentMessage:
             .limit(limit)
         )
         return list(reversed(list(result.scalars().all())))
+
+    async def list_after_offset(
+        self,
+        db: AsyncSession,
+        *,
+        thread_id: uuid.UUID,
+        offset: int,
+        limit: int = COMPACTION_MESSAGE_THRESHOLD,
+    ) -> list[AgentMessage]:
+        result = await db.execute(
+            select(AgentMessage)
+            .where(AgentMessage.thread_id == thread_id)
+            .order_by(AgentMessage.created_at.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
 
 class CRUDAgentRun:
@@ -810,10 +827,11 @@ class AgentWorkflowService:
             recent_runs=recent_runs,
             request_context=request_context,
         )
-        history = await self._planner_history(
+        history, history_mode = await self._planner_history(
             db,
             thread_id=thread.id,
             latest_checkpoint=checkpoint,
+            current_user_message_id=user_message.id,
         )
         context_data = await self._load_project_context(
             db,
@@ -821,11 +839,17 @@ class AgentWorkflowService:
             request_context=request_context,
             latest_checkpoint=checkpoint,
         )
+        context_data["planner_window"] = {
+            "history_mode": history_mode,
+            "history_message_count": len(history),
+            "checkpoint_id": str(checkpoint.id) if checkpoint is not None else None,
+        }
         preplan_hook = self._build_pre_plan_hook(
             project=project,
             context_data=context_data,
             latest_checkpoint=checkpoint,
             history=history,
+            history_mode=history_mode,
         )
         planner_output = await self._plan_with_llm(
             user_message=content,
@@ -1227,9 +1251,21 @@ class AgentWorkflowService:
         *,
         thread_id: uuid.UUID,
         latest_checkpoint: AgentThreadCheckpoint | None,
-    ) -> list[AgentMessage]:
-        limit = 6 if latest_checkpoint is not None else 12
-        return await self.message_store.list_recent_history(db, thread_id=thread_id, limit=limit)
+        current_user_message_id: uuid.UUID,
+    ) -> tuple[list[AgentMessage], Literal["recent_window", "checkpoint_delta"]]:
+        if latest_checkpoint is None:
+            history = await self.message_store.list_recent_history(db, thread_id=thread_id, limit=12)
+            history = [message for message in history if message.id != current_user_message_id]
+            return history, "recent_window"
+
+        history = await self.message_store.list_after_offset(
+            db,
+            thread_id=thread_id,
+            offset=latest_checkpoint.source_message_count,
+            limit=max(COMPACTION_MESSAGE_THRESHOLD, 12),
+        )
+        history = [message for message in history if message.id != current_user_message_id]
+        return history, "checkpoint_delta"
 
     async def _maybe_compact_thread(
         self,
@@ -1273,6 +1309,11 @@ class AgentWorkflowService:
         compact_context = {
             "project": {"name": project.name, "genre": project.genre, "summary": project.summary},
             "request_context": request_context,
+            "compaction_boundary": {
+                "history_mode": "checkpoint_delta",
+                "source_message_count": len(history),
+                "source_run_count": len(recent_runs),
+            },
         }
         thread_summary = self._summarize_thread(history=history, recent_runs=recent_runs)
         recent_run_digest = {
@@ -1301,7 +1342,12 @@ class AgentWorkflowService:
             hook_name="PreCompact",
             status="completed",
             summary="线程达到阈值，已生成新的上下文压缩 checkpoint。",
-            meta={"checkpoint_id": str(created_checkpoint.id)},
+            meta={
+                "checkpoint_id": str(created_checkpoint.id),
+                "history_mode": "checkpoint_delta",
+                "source_message_count": len(history),
+                "source_run_count": len(recent_runs),
+            },
         )
 
     async def _plan_with_llm(
@@ -1778,7 +1824,8 @@ class AgentWorkflowService:
 
         elif tool_name == "create_scene":
             chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
-            scene_in = SceneCreate(**payload, chapter_id=chapter.id)
+            scene_payload = {key: value for key, value in payload.items() if key != "chapter_id"}
+            scene_in = SceneCreate(**scene_payload, chapter_id=chapter.id)
             scene = await scene_service.create_with_chapter(db, obj_in=scene_in, chapter_id=chapter.id)
             operation.target_id = scene.id
             operation.target_display = f"场景 {scene.scene_order}"
@@ -2040,13 +2087,14 @@ class AgentWorkflowService:
             pov_character_id = str(character.id)
 
         normalized = {
+            "chapter_id": str(chapter.id),
             "scene_order": int(scene_order),
             "pov_character_id": pov_character_id,
             "location": payload.get("location"),
             "content": payload.get("content"),
             "meta": cast(dict[str, Any], payload.get("meta", {})),
         }
-        self._validate_schema(SceneCreate, chapter_id=chapter.id, **normalized)
+        self._validate_schema(SceneCreate, **normalized)
         return normalized
 
     async def _filter_scene_update_payload(
@@ -3031,6 +3079,7 @@ class AgentWorkflowService:
         context_data: dict[str, Any],
         latest_checkpoint: AgentThreadCheckpoint | None,
         history: list[AgentMessage],
+        history_mode: Literal["recent_window", "checkpoint_delta"],
     ) -> HookTraceEntry:
         """Record the pre-plan hook that assembled project context and profile state."""
         focused_objects = sorted(
@@ -3048,12 +3097,15 @@ class AgentWorkflowService:
             summary += f" 聚焦对象：{', '.join(focused_objects)}。"
         if latest_checkpoint is not None:
             summary += " 已引入最近 checkpoint。"
+        if history_mode == "checkpoint_delta":
+            summary += " 规划历史已切换为 checkpoint 增量窗口。"
         return HookTraceEntry(
             hook_name="PrePlan",
             status="completed",
             summary=_excerpt(summary, length=SUBTASK_SUMMARY_LIMIT),
             meta={
                 "profile_id": project.agent_profile_id,
+                "history_mode": history_mode,
                 "history_messages": len(history),
                 "checkpoint_id": str(latest_checkpoint.id) if latest_checkpoint is not None else None,
             },
@@ -3198,6 +3250,8 @@ class AgentWorkflowService:
         snapshot_semantic_summary: str | None = None
         content_transition_ok = True
         content_transition_summary: str | None = None
+        domain_semantics_ok = True
+        domain_semantic_summary: str | None = None
         if snapshot is not None:
             snapshot_semantics_ok, snapshot_semantic_summary = self._verify_operation_snapshot_semantics(
                 operation=operation,
@@ -3209,6 +3263,12 @@ class AgentWorkflowService:
                 snapshot=snapshot,
                 target=target,
             )
+        domain_semantics_ok, domain_semantic_summary = await self._verify_operation_domain_semantics(
+            db,
+            project_id=project_id,
+            operation=operation,
+            target=target,
+        )
 
         content_match = (
             operation.preview_content_hash is None
@@ -3223,6 +3283,7 @@ class AgentWorkflowService:
             and snapshot is not None
             and snapshot_semantics_ok
             and content_transition_ok
+            and domain_semantics_ok
         ):
             operation.verification_status = AgentVerificationStatus.PASSED.value
             verification_parts = ["预览与落库结果一致"]
@@ -3234,6 +3295,8 @@ class AgentWorkflowService:
                 verification_parts.append(snapshot_semantic_summary)
             if content_transition_summary:
                 verification_parts.append(content_transition_summary)
+            if domain_semantic_summary:
+                verification_parts.append(domain_semantic_summary)
             operation.verification_summary = "；".join(verification_parts) + "。"
             return
 
@@ -3250,6 +3313,8 @@ class AgentWorkflowService:
             mismatches.append(snapshot_semantic_summary)
         if snapshot is not None and not content_transition_ok and content_transition_summary:
             mismatches.append(content_transition_summary)
+        if not domain_semantics_ok and domain_semantic_summary:
+            mismatches.append(domain_semantic_summary)
         operation.verification_status = AgentVerificationStatus.FAILED.value
         operation.verification_summary = "；".join(mismatches)
         raise BadRequestException(f"Operation verification failed: {operation.verification_summary}")
@@ -3447,6 +3512,113 @@ class AgentWorkflowService:
             rendered = ", ".join(reason_labels[reason] for reason in mismatch_reasons)
             return False, f"内容迁移不一致：{rendered}"
         return True, f"内容迁移已校验：{mode}"
+
+    async def _verify_operation_domain_semantics(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        operation: AgentOperation,
+        target: Character | WorldSetting | Chapter | Scene,
+    ) -> tuple[bool, str | None]:
+        """Verify domain-level invariants that are not fully covered by field or content checks."""
+        passed_checks: list[str] = []
+        failed_checks: list[str] = []
+
+        if operation.tool_name in {"create_chapter", "update_chapter"} and isinstance(target, Chapter):
+            if target.volume_id is not None:
+                try:
+                    volume = await volume_service.get(db, id=target.volume_id)
+                except NotFoundException:
+                    failed_checks.append("volume_missing")
+                else:
+                    if volume.project_id != project_id:
+                        failed_checks.append("volume_project_mismatch")
+                    else:
+                        passed_checks.append("volume_scope")
+
+            duplicate_chapter_stmt = (
+                select(Chapter.id)
+                .where(
+                    Chapter.project_id == project_id,
+                    Chapter.chapter_number == target.chapter_number,
+                    Chapter.id != target.id,
+                )
+                .limit(1)
+            )
+            if target.volume_id is None:
+                duplicate_chapter_stmt = duplicate_chapter_stmt.where(Chapter.volume_id.is_(None))
+            else:
+                duplicate_chapter_stmt = duplicate_chapter_stmt.where(Chapter.volume_id == target.volume_id)
+            duplicate_chapter = (await db.execute(duplicate_chapter_stmt)).scalar_one_or_none()
+            if duplicate_chapter is not None:
+                failed_checks.append("chapter_number_duplicate")
+            else:
+                passed_checks.append("chapter_number_unique")
+
+        if operation.tool_name in {"create_scene", "update_scene"} and isinstance(target, Scene):
+            try:
+                chapter = await chapter_service.get(db, id=target.chapter_id)
+            except NotFoundException:
+                failed_checks.append("scene_parent_missing")
+            else:
+                if chapter.project_id != project_id:
+                    failed_checks.append("scene_project_mismatch")
+                else:
+                    passed_checks.append("scene_project_scope")
+
+            duplicate_scene_stmt = (
+                select(Scene.id)
+                .where(
+                    Scene.chapter_id == target.chapter_id,
+                    Scene.scene_order == target.scene_order,
+                    Scene.id != target.id,
+                )
+                .limit(1)
+            )
+            duplicate_scene = (await db.execute(duplicate_scene_stmt)).scalar_one_or_none()
+            if duplicate_scene is not None:
+                failed_checks.append("scene_order_duplicate")
+            else:
+                passed_checks.append("scene_order_unique")
+
+            if target.pov_character_id is not None:
+                try:
+                    pov_character = await character_service.get(db, id=target.pov_character_id)
+                except NotFoundException:
+                    failed_checks.append("pov_character_missing")
+                else:
+                    if pov_character.project_id != project_id:
+                        failed_checks.append("pov_character_project_mismatch")
+                    else:
+                        passed_checks.append("pov_character_scope")
+
+        if not passed_checks and not failed_checks:
+            return True, None
+
+        execution_result = dict(operation.execution_result or {})
+        execution_result["domain_verification"] = {
+            "status": "failed" if failed_checks else "passed",
+            "passed_checks": passed_checks,
+            "failed_checks": failed_checks,
+        }
+        operation.execution_result = execution_result
+
+        if failed_checks:
+            reason_labels = {
+                "volume_missing": "卷不存在",
+                "volume_project_mismatch": "章节卷归属错误",
+                "chapter_number_duplicate": "章节序号重复",
+                "scene_parent_missing": "场景父章节缺失",
+                "scene_project_mismatch": "场景不属于当前项目",
+                "scene_order_duplicate": "场景序号重复",
+                "pov_character_missing": "POV 人物不存在",
+                "pov_character_project_mismatch": "POV 人物不属于当前项目",
+            }
+            rendered = ", ".join(reason_labels[reason] for reason in failed_checks)
+            return False, f"领域语义不一致：{rendered}"
+
+        return True, f"领域语义已校验：{', '.join(passed_checks)}"
 
     def _expected_target_from_snapshot(
         self,

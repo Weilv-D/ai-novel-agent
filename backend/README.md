@@ -84,11 +84,12 @@ make verify
 - `GET /api/v1/agent/capabilities` 会返回当前稳定 capability registry；registry 定义、policy 和 execution record 已经分层
 - run metadata 会记录 `PreCompact / PrePlan / SubagentStop / RunStop` hook trace
 - 高风险正文覆盖会进入二次确认，而不是直接执行
-- 长线程达到阈值后会生成 `AgentThreadCheckpoint`，并通过线程状态接口返回最近一条压缩摘要
+- 长线程达到阈值后会生成 `AgentThreadCheckpoint`，并切换到 `checkpoint + delta history` 的规划输入模式；线程状态接口会返回最近一条压缩摘要
 - 执行阶段复用现有 CRUD service，并在落库前为目标对象创建 snapshot
 - verification gate 现在除了 summary / content hash，也会对 `create_*` / `update_*` 的落库字段做逐字段校验
 - operation `execution_result` 会带出 snapshot linkage，verification 不只校验该 snapshot 是否真实存在并与目标对象一致，还会验证从 snapshot 推导出的预期落库状态是否成立
 - `write_*_content` 还会额外记录 content transition verification，校验 replace / append 模式下的正文迁移是否符合预期
+- chapter / scene 还会进入 domain-level semantic verification，校验章节序号、场景序号、卷归属和 POV 人物归属等业务约束
 - planner 与每个 operation 都由文件化 skill 驱动；通用技能位于 `app/agent_skills/`，profile 覆盖位于 `app/agent_profiles/`
 - `AGENT_SKILLS_DIR` 作为 profile 根目录覆盖入口，可新增或替换某个 profile
 - `GET /api/v1/agent/profiles`、`GET /api/v1/agent/skills?project_id=...` 与 `GET /api/v1/agent/risk-policies?project_id=...` 可用于检查当前实际加载结果

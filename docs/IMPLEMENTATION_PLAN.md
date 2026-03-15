@@ -144,6 +144,8 @@
 - `create_*` 与非正文类 `update_*` 已接入字段级 verification，会按 payload 对落库结果逐字段比对
 - operation 的 `execution_result` 已记录 snapshot linkage，verification 会校验 snapshot 是否真实存在、与目标对象一致，并验证从 snapshot 推导出的预期落库状态是否成立
 - `write_*_content` 已接入 content transition verification，会验证 replace / append 模式下的正文迁移是否符合预期
+- chapter / scene 已接入 domain-level semantic verification，会校验章节序号、场景序号、卷归属与 POV 人物归属这类业务约束
+- 长线程已经切换到 checkpoint-based compact flow；当 checkpoint 可用时，planner history 改为 `checkpoint + delta history`，而不是继续读取固定窗口历史
 - 执行完成后会验证：
   - 目标对象存在
   - 摘要与预览一致
@@ -151,12 +153,14 @@
   - create/update 字段与预期值一致
   - snapshot linkage 与 snapshot-derived semantics 有效
   - content transition 与 write mode 语义一致
+  - 领域约束与对象归属一致
   - continuity gate 未阻断
 
 后续收口：
 
 - 把当前字段级 verification 从 create/update 扩展到更多对象与更细粒度结果
-- 把当前 snapshot semantic verification 与 content transition verification 从稳定字段比对推进到更细的 domain-level 语义校验
+- 把当前 domain-level semantic verification 从章节/场景约束推进到更多对象与更细的业务规则
+- 把当前 checkpoint-based compact flow 从 delta history 切换推进到更完整的 compact policy 与 planner input contract
 - 在前端提供更清晰的“执行成功但建议人工复核”的分类展示
 
 ### Phase 5: 上下文压缩与长期线程
@@ -175,15 +179,13 @@
   - `active_object_bundle`
   - `recent_run_digest`
   - `profile_id`
+- planner 已切换到 `checkpoint + delta history` 输入模式；当 checkpoint 可用时，不再继续回灌固定窗口历史
+- `PreCompact / PrePlan` hook metadata 已显式记录 compact mode 与 delta history 状态
 
 后续收口：
 
-- 把当前确定性摘要升级为独立 compact step
-- 将 planner 输入正式切换为：
-  - 最新 checkpoint
-  - 当前关键对象 bundle
-  - 少量近期原始消息
-  - 当前待确认 run 摘要
+- 把当前 compact flow 从固定规则推进到更完整的 compact policy
+- 把 planner 输入 contract 从当前的 `checkpoint + delta history` 推进到更清晰的 compact policy / retained window / active bundle 约束
 - 为 long-running thread 增加压缩后的可追踪性说明
 
 ## 公共接口变更

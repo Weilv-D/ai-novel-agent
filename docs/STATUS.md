@@ -35,12 +35,13 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - create/update field-level verification
 - snapshot semantic verification
 - content transition verification
-- 长线程 checkpoint 基础设施
+- domain-level semantic verification
+- checkpoint-based compact flow
 - 工作台可见的 latest checkpoint 摘要
 
 ## 当前质量状态
 
-- 后端测试：`431 passed / 2 skipped`
+- 后端测试：`433 passed / 2 skipped`
 - 后端 lint：通过
 - 后端类型检查：通过
 - 前端 lint：通过
@@ -72,7 +73,7 @@ AI Novel Agent 当前已经具备可用的个人单用户创作工作流，主�
 - 把 subtask 从“摘要记录”升级为真正独立的内部执行单元
 - 把当前 `Plan / Build` 权限矩阵进一步收敛为明确的 child unit contract
 - 把 field-level verification 从当前的 create/update 扩展到更广的对象类型与更细粒度结果
-- 把 snapshot semantic verification 与 content transition verification 推进到更细的 domain-level 语义校验
-- 把 checkpoint 从基础摘要升级为长期线程的正式 compact 流程
+- 把当前 domain-level semantic verification 从章节/场景约束扩展到更多对象与更细的业务规则
+- 把当前 checkpoint-based compact flow 从 delta history 切换推进到更完整的 compact policy 与 planner input contract
 
 详细路线见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)。

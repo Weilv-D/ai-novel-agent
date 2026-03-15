@@ -693,6 +693,155 @@ async def test_append_write_verification_catches_transition_errors(
 
 
 @pytest.mark.asyncio
+async def test_create_chapter_duplicate_number_fails_domain_verification(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Create chapter runs should fail when domain semantics detect duplicate numbering without volume scope."""
+    project_id = await create_project(client, name="Chapter Domain Verification")
+    thread_id = await create_thread(client, project_id)
+
+    existing_chapter = await client.post(
+        "/api/v1/chapters",
+        json={
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "旧章",
+            "content": "旧内容",
+        },
+    )
+    assert existing_chapter.status_code == 201
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会先创建第一章草稿，再等你确认。",
+                summary="创建第一章",
+                operations=[
+                    {
+                        "tool_name": "create_chapter",
+                        "description": "创建重复序号章节",
+                        "reason": "用户要求重做第一章",
+                        "payload": {
+                            "chapter_number": 1,
+                            "title": "新章",
+                            "content": "新内容",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "再创建一个第一章草稿"},
+    )
+    assert message.status_code == 200
+
+    confirm = await client.post(f"/api/v1/agent/runs/{message.json()['run']['id']}/confirm")
+    assert confirm.status_code == 200
+    run = confirm.json()["run"]
+
+    assert run["status"] == "failed"
+    assert run["verification_status"] == "failed"
+    assert "领域语义不一致：章节序号重复" in (run["verification_summary"] or "")
+    operation = run["operations"][0]
+    assert operation["verification_status"] == "failed"
+    assert operation["execution_result"]["domain_verification"]["status"] == "failed"
+    assert operation["execution_result"]["domain_verification"]["failed_checks"] == ["chapter_number_duplicate"]
+
+    chapters = await client.get(f"/api/v1/chapters/project/{project_id}")
+    assert chapters.status_code == 200
+    assert len(chapters.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_scene_cross_project_pov_fails_domain_verification(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scene creation should fail when the chosen POV character belongs to another project."""
+    project_id = await create_project(client, name="Scene Domain Verification")
+    thread_id = await create_thread(client, project_id)
+    other_project_id = await create_project(client, name="Other Scene Domain Verification")
+
+    chapter_response = await client.post(
+        "/api/v1/chapters",
+        json={
+            "project_id": project_id,
+            "chapter_number": 1,
+            "title": "夜行",
+            "content": "旧内容",
+        },
+    )
+    assert chapter_response.status_code == 201
+    chapter_id = chapter_response.json()["id"]
+
+    foreign_character = await client.post(
+        "/api/v1/characters",
+        json={
+            "project_id": other_project_id,
+            "name": "外部人物",
+            "role": "密探",
+        },
+    )
+    assert foreign_character.status_code == 201
+    foreign_character_id = foreign_character.json()["id"]
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value=planner_response(
+                assistant_message="我会先创建场景，再等你确认。",
+                summary="创建场景",
+                operations=[
+                    {
+                        "tool_name": "create_scene",
+                        "description": "创建跨项目 POV 场景",
+                        "reason": "用户要求补一个 POV 场景",
+                        "payload": {
+                            "chapter_id": chapter_id,
+                            "scene_order": 1,
+                            "pov_character_id": foreign_character_id,
+                            "location": "偏殿",
+                            "content": "新场景内容",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    message = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "补一个偏殿 POV 场景"},
+    )
+    assert message.status_code == 200
+
+    confirm = await client.post(f"/api/v1/agent/runs/{message.json()['run']['id']}/confirm")
+    assert confirm.status_code == 200
+    run = confirm.json()["run"]
+
+    assert run["status"] == "failed"
+    assert run["verification_status"] == "failed"
+    assert "领域语义不一致：POV 人物不属于当前项目" in (run["verification_summary"] or "")
+    operation = run["operations"][0]
+    assert operation["verification_status"] == "failed"
+    assert operation["execution_result"]["domain_verification"]["status"] == "failed"
+    assert operation["execution_result"]["domain_verification"]["failed_checks"] == [
+        "pov_character_project_mismatch"
+    ]
+
+    scenes = await client.get(f"/api/v1/scenes/chapter/{chapter_id}")
+    assert scenes.status_code == 200
+    assert scenes.json() == []
+
+
+@pytest.mark.asyncio
 async def test_multi_step_run_is_transactional(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """If execution fails mid-run, earlier operations are rolled back."""
     project_id = await create_project(client, name="Txn Test")
@@ -1336,6 +1485,15 @@ async def test_thread_state_exposes_latest_checkpoint(
         json={"content": "再创建一个谋士顾照"},
     )
     assert second.status_code == 200
+    second_run = second.json()["run"]
+    precompact_hook = second_run["meta"]["hook_trace"][0]
+    preplan_hook = second_run["meta"]["hook_trace"][1]
+    assert precompact_hook["hook_name"] == "PreCompact"
+    assert precompact_hook["meta"]["history_mode"] == "checkpoint_delta"
+    assert precompact_hook["meta"]["source_message_count"] >= 2
+    assert preplan_hook["hook_name"] == "PrePlan"
+    assert preplan_hook["meta"]["history_mode"] == "checkpoint_delta"
+    assert preplan_hook["meta"]["history_messages"] == 0
 
     state = await client.get(f"/api/v1/agent/threads/{thread_id}")
     assert state.status_code == 200
@@ -1343,6 +1501,7 @@ async def test_thread_state_exposes_latest_checkpoint(
     assert payload["latest_checkpoint"] is not None
     assert payload["latest_checkpoint"]["profile_id"] == "default"
     assert payload["latest_checkpoint"]["source_message_count"] >= 2
+    assert payload["latest_checkpoint"]["active_object_bundle"]["compaction_boundary"]["history_mode"] == "checkpoint_delta"
 
 
 @pytest.mark.asyncio
