@@ -73,10 +73,10 @@ export default function ProjectsPage() {
         <div className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="ink-kicker">Project Desk</p>
-            <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">
+            <h1 className="ink-display mt-3 text-4xl font-semibold text-ink-950">
               我的项目
             </h1>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-[rgb(var(--ink-700))]">
+            <p className="mt-3 max-w-2xl text-base leading-7 text-ink-700">
               管理小说创作项目，保持题材、受众、字数目标和当前状态在一个视图内。
             </p>
           </div>
@@ -111,7 +111,7 @@ export default function ProjectsPage() {
           <Card padding="lg" className="max-w-2xl">
             <CardContent>
               <div className="text-center">
-                <p className="mb-4 text-[rgb(var(--danger))]">{error}</p>
+                <p className="mb-4 text-red-800">{error}</p>
                 <Button onClick={() => fetchProjects()}>重试</Button>
               </div>
             </CardContent>
@@ -122,10 +122,10 @@ export default function ProjectsPage() {
           <Card padding="lg" className="max-w-3xl">
             <CardContent>
               <div className="py-8 text-center">
-                <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">
+                <h3 className="ink-display mb-2 text-2xl font-semibold text-ink-950">
                   还没有项目
                 </h3>
-                <p className="mb-6 text-[rgb(var(--ink-700))]">
+                <p className="mb-6 text-ink-700">
                   创建您的第一个小说项目，开始 AI 辅助创作之旅
                 </p>
                 <Button href="/projects/new">创建项目</Button>
@@ -144,23 +144,23 @@ export default function ProjectsPage() {
                   <Card className="ink-grid-card h-full cursor-pointer transition-transform duration-200 hover:-translate-y-1">
                     <CardContent className="pt-6">
                       <div className="mb-3 flex items-start justify-between gap-4">
-                        <h3 className="truncate pr-2 text-xl font-semibold text-[rgb(var(--ink-950))]">
+                        <h3 className="truncate pr-2 text-xl font-semibold text-ink-950">
                           {project.name}
                         </h3>
                         <span className={statusMeta.className}>{statusMeta.label}</span>
                       </div>
-                      <p className="text-sm text-[rgb(var(--ink-600)]">
+                      <p className="text-sm text-ink-700">
                         {project.genre || "未分类"} · {project.target_audience || "未设定受众"}
                       </p>
                       {project.target_word_count && (
-                        <div className="mt-4 flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3 text-sm text-[rgb(var(--ink-700))]">
+                        <div className="mt-4 flex justify-between rounded-[1rem] bg-ink-950/8 px-4 py-3 text-sm text-ink-700">
                           <span>目标字数</span>
-                          <span className="font-medium text-[rgb(var(--ink-950))]">
+                          <span className="font-medium text-ink-950">
                             {project.target_word_count.toLocaleString()}
                           </span>
                         </div>
                       )}
-                      <div className="mt-4 pt-2 text-xs text-[rgb(var(--ink-600))]">
+                      <div className="mt-4 pt-2 text-xs text-ink-700">
                         更新于 {new Date(project.updated_at).toLocaleDateString("zh-CN")}
                       </div>
                     </CardContent>
@@ -189,11 +189,11 @@ export default function ProjectsPage() {
       >
         {importResult && importResult.warnings.length > 0 && (
           <div className="mt-4 space-y-2">
-            <p className="text-sm font-medium text-[rgb(var(--ink-900))]">警告信息：</p>
+            <p className="text-sm font-medium text-ink-900">警告信息：</p>
             {importResult.warnings.map((warning, index) => (
               <div
                 key={index}
-                className="rounded-lg bg-[rgba(var(--amber),0.08)] px-3 py-2 text-sm text-[rgb(var(--ink-800))]"
+                className="rounded-lg bg-amber/12 px-3 py-2 text-sm text-ink-800"
               >
                 <span className="font-medium">{warning.code}：</span>
                 {warning.message}

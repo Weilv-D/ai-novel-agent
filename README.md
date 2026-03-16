@@ -255,6 +255,7 @@ ai-novel-agent/
 
 ## 文档索引
 
+- [API Reference](docs/API_REFERENCE.md)
 - [后端手册](backend/README.md)
 - [开发手册](docs/DEVELOPMENT.md)
 - [当前技术实现](docs/TECH_IMPLEMENTATION.md)

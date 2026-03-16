@@ -22,10 +22,14 @@ module.exports = {
         },
         seal: {
           DEFAULT: "rgb(var(--seal) / <alpha-value>)",
+          dark: "rgb(var(--seal-dark) / <alpha-value>)",
           soft: "rgb(var(--seal-soft) / <alpha-value>)",
         },
         jade: {
           DEFAULT: "rgb(var(--jade) / <alpha-value>)",
+        },
+        amber: {
+          DEFAULT: "rgb(var(--amber) / <alpha-value>)",
         },
         line: {
           DEFAULT: "rgb(var(--line) / <alpha-value>)",

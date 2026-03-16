@@ -1,6 +1,6 @@
 # 项目状态
 
-最后更新：2026-03-15
+最后更新：2026-03-16
 
 ## 交付定位
 
@@ -28,6 +28,7 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - 风险摘要与高风险二次确认
 - execution contract、child unit contract、capability record
 - hook trace、subtask trace、checkpoint trace
+- 流式事件系统（SSE）
 
 ### 执行保障
 
@@ -50,6 +51,7 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - verification 与 compact contract 展示
 - 项目、人物、设定、章节、场景的辅助编辑页
 - 项目包导出与导入入口
+- 宣纸水墨风格 UI（WCAG 2.1 AA 级对比度）
 
 ### E2E 测试
 
@@ -71,11 +73,11 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 
 当前实测结果：
 
-- 后端测试：`418 passed / 2 skipped`
-- 后端 lint：通过
-- 后端类型检查：通过
-- 前端 lint：通过
-- 前端构建：通过
+- 后端测试：`441 passed` ✅
+- 后端 lint：通过 ✅
+- 后端类型检查：通过 ✅
+- 前端 lint：通过 ✅
+- 前端构建：通过 ✅
 
 ## 交付边界
 

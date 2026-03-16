@@ -61,7 +61,7 @@ export function CardContent({ className = "", children, ...props }: HTMLAttribut
 
 export function CardFooter({ className = "", children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`mt-5 border-t border-line/30 pt-5 ${className}`} {...props}>
+    <div className={`mt-5 border-t border-line/40 pt-5 ${className}`} {...props}>
       {children}
     </div>
   );
