@@ -20,6 +20,8 @@ class ExportService:
         lines = [project.name, "=" * len(project.name) * 2, ""]
         if project.summary:
             lines.extend([project.summary, ""])
+        if project.story_outline:
+            lines.extend(["项目大纲", "-" * 8, project.story_outline, ""])
 
         for ch in chapters:
             title = f"第{ch.chapter_number}章 {ch.title or ''}"
@@ -40,6 +42,8 @@ class ExportService:
         lines = [f"# {project.name}", ""]
         if project.summary:
             lines.extend([f"> {project.summary}", ""])
+        if project.story_outline:
+            lines.extend(["## 项目大纲", "", project.story_outline, ""])
 
         for ch in chapters:
             title = ch.title or ""

@@ -7,12 +7,10 @@
 
 本文件描述当前仓库已经落地并可运行的真实实现，不描述未来规划。
 
-本次核对基线：
+本次针对“双层规划体系”更新的核对基线：
 
-- 后端 OpenAPI：62 个 path、85 个 schema（由 `app.openapi()` 实时导出）
-- 后端测试：`441 passed`
-- 前端质量门：`npm run lint`、`npm run build` 通过
-- E2E：`7 passed`
+- 后端回归：`backend/.venv/bin/pytest backend/tests/test_schemas/test_project_schemas.py backend/tests/test_schemas/test_suggestion_schemas.py backend/tests/test_services/test_project_service.py backend/tests/test_services/test_chapter_service.py backend/tests/test_services/test_project_package_service.py backend/tests/test_api/test_projects.py backend/tests/test_api/test_suggestions.py backend/tests/test_api/test_agent_workflow.py backend/tests/test_integration/test_http_integration.py -q` -> `162 passed`
+- 前端质量门：`npm run lint --prefix frontend`、`npm run build --prefix frontend` 通过
 
 相关文档：
 
@@ -74,6 +72,20 @@
 - Snapshot
 - Memory（含向量检索）
 
+当前创作层级：
+
+- `Project.summary`：项目简介
+- `Project.story_outline`：项目大纲
+- `Volume.outline`：卷细纲总述
+- `Chapter.title + Chapter.outline`：卷下章纲
+- `Scene`：写作执行层
+
+兼容规则：
+
+- 历史项目升级后自动补一个默认卷
+- 未挂卷章节自动迁入默认卷
+- 旧 `summary / notes` 用于回填 `story_outline`
+
 ### 5.2 Agent 工作流
 
 核心模型：
@@ -99,6 +111,29 @@
 - 非所有改写都需要二次确认
 - 长文本覆盖（超过策略阈值）或多对象联动重写才进入双确认门禁
 
+当前可写操作集合已扩展为：
+
+- `update_project_outline`
+- `create_volume`
+- `update_volume`
+- `create_character`
+- `update_character`
+- `create_world_setting`
+- `update_world_setting`
+- `create_chapter`
+- `update_chapter`
+- `write_chapter_content`
+- `create_scene`
+- `update_scene`
+- `write_scene_content`
+
+Planner 读取顺序已改为优先使用：
+
+1. 项目大纲
+2. 当前卷细纲
+3. 卷下章节顺序与章纲
+4. 相关人物与世界观
+
 ### 5.3 项目包导出/导入
 
 接口：
@@ -116,6 +151,8 @@
 - 全量新建副本，不覆盖原项目
 - 重新生成主键并维护引用映射
 - embedding 维度不一致时清空向量并返回 warning
+- 项目包版本已提升到 `1.1.0`
+- 项目包包含 `story_outline`，导入时会校验卷/章层级并回填缺失项目大纲
 
 ### 5.4 文本导出
 
@@ -147,13 +184,14 @@
 
 ## 7. 业务流程说明
 
-### 7.1 标准创建流程（人物/设定/章节）
+### 7.1 标准创建流程（项目大纲/卷细纲/章纲）
 
 1. 用户在项目页发送自然语言指令
 2. Agent 产出 operation 计划与风险摘要
-3. 用户确认后落库
-4. 系统写 snapshot 与 verification
-5. 前端回显当前 run 结果与 recent runs
+3. Planner 根据项目大纲、卷细纲、章纲与上下文装配计划
+4. 用户确认后落库
+5. 系统写 snapshot 与 verification
+6. 前端回显当前 run 结果与 recent runs
 
 ### 7.2 异常流程
 
@@ -189,4 +227,4 @@
 
 ## 10. 验证结论
 
-基于当前代码与测试结果，核心业务链路（项目管理、Agent 计划执行、导出导入）可用，文档已同步到当前实现状态。后续优先级应放在覆盖率提升与生产级安全加固。
+基于当前代码与本次回归结果，项目大纲、卷细纲、章纲、Agent 计划执行与导出导入链路可用，文档已同步到当前实现状态。后续优先级应放在覆盖率提升与生产级安全加固。

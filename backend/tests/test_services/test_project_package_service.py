@@ -17,7 +17,7 @@ class TestProjectPackageService:
 
     def test_package_version(self):
         """Test package version constant."""
-        assert project_package_service.PACKAGE_VERSION == "1.0.0"
+        assert project_package_service.PACKAGE_VERSION == "1.1.0"
 
     @pytest.mark.asyncio
     async def test_import_package_invalid_zip_raises_error(self):
@@ -57,7 +57,7 @@ class TestProjectPackageService:
         mock_db = MagicMock()
 
         manifest_data = {
-            "package_version": "1.0.0",
+            "package_version": "1.1.0",
             "exported_at": datetime.now(UTC).isoformat(),
             "app_version": "0.1.0",
             "source_project_id": str(uuid.uuid4()),
@@ -89,7 +89,7 @@ class TestProjectPackageManifest:
         from app.schemas.project_package import ProjectPackageManifest
 
         manifest = ProjectPackageManifest(
-            package_version="1.0.0",
+            package_version="1.1.0",
             exported_at=datetime.now(UTC),
             app_version="0.1.0",
             source_project_id=uuid.uuid4(),
@@ -98,7 +98,7 @@ class TestProjectPackageManifest:
             embedding_dimension=1536,
         )
 
-        assert manifest.package_version == "1.0.0"
+        assert manifest.package_version == "1.1.0"
         assert manifest.source_project_name == "Test Project"
 
     def test_manifest_serialization(self):
@@ -106,7 +106,7 @@ class TestProjectPackageManifest:
         from app.schemas.project_package import ProjectPackageManifest
 
         manifest = ProjectPackageManifest(
-            package_version="1.0.0",
+            package_version="1.1.0",
             exported_at=datetime.now(UTC),
             app_version="0.1.0",
             source_project_id=uuid.uuid4(),
@@ -116,7 +116,7 @@ class TestProjectPackageManifest:
         )
 
         json_data = manifest.model_dump_json()
-        assert "1.0.0" in json_data
+        assert "1.1.0" in json_data
         assert "Test Project" in json_data
 
 
@@ -219,7 +219,7 @@ class TestExportPackageIntegrity:
         from app.schemas.project_package import ProjectBundle, ProjectPackageManifest
 
         manifest = ProjectPackageManifest(
-            package_version="1.0.0",
+            package_version="1.1.0",
             exported_at=datetime.now(UTC),
             app_version="0.1.0",
             source_project_id=uuid.uuid4(),
@@ -266,7 +266,7 @@ class TestExportPackageIntegrity:
             assert "project_bundle.json" in zf.namelist()
 
             manifest_data = json.loads(zf.read("manifest.json"))
-            assert manifest_data["package_version"] == "1.0.0"
+            assert manifest_data["package_version"] == "1.1.0"
 
             bundle_data = json.loads(zf.read("project_bundle.json"))
             assert bundle_data["project"]["name"] == "Test Project"

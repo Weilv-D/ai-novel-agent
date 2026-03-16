@@ -14,7 +14,7 @@ from app.agents.draft_agent import DraftAgent
 from app.agents.lore_agent import LoreAgent
 from app.agents.outline_agent import OutlineAgent
 from app.schemas.suggestion import SuggestionCreate
-from app.services.chapter import chapter_service
+from app.services.chapter import chapter_service, volume_service
 from app.services.character import character_service
 from app.services.llm import LLMService, llm_service
 from app.services.memory import memory_service
@@ -86,10 +86,12 @@ class WritingOrchestrator:
             project = await project_service.get(db, id=pid)
             if project:
                 context_data["project"] = {
+                    "id": str(project.id),
                     "name": project.name,
                     "genre": project.genre,
                     "target_word_count": project.target_word_count,
                     "summary": project.summary,
+                    "story_outline": project.story_outline,
                 }
         except Exception:
             pass
@@ -118,10 +120,25 @@ class WritingOrchestrator:
             context_data["world_settings"] = []
 
         try:
+            volumes = await volume_service.get_by_project(db, project_id=pid, limit=20)
+            context_data["volumes"] = [
+                {
+                    "id": str(volume.id),
+                    "volume_number": volume.volume_number,
+                    "title": volume.title,
+                    "outline": (volume.outline or "")[:300],
+                }
+                for volume in volumes
+            ]
+        except Exception:
+            context_data["volumes"] = []
+
+        try:
             chapters = await chapter_service.get_by_project(db, project_id=pid, limit=50)
             context_data["chapters"] = [
                 {
                     "id": str(ch.id),
+                    "volume_id": str(ch.volume_id) if ch.volume_id is not None else None,
                     "chapter_number": ch.chapter_number,
                     "title": ch.title,
                     "outline": ch.outline,
@@ -225,7 +242,7 @@ class WritingOrchestrator:
             target_type_map = {
                 "world_edit": "world_setting",
                 "character_edit": "character",
-                "outline_gen": "chapter",
+                "outline_gen": parsed.get("target_type", "chapter"),
                 "chapter_edit": "chapter",
                 "content_gen": "scene",
                 "scene_edit": "scene",
@@ -362,14 +379,33 @@ class WritingOrchestrator:
                 if ch.get("chapter_number") == content["chapter_number"]:
                     return uuid.UUID(ch["id"])
 
+        if target_type == "project":
+            project = context_data.get("project", {})
+            if project.get("id"):
+                return uuid.UUID(project["id"])
+
+        if target_type == "volume":
+            if content.get("volume_number"):
+                for volume in context_data.get("volumes", []):
+                    if volume.get("volume_number") == content["volume_number"]:
+                        return uuid.UUID(volume["id"])
+            if content.get("volume_title"):
+                for volume in context_data.get("volumes", []):
+                    if volume.get("title") == content["volume_title"]:
+                        return uuid.UUID(volume["id"])
+
         # Fallback: use first entity of matching type, or generate a placeholder
         type_to_list = {
+            "project": "project",
             "character": "characters",
             "world_setting": "world_settings",
+            "volume": "volumes",
             "chapter": "chapters",
         }
         list_key = type_to_list.get(target_type)
-        if list_key and context_data.get(list_key):
+        if list_key == "project" and context_data.get("project", {}).get("id"):
+            return uuid.UUID(context_data["project"]["id"])
+        if list_key and list_key != "project" and context_data.get(list_key):
             return uuid.UUID(context_data[list_key][0]["id"])
 
         # Final fallback: generate a new UUID (suggestion will reference a non-existent entity)

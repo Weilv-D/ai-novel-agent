@@ -26,12 +26,13 @@ from app.schemas.project_package import (
     ProjectImportWarning,
     ProjectPackageManifest,
 )
+from app.services.project import build_initial_story_outline
 
 
 class ProjectPackageService:
     """Service for exporting and importing project packages."""
 
-    PACKAGE_VERSION = "1.0.0"
+    PACKAGE_VERSION = "1.1.0"
 
     async def export_package(
         self,
@@ -148,6 +149,11 @@ class ProjectPackageService:
 
         project_data["id"] = new_project_id
         project_data["name"] = new_name or f"{project_data['name']} (导入副本)"
+        project_data["story_outline"] = build_initial_story_outline(
+            story_outline=project_data.get("story_outline"),
+            summary=project_data.get("summary"),
+            notes=project_data.get("notes"),
+        )
         for field in ("created_at", "updated_at"):
             if field in project_data:
                 del project_data[field]

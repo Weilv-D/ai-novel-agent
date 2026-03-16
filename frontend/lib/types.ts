@@ -24,6 +24,7 @@ export interface Project {
   target_audience?: string;
   target_word_count?: number;
   summary?: string;
+  story_outline?: string;
   notes?: string;
   agent_profile_id: string;
   meta?: Record<string, unknown>;
@@ -38,6 +39,7 @@ export interface ProjectCreate {
   target_audience?: string;
   target_word_count?: number;
   summary?: string;
+  story_outline?: string;
   notes?: string;
   agent_profile_id?: string;
   meta?: Record<string, unknown>;
@@ -50,6 +52,7 @@ export interface ProjectUpdate {
   target_audience?: string;
   target_word_count?: number;
   summary?: string;
+  story_outline?: string;
   notes?: string;
   agent_profile_id?: string;
   meta?: Record<string, unknown>;
@@ -359,7 +362,7 @@ export type SuggestionType =
   | "outline_gen"
   | "continuity_fix";
 
-export type SuggestionTargetType = "character" | "world_setting" | "chapter" | "scene";
+export type SuggestionTargetType = "project" | "character" | "world_setting" | "volume" | "chapter" | "scene";
 export type SuggestionAction = "confirm" | "discard" | "commit";
 
 export interface Suggestion {
@@ -669,6 +672,8 @@ export interface AgentActiveBundleCollections {
   characters_limit: number;
   world_settings_count: number;
   world_settings_limit: number;
+  volumes_count: number;
+  volumes_limit: number;
   chapters_count: number;
   chapters_limit: number;
   current_scenes_count: number;

@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
-import { ApiError, chapterApi, sceneApi } from "@/lib/api-client";
+import { ApiError, chapterApi, sceneApi, volumeApi } from "@/lib/api-client";
 import { getChapterStatusMeta } from "@/lib/presentation";
-import type { Chapter, Scene } from "@/lib/types";
+import type { Chapter, Scene, Volume } from "@/lib/types";
 
 export default function ChapterDetailPage() {
   const params = useParams();
@@ -20,6 +20,7 @@ export default function ChapterDetailPage() {
   const chapterId = params.chapterId as string;
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [volume, setVolume] = useState<Volume | null>(null);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,12 @@ export default function ChapterDetailPage() {
       setError(null);
       const data = await chapterApi.get(chapterId) as Chapter;
       setChapter(data);
+      if (data.volume_id) {
+        const volumeData = await volumeApi.get(data.volume_id) as Volume;
+        setVolume(volumeData);
+      } else {
+        setVolume(null);
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 404) {
@@ -126,8 +133,13 @@ export default function ChapterDetailPage() {
                 </h1>
                 <span className={statusMeta.className}>{statusMeta.label}</span>
               </div>
-              {chapter.outline && (
-                <p className="text-[rgb(var(--ink-800))]">{chapter.outline}</p>
+              {volume && (
+                <Link
+                  href={`/projects/${projectId}/volumes/${volume.id}`}
+                  className="inline-flex rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))] transition-colors hover:bg-[rgba(var(--ink-950),0.05)]"
+                >
+                  所属卷：第 {volume.volume_number || "?"} 卷 {volume.title || "未命名卷"}
+                </Link>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -142,6 +154,17 @@ export default function ChapterDetailPage() {
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-lg">章纲</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">
+                {chapter.outline || "尚未填写章纲。"}
+              </p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">统计信息</CardTitle>
@@ -163,11 +186,22 @@ export default function ChapterDetailPage() {
                   {new Date(chapter.updated_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
+              {volume && (
+                <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">
+                  <div className="mb-2 text-[rgb(var(--ink-800))]">卷细纲归属</div>
+                  <Link
+                    href={`/projects/${projectId}/volumes/${volume.id}`}
+                    className="text-sm font-medium text-[rgb(var(--ink-950))] hover:underline"
+                  >
+                    第 {volume.volume_number || "?"} 卷 {volume.title || "未命名卷"}
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {chapter.notes && (
-            <Card className="md:col-span-2">
+            <Card className="md:col-span-3">
               <CardHeader>
                 <CardTitle className="text-lg">备注</CardTitle>
               </CardHeader>

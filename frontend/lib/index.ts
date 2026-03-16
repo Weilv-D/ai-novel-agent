@@ -10,6 +10,7 @@ export {
   projectApi,
   characterApi,
   worldSettingApi,
+  volumeApi,
   chapterApi,
   sceneApi,
   memoryApi,

@@ -506,5 +506,159 @@ async def test_existing_chapter_scene_verification_still_works(client: AsyncClie
     assert confirm_response.status_code == 200
     confirm_data = confirm_response.json()
     assert confirm_data["run"]["status"] == "failed"
-    domain_verification = confirm_data["run"]["operations"][0]["execution_result"]["domain_verification"]
-    assert "chapter_number_duplicate" in domain_verification["failed_checks"]
+    operation = confirm_data["run"]["operations"][0]
+    assert "already exists" in (operation["error_message"] or "")
+
+
+@pytest.mark.asyncio
+async def test_update_project_outline_run_flow(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A planned run can update the project-level story outline."""
+    project_id = await create_project(client)
+    thread_id = await create_thread(client, project_id)
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value={
+                "content": json.dumps(
+                    {
+                        "assistant_message": "我会先补全项目大纲。",
+                        "operations": [
+                            {
+                                "tool_name": "update_project_outline",
+                                "description": "补充项目大纲",
+                                "payload": {
+                                    "updates": {
+                                        "story_outline": "项目大纲：主角从入局到登顶，分三卷完成身份跃迁。"
+                                    }
+                                },
+                            }
+                        ],
+                    }
+                ),
+            },
+        ),
+    )
+
+    response = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "补一个项目大纲"},
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["operations"][0]["tool_name"] == "update_project_outline"
+
+    confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["run"]["status"] == "completed"
+
+    project_response = await client.get(f"/api/v1/projects/{project_id}")
+    assert project_response.status_code == 200
+    assert "身份跃迁" in project_response.json()["story_outline"]
+
+
+@pytest.mark.asyncio
+async def test_create_volume_run_flow(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A planned run can create a volume under the current project."""
+    project_id = await create_project(client)
+    thread_id = await create_thread(client, project_id)
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value={
+                "content": json.dumps(
+                    {
+                        "assistant_message": "我会创建第一卷细纲。",
+                        "operations": [
+                            {
+                                "tool_name": "create_volume",
+                                "description": "创建第一卷",
+                                "payload": {
+                                    "volume_number": 1,
+                                    "title": "第一卷 北地试锋",
+                                    "outline": "第一卷聚焦入局试探、资源争夺与卷末局势翻转。",
+                                },
+                            }
+                        ],
+                    }
+                ),
+            },
+        ),
+    )
+
+    response = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "创建第一卷细纲"},
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["operations"][0]["tool_name"] == "create_volume"
+
+    confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["run"]["status"] == "completed"
+
+    volumes_response = await client.get(f"/api/v1/volumes/project/{project_id}")
+    assert volumes_response.status_code == 200
+    volumes = volumes_response.json()
+    assert len(volumes) == 1
+    assert volumes[0]["title"] == "第一卷 北地试锋"
+
+
+@pytest.mark.asyncio
+async def test_update_volume_run_flow(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A planned run can update an existing volume outline."""
+    project_id = await create_project(client)
+    thread_id = await create_thread(client, project_id)
+
+    volume_response = await client.post(
+        "/api/v1/volumes",
+        json={"project_id": project_id, "volume_number": 1, "title": "第一卷", "outline": "旧卷纲"},
+    )
+    assert volume_response.status_code == 201
+    volume_id = volume_response.json()["id"]
+
+    monkeypatch.setattr(
+        agent_workflow_service.llm,
+        "generate",
+        AsyncMock(
+            return_value={
+                "content": json.dumps(
+                    {
+                        "assistant_message": "我会更新卷细纲。",
+                        "operations": [
+                            {
+                                "tool_name": "update_volume",
+                                "description": "更新第一卷细纲",
+                                "payload": {
+                                    "volume_id": volume_id,
+                                    "updates": {
+                                        "outline": "新卷纲：加入支线网络、因果链升级和卷末悬念。"
+                                    },
+                                },
+                            }
+                        ],
+                    }
+                ),
+            },
+        ),
+    )
+
+    response = await client.post(
+        f"/api/v1/agent/threads/{thread_id}/messages",
+        json={"content": "更新第一卷细纲"},
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["operations"][0]["tool_name"] == "update_volume"
+
+    confirm_response = await client.post(f"/api/v1/agent/runs/{run['id']}/confirm")
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["run"]["status"] == "completed"
+
+    updated_volume_response = await client.get(f"/api/v1/volumes/{volume_id}")
+    assert updated_volume_response.status_code == 200
+    assert "支线网络" in updated_volume_response.json()["outline"]

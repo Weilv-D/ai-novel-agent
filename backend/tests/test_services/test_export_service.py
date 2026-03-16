@@ -29,6 +29,7 @@ class TestExportService:
         mock_project = MagicMock(spec=Project)
         mock_project.name = "Empty Project"
         mock_project.summary = None
+        mock_project.story_outline = None
 
         with patch.object(project_service, "get", new_callable=AsyncMock) as mock_get_project:
             with patch.object(
@@ -50,6 +51,7 @@ class TestExportService:
         mock_project = MagicMock(spec=Project)
         mock_project.name = "Test Novel"
         mock_project.summary = "A test novel summary"
+        mock_project.story_outline = None
 
         chapter1 = MagicMock(spec=Chapter)
         chapter1.chapter_number = 1
@@ -85,7 +87,7 @@ class TestExportService:
         mock_project = MagicMock()
         mock_project.name = "Sorted Novel"
         mock_project.summary = None
-        mock_project.summary = None
+        mock_project.story_outline = None
 
         chapter3 = MagicMock(spec=Chapter)
         chapter3.chapter_number = 3
@@ -125,6 +127,7 @@ class TestExportService:
         mock_project = MagicMock()
         mock_project.name = "Draft Novel"
         mock_project.summary = None
+        mock_project.story_outline = None
 
         chapter = MagicMock(spec=Chapter)
         chapter.chapter_number = 1
@@ -150,6 +153,7 @@ class TestExportService:
         mock_project = MagicMock(spec=Project)
         mock_project.name = "Empty Project"
         mock_project.summary = None
+        mock_project.story_outline = None
 
         with patch.object(project_service, "get", new_callable=AsyncMock) as mock_get_project:
             with patch.object(
@@ -170,6 +174,7 @@ class TestExportService:
         mock_project = MagicMock(spec=Project)
         mock_project.name = "Test Novel"
         mock_project.summary = "A test novel"
+        mock_project.story_outline = None
 
         chapter = MagicMock(spec=Chapter)
         chapter.chapter_number = 1
@@ -199,6 +204,7 @@ class TestExportService:
 
         mock_project = MagicMock(spec=Project)
         mock_project.name = "Sorted Novel"
+        mock_project.story_outline = None
 
         chapter2 = MagicMock(spec=Chapter)
         chapter2.chapter_number = 2
@@ -234,6 +240,7 @@ class TestExportService:
         mock_project = MagicMock(spec=Project)
         mock_project.name = "Draft Novel"
         mock_project.summary = None
+        mock_project.story_outline = None
 
         chapter = MagicMock(spec=Chapter)
         chapter.chapter_number = 1
@@ -260,6 +267,7 @@ class TestExportService:
         mock_project = MagicMock(spec=Project)
         mock_project.name = "My Novel"
         mock_project.summary = "This is a novel summary."
+        mock_project.story_outline = None
 
         with patch.object(project_service, "get", new_callable=AsyncMock) as mock_get_project:
             with patch.object(

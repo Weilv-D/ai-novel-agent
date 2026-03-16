@@ -23,7 +23,7 @@ SuggestionTypeLiteral = Literal[
 ]
 
 # Target type literals
-TargetTypeLiteral = Literal["character", "world_setting", "chapter", "scene"]
+TargetTypeLiteral = Literal["project", "character", "world_setting", "volume", "chapter", "scene"]
 
 # Action literals
 SuggestionActionLiteral = Literal["confirm", "discard", "commit"]
@@ -64,7 +64,7 @@ class SuggestionBase(BaseModel):
     """Base suggestion schema."""
 
     target_type: TargetTypeLiteral = Field(
-        ..., description="Type of target object (character, world_setting, chapter, scene)"
+        ..., description="Type of target object (project, character, world_setting, volume, chapter, scene)"
     )
     target_id: UUID = Field(..., description="ID of the target object")
     type: SuggestionTypeLiteral = Field(..., description="Type of suggestion")

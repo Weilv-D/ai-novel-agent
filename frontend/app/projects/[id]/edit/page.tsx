@@ -46,6 +46,7 @@ export default function EditProjectPage() {
   const [formData, setFormData] = useState<ProjectUpdate>({
     name: "",
     summary: "",
+    story_outline: "",
     notes: "",
     genre: "",
     target_audience: "",
@@ -87,6 +88,7 @@ export default function EditProjectPage() {
       setFormData({
         name: project.name,
         summary: project.summary || "",
+        story_outline: project.story_outline || "",
         notes: project.notes || "",
         genre: project.genre || "",
         target_audience: project.target_audience || "",
@@ -191,6 +193,14 @@ export default function EditProjectPage() {
                 value={formData.summary}
                 onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
                 rows={3}
+              />
+
+              <Textarea
+                label="项目大纲"
+                placeholder="维护作品总纲、主线因果与长期推进方向..."
+                value={formData.story_outline}
+                onChange={(e) => setFormData({ ...formData, story_outline: e.target.value })}
+                rows={8}
               />
 
               <Textarea

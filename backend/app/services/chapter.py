@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, ConflictException
@@ -48,20 +48,61 @@ class CRUDVolume(CRUDBase[Volume, VolumeCreate, VolumeUpdate]):
         project_id: Any,
     ) -> Volume:
         """Create a new volume for a specific project."""
-        if obj_in.volume_number is not None:
-            existing = await self.get_by_volume_number(
-                db, project_id=project_id, volume_number=obj_in.volume_number
+        volume_number = obj_in.volume_number
+        if volume_number is None:
+            volume_number = await self.next_volume_number(db, project_id=project_id)
+        existing = await self.get_by_volume_number(
+            db, project_id=project_id, volume_number=volume_number
+        )
+        if existing:
+            raise ConflictException(
+                f"Volume with number {volume_number} already exists in this project"
             )
-            if existing:
-                raise ConflictException(
-                    f"Volume with number {obj_in.volume_number} already exists in this project"
-                )
         obj_dict = obj_in.model_dump(exclude={"project_id"})
+        obj_dict["volume_number"] = volume_number
+        if not str(obj_dict.get("title") or "").strip():
+            obj_dict["title"] = f"第{volume_number}卷"
         db_obj = Volume(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()
         await db.refresh(db_obj)
         return db_obj
+
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: Volume,
+        obj_in: VolumeUpdate | dict[str, Any],
+    ) -> Volume:
+        """Update a volume while protecting project-scoped volume numbering."""
+        update_data = obj_in.model_dump(exclude_unset=True) if hasattr(obj_in, "model_dump") else dict(obj_in)
+        next_volume_number = update_data.get("volume_number", db_obj.volume_number)
+        if next_volume_number is not None and next_volume_number != db_obj.volume_number:
+            existing = await self.get_by_volume_number(
+                db,
+                project_id=db_obj.project_id,
+                volume_number=int(next_volume_number),
+            )
+            if existing and existing.id != db_obj.id:
+                raise ConflictException(
+                    f"Volume with number {next_volume_number} already exists in this project"
+                )
+        if "title" in update_data and not str(update_data.get("title") or "").strip():
+            update_data["title"] = f"第{next_volume_number or db_obj.volume_number or 1}卷"
+        return await super().update(db, db_obj=db_obj, obj_in=update_data)
+
+    async def delete(self, db: AsyncSession, *, id: Any) -> Volume:
+        """Delete a volume only when it no longer contains chapters."""
+        volume = await self.get(db, id=id)
+        chapter_count = (
+            await db.execute(
+                select(func.count()).select_from(Chapter).where(Chapter.volume_id == volume.id)
+            )
+        ).scalar_one()
+        if chapter_count:
+            raise BadRequestException("Cannot delete a volume that still contains chapters")
+        return await super().delete(db, id=id)
 
     async def get_by_volume_number(
         self,
@@ -78,6 +119,39 @@ class CRUDVolume(CRUDBase[Volume, VolumeCreate, VolumeUpdate]):
             )
         )
         return result.scalars().first()
+
+    async def next_volume_number(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: Any,
+    ) -> int:
+        """Return the next available volume number inside a project."""
+        result = await db.execute(
+            select(func.max(Volume.volume_number)).where(Volume.project_id == project_id)
+        )
+        return int(result.scalar() or 0) + 1
+
+    async def ensure_default_for_project(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: Any,
+    ) -> Volume:
+        """Return the first/default volume for a project, creating one if needed."""
+        existing = await self.get_by_project(db, project_id=project_id, limit=1)
+        if existing:
+            return existing[0]
+        return await self.create_with_project(
+            db,
+            obj_in=VolumeCreate(
+                project_id=project_id,
+                volume_number=1,
+                title="第一卷",
+                outline="默认兼容卷，用于承接尚未显式编排卷细纲的章节。",
+            ),
+            project_id=project_id,
+        )
 
 
 class CRUDChapter(CRUDBase[Chapter, ChapterCreate, ChapterUpdate]):
@@ -128,26 +202,64 @@ class CRUDChapter(CRUDBase[Chapter, ChapterCreate, ChapterUpdate]):
         skip_duplicate_check: bool = False,
     ) -> Chapter:
         """Create a new chapter for a specific project."""
+        effective_volume_id = obj_in.volume_id
+        if effective_volume_id is None:
+            effective_volume_id = (await volume_service.ensure_default_for_project(db, project_id=project_id)).id
         if not skip_duplicate_check:
             existing = await self.get_by_chapter_number(
-                db, project_id=project_id, chapter_number=obj_in.chapter_number, volume_id=obj_in.volume_id
+                db, project_id=project_id, chapter_number=obj_in.chapter_number, volume_id=effective_volume_id
             )
             if existing:
                 raise ConflictException(
                     f"Chapter with number {obj_in.chapter_number} already exists in this project"
                 )
-        if obj_in.volume_id:
-            volume = await volume_service.get(db, id=obj_in.volume_id)
+        if effective_volume_id:
+            volume = await volume_service.get(db, id=effective_volume_id)
             if not volume or volume.project_id != project_id:
                 raise BadRequestException(
-                    f"Volume {obj_in.volume_id} does not belong to project {project_id}"
+                    f"Volume {effective_volume_id} does not belong to project {project_id}"
                 )
         obj_dict = obj_in.model_dump(exclude={"project_id"})
+        obj_dict["volume_id"] = effective_volume_id
         db_obj = Chapter(**obj_dict, project_id=project_id)
         db.add(db_obj)
         await db.flush()
         await db.refresh(db_obj)
         return db_obj
+
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: Chapter,
+        obj_in: ChapterUpdate | dict[str, Any],
+    ) -> Chapter:
+        """Update a chapter while enforcing volume scope and per-volume numbering."""
+        update_data = obj_in.model_dump(exclude_unset=True) if hasattr(obj_in, "model_dump") else dict(obj_in)
+        if "volume_id" in update_data and update_data["volume_id"] is None:
+            update_data["volume_id"] = (await volume_service.ensure_default_for_project(db, project_id=db_obj.project_id)).id
+        next_volume_id = update_data.get("volume_id", db_obj.volume_id)
+        if next_volume_id is None:
+            next_volume_id = (await volume_service.ensure_default_for_project(db, project_id=db_obj.project_id)).id
+            update_data["volume_id"] = next_volume_id
+        if next_volume_id is not None:
+            volume = await volume_service.get(db, id=next_volume_id)
+            if volume.project_id != db_obj.project_id:
+                raise BadRequestException(
+                    f"Volume {next_volume_id} does not belong to project {db_obj.project_id}"
+                )
+        next_chapter_number = int(update_data.get("chapter_number", db_obj.chapter_number))
+        existing = await self.get_by_chapter_number(
+            db,
+            project_id=db_obj.project_id,
+            chapter_number=next_chapter_number,
+            volume_id=next_volume_id,
+        )
+        if existing and existing.id != db_obj.id:
+            raise ConflictException(
+                f"Chapter with number {next_chapter_number} already exists in this volume"
+            )
+        return await super().update(db, db_obj=db_obj, obj_in=update_data)
 
     async def get_by_chapter_number(
         self,

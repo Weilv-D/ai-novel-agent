@@ -93,6 +93,37 @@ class TestProjectServiceCreateProject:
         assert result.id is not None
         assert result.name == "Minimal Project"
 
+    @pytest.mark.asyncio
+    async def test_create_project_derives_story_outline_from_summary_and_notes(self, db_session: AsyncSession):
+        """Legacy summary/notes should seed the project story outline."""
+        result = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(
+                name="Outline Seed",
+                summary="这是项目简介",
+                notes="这是项目备注",
+            ),
+        )
+
+        assert result.story_outline is not None
+        assert "这是项目简介" in result.story_outline
+        assert "这是项目备注" in result.story_outline
+
+    @pytest.mark.asyncio
+    async def test_create_project_preserves_explicit_story_outline(self, db_session: AsyncSession):
+        """Explicit story outline should win over legacy fallback fields."""
+        result = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(
+                name="Explicit Outline",
+                summary="旧简介",
+                notes="旧备注",
+                story_outline="明确的项目大纲",
+            ),
+        )
+
+        assert result.story_outline == "明确的项目大纲"
+
 
 class TestProjectServiceGet:
     """Tests for project_service.get with real database."""

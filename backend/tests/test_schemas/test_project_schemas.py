@@ -23,6 +23,7 @@ class TestProjectSchemas:
             "genre": "Fantasy",
             "target_audience": "Young Adult",
             "target_word_count": 80000,
+            "story_outline": "主角踏上旅程，并在三幕中完成身份跃迁。",
             "status": "drafting",
         }
         schema = ProjectCreate(**data)
@@ -30,6 +31,7 @@ class TestProjectSchemas:
         assert schema.genre == "Fantasy"
         assert schema.status == "drafting"
         assert schema.target_word_count == 80000
+        assert schema.story_outline == "主角踏上旅程，并在三幕中完成身份跃迁。"
 
     def test_project_create_minimal(self):
         """Test ProjectCreate with minimal required fields."""
@@ -107,6 +109,7 @@ class TestProjectSchemas:
             "target_word_count": 100000,
             "status": "writing",
             "summary": "A test novel",
+            "story_outline": "A project-level story outline",
             "notes": "Some notes",
             "metadata": {"key": "value"},
             "created_at": datetime.now(),
@@ -115,3 +118,4 @@ class TestProjectSchemas:
         schema = ProjectResponse(**data)
         assert schema.id == project_id
         assert schema.status == "writing"
+        assert schema.story_outline == "A project-level story outline"

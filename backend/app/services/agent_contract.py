@@ -134,12 +134,15 @@ class AgentContractService:
         """Return the internal tool scope fallback for one child unit role."""
         if role == AgentSubtaskRole.RESEARCHER.value:
             return [
+                "resolve_current_project",
                 "list_project_characters",
                 "list_project_world_settings",
+                "list_project_volumes",
                 "list_project_chapters",
                 "list_project_scenes",
                 "resolve_current_character",
                 "resolve_current_world_setting",
+                "resolve_current_volume",
                 "resolve_current_chapter",
                 "resolve_current_scene",
                 "load_latest_checkpoint",
@@ -147,7 +150,15 @@ class AgentContractService:
         if role == AgentSubtaskRole.WRITER.value:
             return ["write_chapter_content", "write_scene_content", "create_chapter", "create_scene"]
         if role == AgentSubtaskRole.EDITOR.value:
-            return ["update_character", "update_world_setting", "update_chapter", "update_scene"]
+            return [
+                "update_project_outline",
+                "create_volume",
+                "update_volume",
+                "update_character",
+                "update_world_setting",
+                "update_chapter",
+                "update_scene",
+            ]
         if role == AgentSubtaskRole.CONTINUITY.value:
             return ["load_latest_checkpoint"]
         return []

@@ -38,6 +38,7 @@ class Project(Base, UUIDMixin, TimestampMixin):
 
     # Content fields
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    story_outline: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # JSONB for extensibility

@@ -2,7 +2,21 @@
 
 最后更新：2026-03-16
 
-本文档基于当前代码实时导出的 OpenAPI 规格（62 个 path，85 个 schema）生成。
+本文档围绕当前代码生成的 OpenAPI 规格整理，并补充了双层规划体系的字段语义说明。
+
+## 结构层级约定
+
+- `Project.summary`：项目简介
+- `Project.story_outline`：项目大纲
+- `Volume.outline`：卷细纲总述
+- `Chapter.outline`：章纲
+- `Scene`：写作执行层
+
+兼容规则：
+
+- `POST /api/v1/chapters` 的 `volume_id` 仍为可选；省略时服务会自动挂到项目默认卷
+- Suggestion 的 `target_type` 已支持 `project` 与 `volume`
+- Agent 计划写入目标已支持项目大纲与卷细纲
 
 ## 基础信息
 
@@ -2593,12 +2607,12 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 |---|---|---|---|
 | `chapter_number` | `integer` | 是 |  |
 | `title` | `string \| null` | 否 |  |
-| `outline` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 | 章纲内容 |
 | `content` | `string \| null` | 否 |  |
 | `status` | `string(draft, writing, completed)` | 否 |  |
 | `notes` | `string \| null` | 否 |  |
 | `project_id` | `string` | 是 |  |
-| `volume_id` | `string \| null` | 否 |  |
+| `volume_id` | `string \| null` | 否 | 所属卷；省略时自动挂到默认卷 |
 
 ### ChapterResponse
 
@@ -2609,7 +2623,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 |---|---|---|---|
 | `chapter_number` | `integer` | 是 |  |
 | `title` | `string \| null` | 否 |  |
-| `outline` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 | 章纲内容 |
 | `content` | `string \| null` | 否 |  |
 | `status` | `string(draft, writing, completed)` | 否 |  |
 | `notes` | `string \| null` | 否 |  |
@@ -2628,7 +2642,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 |---|---|---|---|
 | `chapter_number` | `integer \| null` | 否 |  |
 | `title` | `string \| null` | 否 |  |
-| `outline` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 | 章纲内容 |
 | `content` | `string \| null` | 否 |  |
 | `status` | `string(draft, writing, completed) \| null` | 否 |  |
 | `notes` | `string \| null` | 否 |  |
@@ -2870,6 +2884,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 | `target_audience` | `string \| null` | 否 |  |
 | `target_word_count` | `integer \| null` | 否 |  |
 | `summary` | `string \| null` | 否 |  |
+| `story_outline` | `string \| null` | 否 | 项目级总纲，区别于简介 |
 | `notes` | `string \| null` | 否 |  |
 | `agent_profile_id` | `string` | 否 |  |
 | `meta` | `object` | 否 |  |
@@ -2910,6 +2925,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 | `target_audience` | `string \| null` | 否 |  |
 | `target_word_count` | `integer \| null` | 否 |  |
 | `summary` | `string \| null` | 否 |  |
+| `story_outline` | `string \| null` | 否 | 项目级总纲，区别于简介 |
 | `notes` | `string \| null` | 否 |  |
 | `agent_profile_id` | `string` | 否 |  |
 | `meta` | `object` | 否 |  |
@@ -2931,6 +2947,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 | `target_word_count` | `integer \| null` | 否 |  |
 | `status` | `string(drafting, writing, revising, completed) \| null` | 否 |  |
 | `summary` | `string \| null` | 否 |  |
+| `story_outline` | `string \| null` | 否 | 项目级总纲，区别于简介 |
 | `notes` | `string \| null` | 否 |  |
 | `agent_profile_id` | `string \| null` | 否 |  |
 | `meta` | `object \| null` | 否 |  |
@@ -3066,7 +3083,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `target_type` | `string(character, world_setting, chapter, scene)` | 是 | Type of target object (character, world_setting, chapter, scene) |
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene)` | 是 | Type of target object |
 | `target_id` | `string` | 是 | ID of the target object |
 | `type` | `string(character_edit, world_edit, chapter_edit, scene_edit, content_gen, outline_gen, continuity_fix)` | 是 | Type of suggestion |
 | `content` | `object` | 是 | Suggestion content (JSON) |
@@ -3080,7 +3097,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `target_type` | `string(character, world_setting, chapter, scene)` | 是 | Type of target object (character, world_setting, chapter, scene) |
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene)` | 是 | Type of target object |
 | `target_id` | `string` | 是 | ID of the target object |
 | `type` | `string(character_edit, world_edit, chapter_edit, scene_edit, content_gen, outline_gen, continuity_fix)` | 是 | Type of suggestion |
 | `content` | `object` | 是 | Suggestion content (JSON) |
@@ -3145,7 +3162,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 |---|---|---|---|
 | `volume_number` | `integer \| null` | 否 |  |
 | `title` | `string \| null` | 否 |  |
-| `outline` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 | 卷细纲总述 |
 | `notes` | `string \| null` | 否 |  |
 | `project_id` | `string` | 是 |  |
 
@@ -3158,7 +3175,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 |---|---|---|---|
 | `volume_number` | `integer \| null` | 否 |  |
 | `title` | `string \| null` | 否 |  |
-| `outline` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 | 卷细纲总述 |
 | `notes` | `string \| null` | 否 |  |
 | `id` | `string` | 是 |  |
 | `project_id` | `string` | 是 |  |
@@ -3174,7 +3191,7 @@ curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本
 |---|---|---|---|
 | `volume_number` | `integer \| null` | 否 |  |
 | `title` | `string \| null` | 否 |  |
-| `outline` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 | 卷细纲总述 |
 | `notes` | `string \| null` | 否 |  |
 
 ### WorldSettingCreate

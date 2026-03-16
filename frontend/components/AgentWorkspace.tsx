@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { agentWorkflowApi, ApiError } from "@/lib/api-client";
+import { agentWorkflowApi, ApiError, chapterApi, projectApi, volumeApi } from "@/lib/api-client";
 import type {
   AgentExecutionChildUnit,
   AgentAppliedRiskPolicy,
   AgentExecutionContractPhase,
   AgentHookTraceEntry,
   AgentOperation,
+  Chapter,
   AgentRun,
   AgentRunRiskSummary,
   AgentStreamEvent,
@@ -16,6 +17,8 @@ import type {
   AgentThread,
   AgentThreadCheckpoint,
   AgentThreadMessage,
+  Project,
+  Volume,
 } from "@/lib/types";
 import { getRunStatusMeta } from "@/lib/presentation";
 import { Button } from "@/components/ui/Button";
@@ -33,10 +36,13 @@ interface AgentWorkspaceProps {
 }
 
 const TOOL_LABELS: Record<string, string> = {
+  update_project_outline: "修改项目大纲",
   create_character: "创建人物",
   update_character: "修改人物",
   create_world_setting: "创建设定",
   update_world_setting: "修改设定",
+  create_volume: "创建卷",
+  update_volume: "修改卷细纲",
   create_chapter: "创建章节",
   update_chapter: "修改章节",
   write_chapter_content: "写章节正文",
@@ -83,6 +89,177 @@ function formatTimestamp(value: string): string {
     month: "numeric",
     day: "numeric",
   });
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function extractPreviewAfterText(operation: AgentOperation): string | null {
+  return asString(operation.preview.after_summary) || asString(operation.preview.diff);
+}
+
+function getRequestContext(run: AgentRun | null): Record<string, unknown> {
+  return asRecord(run?.meta.request_context) || {};
+}
+
+function excerpt(value: string | null | undefined, fallback: string, max = 150): string {
+  const text = value?.trim();
+  if (!text) {
+    return fallback;
+  }
+  if (text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, max)}...`;
+}
+
+type FocusVolumeSummary = {
+  id?: string;
+  title: string;
+  outline: string | null;
+  badge: string;
+};
+
+function getProjectOutlinePreview(run: AgentRun | null, project: Project | null): string | null {
+  const pendingUpdate = run?.operations.find((operation) => operation.tool_name === "update_project_outline");
+  if (pendingUpdate) {
+    const updates = asRecord(pendingUpdate.payload.updates) || asRecord(pendingUpdate.payload);
+    return (
+      asString(updates?.story_outline) ||
+      asString(updates?.outline) ||
+      extractPreviewAfterText(pendingUpdate) ||
+      project?.story_outline ||
+      null
+    );
+  }
+  return project?.story_outline || null;
+}
+
+function getFocusedVolumeSummary(
+  run: AgentRun | null,
+  volumes: Volume[],
+  chapters: Chapter[],
+): FocusVolumeSummary | null {
+  const requestContext = getRequestContext(run);
+  const operationVolume =
+    run?.operations.find((operation) => operation.target_type === "volume") ||
+    run?.operations.find((operation) => operation.tool_name === "create_volume") ||
+    run?.operations.find((operation) => {
+      const payload = asRecord(operation.payload);
+      const updates = asRecord(payload?.updates);
+      return (
+        asString(payload?.volume_id) ||
+        asString(payload?.target_volume_id) ||
+        asString(updates?.volume_id)
+      );
+    });
+
+  const focusedVolumeId =
+    asString(requestContext.volume_id) ||
+    asString(operationVolume?.target_id) ||
+    asString(asRecord(operationVolume?.payload)?.volume_id) ||
+    asString(asRecord(asRecord(operationVolume?.payload)?.updates)?.volume_id);
+
+  if (focusedVolumeId) {
+    const matched = volumes.find((volume) => volume.id === focusedVolumeId);
+    if (matched) {
+      return {
+        id: matched.id,
+        title: matched.title || `第 ${matched.volume_number || "?"} 卷`,
+        outline: matched.outline || null,
+        badge: `第 ${matched.volume_number || "?"} 卷`,
+      };
+    }
+  }
+
+  const chapterId =
+    asString(requestContext.chapter_id) ||
+    asString(run?.operations.find((operation) => operation.target_type === "chapter")?.target_id);
+  if (chapterId) {
+    const matchedChapter = chapters.find((chapter) => chapter.id === chapterId);
+    if (matchedChapter?.volume_id) {
+      const matchedVolume = volumes.find((volume) => volume.id === matchedChapter.volume_id);
+      if (matchedVolume) {
+        return {
+          id: matchedVolume.id,
+          title: matchedVolume.title || `第 ${matchedVolume.volume_number || "?"} 卷`,
+          outline: matchedVolume.outline || null,
+          badge: `第 ${matchedVolume.volume_number || "?"} 卷`,
+        };
+      }
+    }
+  }
+
+  const pendingVolumeOperation = run?.operations.find(
+    (operation) => operation.tool_name === "create_volume" || operation.tool_name === "update_volume",
+  );
+  if (pendingVolumeOperation) {
+    const payload = asRecord(pendingVolumeOperation.payload);
+    const updates = asRecord(payload?.updates);
+    const volumeNumber =
+      asNumber(payload?.volume_number) ||
+      asNumber(updates?.volume_number);
+    return {
+      title:
+        asString(payload?.title) ||
+        asString(updates?.title) ||
+        pendingVolumeOperation.target_display ||
+        "待更新卷细纲",
+      outline:
+        asString(payload?.outline) ||
+        asString(updates?.outline) ||
+        extractPreviewAfterText(pendingVolumeOperation),
+      badge: `第 ${volumeNumber || "?"} 卷`,
+    };
+  }
+
+  return null;
+}
+
+function getRelatedChapterOutlines(run: AgentRun | null, chapters: Chapter[], focusVolume: FocusVolumeSummary | null): Chapter[] {
+  const requestContext = getRequestContext(run);
+  const relatedChapterIds = new Set<string>();
+
+  const contextChapterId = asString(requestContext.chapter_id);
+  if (contextChapterId) {
+    relatedChapterIds.add(contextChapterId);
+  }
+
+  for (const operation of run?.operations || []) {
+    if (operation.target_type === "chapter" && operation.target_id) {
+      relatedChapterIds.add(operation.target_id);
+    }
+    const payload = asRecord(operation.payload);
+    const updates = asRecord(payload?.updates);
+    for (const value of [payload?.chapter_id, updates?.chapter_id]) {
+      const chapterId = asString(value);
+      if (chapterId) {
+        relatedChapterIds.add(chapterId);
+      }
+    }
+  }
+
+  let related = chapters.filter((chapter) => relatedChapterIds.has(chapter.id));
+
+  if (related.length === 0 && focusVolume?.id) {
+    related = chapters.filter((chapter) => chapter.volume_id === focusVolume.id);
+  }
+
+  return related
+    .sort((left, right) => left.chapter_number - right.chapter_number)
+    .slice(0, 4);
 }
 
 function MessageBubble({ message }: { message: AgentThreadMessage }) {
@@ -376,6 +553,9 @@ export function AgentWorkspace({
   className = "",
   onProjectRefresh,
 }: AgentWorkspaceProps) {
+  const [project, setProject] = useState<Project | null>(null);
+  const [volumes, setVolumes] = useState<Volume[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [thread, setThread] = useState<AgentThread | null>(null);
   const [messages, setMessages] = useState<AgentThreadMessage[]>([]);
   const [recentRuns, setRecentRuns] = useState<AgentRun[]>([]);
@@ -389,6 +569,9 @@ export function AgentWorkspace({
   const [isStreaming, setIsStreaming] = useState(false);
   const hookTrace = getHookTrace(currentRun);
   const permissionMatrix = currentRun?.execution_contract?.phases || [];
+  const projectOutlinePreview = getProjectOutlinePreview(currentRun, project);
+  const focusedVolume = getFocusedVolumeSummary(currentRun, volumes, chapters);
+  const relatedChapters = getRelatedChapterOutlines(currentRun, chapters, focusedVolume);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const scrollToBottom = () => {
@@ -398,6 +581,21 @@ export function AgentWorkspace({
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingEvents]);
+
+  async function loadOutlineHierarchy() {
+    try {
+      const [projectData, volumeData, chapterData] = await Promise.all([
+        projectApi.get(projectId) as Promise<Project>,
+        volumeApi.list(projectId) as Promise<Volume[]>,
+        chapterApi.list(projectId) as Promise<Chapter[]>,
+      ]);
+      setProject(projectData);
+      setVolumes(volumeData.sort((left, right) => (left.volume_number || 0) - (right.volume_number || 0)));
+      setChapters(chapterData.sort((left, right) => left.chapter_number - right.chapter_number));
+    } catch (err) {
+      console.error("Failed to load outline hierarchy:", err);
+    }
+  }
 
   async function loadThreadState(existingThreadId?: string) {
     setError(null);
@@ -429,6 +627,7 @@ export function AgentWorkspace({
 
   useEffect(() => {
     loadThreadState();
+    loadOutlineHierarchy();
     // projectId change means a different workspace.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -437,6 +636,7 @@ export function AgentWorkspace({
     if (thread?.id) {
       await loadThreadState(thread.id);
     }
+    await loadOutlineHierarchy();
     if (onProjectRefresh) {
       await onProjectRefresh();
     }
@@ -542,10 +742,45 @@ export function AgentWorkspace({
           <p className="ink-kicker">Agent Workspace</p>
           <CardTitle className="mt-3 text-3xl">以自然语言驱动 {projectName}</CardTitle>
           <CardDescription>
-            直接说出你的目标，例如“创建一个冷静克制的女主角”“把第三章改成雨夜追逐”“新增一个宗教设定并补进世界观”。
+            直接说出你的目标，例如“先补项目大纲，再拆第一卷细纲”“把第三章章纲改成雨夜追逐”“新增一个宗教设定并补进世界观”。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4 pt-6">
+          <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">Outline Hierarchy</div>
+                <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">当前规划层级</div>
+              </div>
+              <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
+                项目大纲 / 卷细纲 / 章纲
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">项目大纲</div>
+                <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
+                  {excerpt(projectOutlinePreview, "尚未填写项目大纲。可以直接让 Agent 先补一版项目总纲。")}
+                </p>
+              </div>
+              <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">卷细纲</div>
+                  {focusedVolume && (
+                    <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
+                      {focusedVolume.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">
+                  {focusedVolume?.title || "当前没有聚焦到具体卷"}
+                </p>
+                <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
+                  {excerpt(focusedVolume?.outline, "发送“创建卷”或在运行计划里选定卷后，这里会显示卷细纲焦点。")}
+                </p>
+              </div>
+            </div>
+          </div>
           <div className="flex-1 space-y-4 overflow-y-auto pr-1">
             {messages.length === 0 ? (
               <div className="rounded-[1.4rem] border border-dashed border-[rgba(var(--line),0.18)] bg-[var(--surface-subtle)] px-6 py-12 text-center text-sm leading-7 text-[rgb(var(--ink-800))]">
@@ -669,6 +904,57 @@ export function AgentWorkspace({
                   </div>
                 )}
                 {currentRun.risk_summary && <RiskSummaryCard riskSummary={currentRun.risk_summary} />}
+                <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
+                        Outline Focus
+                      </div>
+                      <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">本次计划聚焦层级</div>
+                    </div>
+                    <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
+                      Project / Volume / Chapter
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">项目大纲</div>
+                      <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
+                        {excerpt(projectOutlinePreview, "当前项目还没有完整项目大纲。")}
+                      </p>
+                    </div>
+                    <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">卷细纲</div>
+                      <p className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">
+                        {focusedVolume?.title || "未锁定具体卷"}
+                      </p>
+                      <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
+                        {excerpt(focusedVolume?.outline, "本次运行暂时没有卷级焦点。")}
+                      </p>
+                    </div>
+                    <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">相关章纲</div>
+                      {relatedChapters.length > 0 ? (
+                        <div className="mt-3 space-y-3">
+                          {relatedChapters.map((chapter) => (
+                            <div key={chapter.id} className="rounded-[0.9rem] bg-[rgba(var(--ink-950),0.05)] px-3 py-3">
+                              <div className="text-sm font-medium text-[rgb(var(--ink-950))]">
+                                第 {chapter.chapter_number} 章 {chapter.title || "无标题"}
+                              </div>
+                              <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
+                                {excerpt(chapter.outline, "尚未填写章纲。", 120)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
+                          当前运行还没有锁定具体章纲。
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 {(currentRun.planner_window || currentRun.compact_policy || currentRun.retained_window || currentRun.active_bundle_contract) && (
                   <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -730,6 +1016,9 @@ export function AgentWorkspace({
                           </span>
                           <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
                             chars:{currentRun.active_bundle_contract.collections.characters_count}/{currentRun.active_bundle_contract.collections.characters_limit}
+                          </span>
+                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
+                            volumes:{currentRun.active_bundle_contract.collections.volumes_count}/{currentRun.active_bundle_contract.collections.volumes_limit}
                           </span>
                           <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
                             chapters:{currentRun.active_bundle_contract.collections.chapters_count}/{currentRun.active_bundle_contract.collections.chapters_limit}

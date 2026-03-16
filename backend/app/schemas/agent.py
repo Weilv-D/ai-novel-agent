@@ -276,6 +276,8 @@ class AgentActiveBundleCollectionsResponse(BaseModel):
     characters_limit: int = 0
     world_settings_count: int = 0
     world_settings_limit: int = 0
+    volumes_count: int = 0
+    volumes_limit: int = 0
     chapters_count: int = 0
     chapters_limit: int = 0
     current_scenes_count: int = 0

@@ -427,7 +427,8 @@ class TestChaptersAPI:
         volume_response = await client.post("/api/v1/volumes", json=volume_data)
         volume_id = volume_response.json()["id"]
 
-        # Create chapters with and without volume
+        # Create chapters with and without volume. The second one should auto-attach
+        # to the project's default/first volume, which is this volume.
         chapter_with_volume = {
             "project_id": project_id,
             "volume_id": volume_id,
@@ -450,9 +451,9 @@ class TestChaptersAPI:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["volume_id"] == volume_id
-        assert data[0]["title"] == "Chapter in Volume"
+        assert len(data) == 2
+        assert all(chapter["volume_id"] == volume_id for chapter in data)
+        assert {chapter["title"] for chapter in data} == {"Chapter in Volume", "Standalone Chapter"}
 
 
 class TestScenesAPI:

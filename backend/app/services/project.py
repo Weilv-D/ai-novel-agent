@@ -10,6 +10,26 @@ from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.services.base import CRUDBase
 
 
+def build_initial_story_outline(
+    *,
+    summary: str | None = None,
+    notes: str | None = None,
+    story_outline: str | None = None,
+) -> str | None:
+    """Build a canonical initial project outline from legacy free-text fields."""
+    explicit_outline = (story_outline or "").strip()
+    if explicit_outline:
+        return explicit_outline
+
+    summary_text = (summary or "").strip()
+    notes_text = (notes or "").strip()
+    if not summary_text and not notes_text:
+        return None
+    if summary_text and notes_text:
+        return f"【项目简介】\n{summary_text}\n\n【补充备注】\n{notes_text}"
+    return summary_text or notes_text
+
+
 class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
     """CRUD operations for Project model."""
 
@@ -39,6 +59,11 @@ class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
         obj_dict = obj_in.model_dump()
         profile_id = str(obj_dict.pop("agent_profile_id", DEFAULT_AGENT_PROFILE_ID))
         meta = dict(obj_dict.pop("meta", {}) or {})
+        obj_dict["story_outline"] = build_initial_story_outline(
+            summary=cast(str | None, obj_dict.get("summary")),
+            notes=cast(str | None, obj_dict.get("notes")),
+            story_outline=cast(str | None, obj_dict.get("story_outline")),
+        )
         meta.setdefault("agent_profile_id", profile_id)
         db_obj = Project(**obj_dict, meta=meta)
         db_obj.agent_profile_id = profile_id
@@ -61,6 +86,12 @@ class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
             update_data = dict(obj_in)
 
         next_profile_id = cast(str | None, update_data.pop("agent_profile_id", None))
+        if "story_outline" in update_data:
+            update_data["story_outline"] = build_initial_story_outline(
+                story_outline=cast(str | None, update_data.get("story_outline")),
+                summary=cast(str | None, update_data.get("summary", db_obj.summary)),
+                notes=cast(str | None, update_data.get("notes", db_obj.notes)),
+            )
         if "meta" in update_data:
             next_meta = dict(update_data.pop("meta") or {})
             next_meta.setdefault("agent_profile_id", db_obj.agent_profile_id)

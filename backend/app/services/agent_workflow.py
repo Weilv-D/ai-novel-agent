@@ -36,7 +36,7 @@ from app.models.agent_workflow import (
     AgentThreadCheckpoint,
     AgentVerificationStatus,
 )
-from app.models.chapter import Chapter, Scene
+from app.models.chapter import Chapter, Scene, Volume
 from app.models.character import Character
 from app.models.project import Project
 from app.models.snapshot import Snapshot
@@ -73,8 +73,9 @@ from app.schemas.agent import (
     AgentThreadStateResponse,
     OperationPreview,
 )
-from app.schemas.chapter import ChapterCreate, ChapterUpdate, SceneCreate, SceneUpdate
+from app.schemas.chapter import ChapterCreate, ChapterUpdate, SceneCreate, SceneUpdate, VolumeCreate, VolumeUpdate
 from app.schemas.character import CharacterCreate, CharacterUpdate
+from app.schemas.project import ProjectUpdate
 from app.schemas.world_setting import WorldSettingCreate, WorldSettingUpdate
 from app.services.agent_contract import agent_contract_service
 from app.services.agent_risk import agent_risk_service
@@ -89,10 +90,13 @@ from app.services.world_setting import world_setting_service
 logger = logging.getLogger(__name__)
 
 TOOL_NAMES = {
+    "update_project_outline",
     "create_character",
     "update_character",
     "create_world_setting",
     "update_world_setting",
+    "create_volume",
+    "update_volume",
     "create_chapter",
     "update_chapter",
     "write_chapter_content",
@@ -116,6 +120,7 @@ COMPACT_POLICY_VERSION = "2026-03-15.1"
 ACTIVE_BUNDLE_CONTRACT_VERSION = "2026-03-15.1"
 CHARACTER_CONTEXT_LIMIT = 20
 WORLD_SETTING_CONTEXT_LIMIT = 20
+VOLUME_CONTEXT_LIMIT = 20
 CHAPTER_CONTEXT_LIMIT = 40
 SCENE_CONTEXT_LIMIT = 20
 RECENT_RUN_DIGEST_LIMIT = 6
@@ -124,10 +129,13 @@ CAPABILITY_REGISTRY_VERSION = "2026-03-15.1"
 INTERNAL_READ_SEARCH_TOOLS = (
     "list_project_characters",
     "list_project_world_settings",
+    "list_project_volumes",
     "list_project_chapters",
     "list_project_scenes",
+    "resolve_current_project",
     "resolve_current_character",
     "resolve_current_world_setting",
+    "resolve_current_volume",
     "resolve_current_chapter",
     "resolve_current_scene",
     "load_latest_checkpoint",
@@ -1482,6 +1490,11 @@ class AgentWorkflowService:
             project_id=project.id,
             limit=WORLD_SETTING_CONTEXT_LIMIT,
         )
+        volumes = await volume_service.get_by_project(
+            db,
+            project_id=project.id,
+            limit=VOLUME_CONTEXT_LIMIT,
+        )
         chapters = await chapter_service.get_by_project(
             db,
             project_id=project.id,
@@ -1494,6 +1507,8 @@ class AgentWorkflowService:
                 "name": project.name,
                 "genre": project.genre,
                 "summary": project.summary,
+                "story_outline": project.story_outline,
+                "notes": project.notes,
             },
             "characters": [
                 {
@@ -1511,16 +1526,33 @@ class AgentWorkflowService:
                 }
                 for setting in world_settings
             ],
+            "volumes": [
+                {
+                    "id": str(volume.id),
+                    "volume_number": volume.volume_number,
+                    "title": volume.title,
+                    "outline": volume.outline,
+                }
+                for volume in volumes
+            ],
             "chapters": [
                 {
                     "id": str(chapter.id),
+                    "volume_id": str(chapter.volume_id) if chapter.volume_id is not None else None,
                     "chapter_number": chapter.chapter_number,
                     "title": chapter.title,
+                    "outline": chapter.outline,
                 }
                 for chapter in chapters
             ],
             "request_context": request_context,
             "agent_profile_id": project.agent_profile_id,
+        }
+        context_data["current_project"] = {
+            "id": str(project.id),
+            "name": project.name,
+            "summary": project.summary,
+            "story_outline": project.story_outline,
         }
         if latest_checkpoint is not None:
             context_data["latest_checkpoint"] = {
@@ -1530,6 +1562,34 @@ class AgentWorkflowService:
                 "active_object_bundle": latest_checkpoint.active_object_bundle,
                 "recent_run_digest": latest_checkpoint.recent_run_digest,
             }
+
+        volume_id = request_context.get("volume_id")
+        if volume_id:
+            try:
+                volume = await volume_service.get(db, id=uuid.UUID(str(volume_id)))
+                volume_chapters = await chapter_service.get_by_volume(
+                    db,
+                    volume_id=volume.id,
+                    limit=CHAPTER_CONTEXT_LIMIT,
+                )
+                context_data["current_volume"] = {
+                    "id": str(volume.id),
+                    "volume_number": volume.volume_number,
+                    "title": volume.title,
+                    "outline": volume.outline,
+                    "notes": volume.notes,
+                }
+                context_data["current_volume_chapters"] = [
+                    {
+                        "id": str(chapter.id),
+                        "chapter_number": chapter.chapter_number,
+                        "title": chapter.title,
+                        "outline": chapter.outline,
+                    }
+                    for chapter in volume_chapters
+                ]
+            except Exception:
+                logger.debug("Failed to load volume context for %s", volume_id)
 
         chapter_id = request_context.get("chapter_id")
         if chapter_id:
@@ -1542,8 +1602,10 @@ class AgentWorkflowService:
                 )
                 context_data["current_chapter"] = {
                     "id": str(chapter.id),
+                    "volume_id": str(chapter.volume_id) if chapter.volume_id is not None else None,
                     "chapter_number": chapter.chapter_number,
                     "title": chapter.title,
+                    "outline": chapter.outline,
                     "content": _excerpt(chapter.content, length=400),
                 }
                 context_data["current_scenes"] = [
@@ -1554,6 +1616,29 @@ class AgentWorkflowService:
                     }
                     for scene in scenes
                 ]
+                if chapter.volume_id is not None and "current_volume" not in context_data:
+                    volume = await volume_service.get(db, id=chapter.volume_id)
+                    volume_chapters = await chapter_service.get_by_volume(
+                        db,
+                        volume_id=volume.id,
+                        limit=CHAPTER_CONTEXT_LIMIT,
+                    )
+                    context_data["current_volume"] = {
+                        "id": str(volume.id),
+                        "volume_number": volume.volume_number,
+                        "title": volume.title,
+                        "outline": volume.outline,
+                        "notes": volume.notes,
+                    }
+                    context_data["current_volume_chapters"] = [
+                        {
+                            "id": str(volume_chapter.id),
+                            "chapter_number": volume_chapter.chapter_number,
+                            "title": volume_chapter.title,
+                            "outline": volume_chapter.outline,
+                        }
+                        for volume_chapter in volume_chapters
+                    ]
             except Exception:
                 logger.debug("Failed to load chapter context for %s", chapter_id)
 
@@ -1885,7 +1970,29 @@ class AgentWorkflowService:
         preview_content_hash: str | None = None
         preview: OperationPreview
 
-        if tool_name == "create_character":
+        if tool_name == "update_project_outline":
+            project = await self._resolve_project(
+                db,
+                project_id=project_id,
+                payload=payload,
+                request_context=request_context,
+            )
+            updates = await self._filter_project_outline_update_payload(cast(dict[str, Any], payload.get("updates", payload)))
+            merged = self._merge_preview_data(project, updates)
+            preview_content_hash = _hash_text(cast(str | None, merged.get("story_outline")))
+            preview = OperationPreview(
+                changed_fields=list(updates.keys()),
+                before_summary=self._project_summary(project),
+                after_summary=self._project_summary_data(merged),
+                diff=_build_diff(project.story_outline, cast(str | None, updates.get("story_outline"))),
+                reason=operation.reason,
+            )
+            normalized_payload = {"project_id": str(project.id), "updates": updates}
+            target_type = "project"
+            target_id = project.id
+            target_display = project.name
+
+        elif tool_name == "create_character":
             normalized_payload = self._filter_character_create_payload(payload)
             preview = OperationPreview(
                 changed_fields=list(normalized_payload.keys()),
@@ -1950,6 +2057,45 @@ class AgentWorkflowService:
             target_type = "world_setting"
             target_id = setting.id
             target_display = setting.name
+
+        elif tool_name == "create_volume":
+            normalized_payload = await self._filter_volume_create_payload(
+                db,
+                project_id=project_id,
+                payload=payload,
+            )
+            preview = OperationPreview(
+                changed_fields=list(normalized_payload.keys()),
+                before_summary="将创建新卷细纲",
+                after_summary=self._volume_summary_data(normalized_payload),
+                diff=_build_diff(None, cast(str | None, normalized_payload.get("outline"))),
+                reason=operation.reason,
+            )
+            target_type = "volume"
+            target_display = f"第{normalized_payload['volume_number']}卷"
+
+        elif tool_name == "update_volume":
+            volume = await self._resolve_volume(
+                db,
+                project_id=project_id,
+                payload=payload,
+                request_context=request_context,
+            )
+            updates = self._filter_volume_update_payload(cast(dict[str, Any], payload.get("updates", {})))
+            if not updates:
+                raise BadRequestException("update_volume requires a non-empty updates object")
+            merged = self._merge_preview_data(volume, updates)
+            preview = OperationPreview(
+                changed_fields=list(updates.keys()),
+                before_summary=self._volume_summary(volume),
+                after_summary=self._volume_summary_data(merged),
+                diff=_build_diff(volume.outline, cast(str | None, updates.get("outline"))),
+                reason=operation.reason,
+            )
+            normalized_payload = {"volume_id": str(volume.id), "updates": updates}
+            target_type = "volume"
+            target_id = volume.id
+            target_display = f"第{volume.volume_number or '?'}卷 {volume.title or ''}".strip()
 
         elif tool_name == "create_chapter":
             normalized_payload = await self._filter_chapter_create_payload(db, project_id=project_id, payload=payload)
@@ -2091,7 +2237,34 @@ class AgentWorkflowService:
         tool_name = operation.tool_name
         payload = dict(operation.payload)
 
-        if tool_name == "create_character":
+        if tool_name == "update_project_outline":
+            project = await self._resolve_project(
+                db,
+                project_id=project_id,
+                payload=payload,
+                request_context=request_context,
+            )
+            await self._create_operation_snapshot(
+                db,
+                project_id=project_id,
+                operation=operation,
+                target_type="project",
+                target_id=project.id,
+                data=_serialize_model(project),
+                stage="pre_update",
+            )
+            updated_project = await project_service.update(
+                db,
+                db_obj=project,
+                obj_in=ProjectUpdate(**cast(dict[str, Any], payload["updates"])),
+            )
+            operation.target_id = updated_project.id
+            operation.target_display = updated_project.name
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_project.id)
+            operation.execution_result = execution_result
+
+        elif tool_name == "create_character":
             character_in = CharacterCreate(project_id=project_id, **payload)
             character = await character_service.create_with_project(db, obj_in=character_in, project_id=project_id)
             operation.target_id = character.id
@@ -2167,11 +2340,52 @@ class AgentWorkflowService:
             execution_result["updated_id"] = str(updated_setting.id)
             operation.execution_result = execution_result
 
+        elif tool_name == "create_volume":
+            volume_in = VolumeCreate(project_id=project_id, **payload)
+            volume = await volume_service.create_with_project(db, obj_in=volume_in, project_id=project_id)
+            operation.target_id = volume.id
+            operation.target_display = f"第{volume.volume_number or '?'}卷 {volume.title or ''}".strip()
+            operation.execution_result = {"created_id": str(volume.id)}
+            await self._create_operation_snapshot(
+                db,
+                project_id=project_id,
+                operation=operation,
+                target_type="volume",
+                target_id=volume.id,
+                data=_serialize_model(volume),
+                stage="post_create",
+            )
+
+        elif tool_name == "update_volume":
+            volume = await self._resolve_volume(
+                db,
+                project_id=project_id,
+                payload=payload,
+                request_context=request_context,
+            )
+            await self._create_operation_snapshot(
+                db,
+                project_id=project_id,
+                operation=operation,
+                target_type="volume",
+                target_id=volume.id,
+                data=_serialize_model(volume),
+                stage="pre_update",
+            )
+            updated_volume = await volume_service.update(
+                db,
+                db_obj=volume,
+                obj_in=VolumeUpdate(**cast(dict[str, Any], payload["updates"])),
+            )
+            operation.target_id = updated_volume.id
+            operation.target_display = f"第{updated_volume.volume_number or '?'}卷 {updated_volume.title or ''}".strip()
+            execution_result = dict(operation.execution_result or {})
+            execution_result["updated_id"] = str(updated_volume.id)
+            operation.execution_result = execution_result
+
         elif tool_name == "create_chapter":
             chapter_in = ChapterCreate(project_id=project_id, **payload)
-            chapter = await chapter_service.create_with_project(
-                db, obj_in=chapter_in, project_id=project_id, skip_duplicate_check=True
-            )
+            chapter = await chapter_service.create_with_project(db, obj_in=chapter_in, project_id=project_id)
             operation.target_id = chapter.id
             operation.target_display = f"第{chapter.chapter_number}章 {chapter.title or ''}".strip()
             operation.execution_result = {"created_id": str(chapter.id)}
@@ -2234,9 +2448,7 @@ class AgentWorkflowService:
             chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
             scene_payload = {key: value for key, value in payload.items() if key != "chapter_id"}
             scene_in = SceneCreate(**scene_payload, chapter_id=chapter.id)
-            scene = await scene_service.create_with_chapter(
-                db, obj_in=scene_in, chapter_id=chapter.id, skip_duplicate_check=True
-            )
+            scene = await scene_service.create_with_chapter(db, obj_in=scene_in, chapter_id=chapter.id)
             operation.target_id = scene.id
             operation.target_display = f"场景 {scene.scene_order}"
             operation.execution_result = {"created_id": str(scene.id)}
@@ -2346,6 +2558,61 @@ class AgentWorkflowService:
             if setting is not None:
                 return setting
         raise NotFoundException("World setting target could not be resolved")
+
+    async def _resolve_project(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        payload: dict[str, Any],
+        request_context: dict[str, Any],
+    ) -> Project:
+        resolved_project_id = (
+            payload.get("project_id")
+            or request_context.get("project_id")
+            or str(project_id)
+        )
+        project = await project_service.get(db, id=uuid.UUID(str(resolved_project_id)))
+        if project.id != project_id:
+            raise NotFoundException("Project target does not belong to the active workspace")
+        return project
+
+    async def _resolve_volume(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        payload: dict[str, Any],
+        request_context: dict[str, Any],
+    ) -> Volume:
+        volume_id = payload.get("volume_id") or request_context.get("volume_id")
+        if volume_id:
+            volume = await volume_service.get(db, id=uuid.UUID(str(volume_id)))
+            if volume.project_id != project_id:
+                raise NotFoundException("Volume target does not belong to the active workspace")
+            return volume
+
+        volume_number = payload.get("volume_number") or request_context.get("volume_number")
+        if volume_number is not None:
+            volume = await volume_service.get_by_volume_number(
+                db,
+                project_id=project_id,
+                volume_number=int(volume_number),
+            )
+            if volume is not None:
+                return volume
+
+        volume_title = payload.get("volume_title") or payload.get("title") or request_context.get("volume_title")
+        if volume_title:
+            result = await db.execute(
+                select(Volume)
+                .where(Volume.project_id == project_id, Volume.title == str(volume_title))
+                .limit(1)
+            )
+            volume = result.scalar_one_or_none()
+            if volume is not None:
+                return volume
+        raise NotFoundException("Volume target could not be resolved")
 
     async def _resolve_chapter(
         self,
@@ -2500,6 +2767,50 @@ class AgentWorkflowService:
         self._validate_schema(WorldSettingUpdate, **updates)
         return updates
 
+    async def _filter_project_outline_update_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise BadRequestException("update_project_outline updates must be an object")
+        story_outline = str(
+            payload.get("story_outline")
+            or payload.get("outline")
+            or payload.get("content")
+            or ""
+        ).strip()
+        if not story_outline:
+            raise BadRequestException("update_project_outline requires a non-empty story_outline")
+        updates = {"story_outline": story_outline}
+        self._validate_schema(ProjectUpdate, **updates)
+        return updates
+
+    async def _filter_volume_create_payload(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        volume_number = payload.get("volume_number")
+        if volume_number is None:
+            volume_number = await volume_service.next_volume_number(db, project_id=project_id)
+        normalized = {
+            "volume_number": int(volume_number),
+            "title": payload.get("title") or f"第{int(volume_number)}卷",
+            "outline": payload.get("outline"),
+            "notes": payload.get("notes"),
+        }
+        self._validate_schema(VolumeCreate, project_id=uuid.uuid4(), **normalized)
+        return normalized
+
+    def _filter_volume_update_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise BadRequestException("update_volume updates must be an object")
+        updates: dict[str, Any] = {}
+        for key in ["volume_number", "title", "outline", "notes"]:
+            if key in payload:
+                updates[key] = payload[key]
+        self._validate_schema(VolumeUpdate, **updates)
+        return updates
+
     async def _filter_chapter_create_payload(
         self,
         db: AsyncSession,
@@ -2507,9 +2818,17 @@ class AgentWorkflowService:
         project_id: uuid.UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
+        effective_volume_id = payload.get("volume_id")
+        if effective_volume_id is None:
+            project_volumes = await volume_service.get_by_project(db, project_id=project_id, limit=1)
+            if project_volumes:
+                effective_volume_id = str(project_volumes[0].id)
         chapter_number = payload.get("chapter_number")
         if chapter_number is None:
-            chapters = await chapter_service.get_by_project(db, project_id=project_id, limit=200)
+            if effective_volume_id is not None:
+                chapters = await chapter_service.get_by_volume(db, volume_id=uuid.UUID(str(effective_volume_id)), limit=200)
+            else:
+                chapters = await chapter_service.get_by_project(db, project_id=project_id, limit=200)
             chapter_number = max((chapter.chapter_number for chapter in chapters), default=0) + 1
         normalized = {
             "chapter_number": int(chapter_number),
@@ -2518,7 +2837,7 @@ class AgentWorkflowService:
             "content": payload.get("content"),
             "status": payload.get("status", "draft"),
             "notes": payload.get("notes"),
-            "volume_id": payload.get("volume_id"),
+            "volume_id": effective_volume_id,
         }
         self._validate_schema(ChapterCreate, project_id=uuid.uuid4(), **normalized)
         return normalized
@@ -2605,6 +2924,23 @@ class AgentWorkflowService:
 
     def _world_setting_summary_data(self, data: dict[str, Any]) -> str:
         return f"{data.get('name') or '未命名设定'} / {data.get('category') or 'other'} / {_excerpt(cast(str | None, data.get('content')))}"
+
+    def _project_summary(self, project: Project) -> str:
+        return self._project_summary_data(_serialize_model(project))
+
+    def _project_summary_data(self, data: dict[str, Any]) -> str:
+        title = data.get("name") or "未命名项目"
+        outline = cast(str | None, data.get("story_outline") or data.get("summary"))
+        return f"{title} / {_excerpt(outline)}"
+
+    def _volume_summary(self, volume: Volume) -> str:
+        return self._volume_summary_data(_serialize_model(volume))
+
+    def _volume_summary_data(self, data: dict[str, Any]) -> str:
+        number = data.get("volume_number") or "?"
+        title = data.get("title") or "未命名卷"
+        outline = cast(str | None, data.get("outline"))
+        return f"第{number}卷 {title} / {_excerpt(outline)}"
 
     def _chapter_summary(self, chapter: Chapter) -> str:
         return self._chapter_summary_data(_serialize_model(chapter))
@@ -2696,8 +3032,10 @@ class AgentWorkflowService:
         return [
             name
             for key, name in (
+                ("project_id", "project"),
                 ("character_id", "character"),
                 ("world_setting_id", "world_setting"),
+                ("volume_id", "volume"),
                 ("chapter_id", "chapter"),
                 ("scene_id", "scene"),
             )
@@ -2731,6 +3069,8 @@ class AgentWorkflowService:
                 "characters_limit": CHARACTER_CONTEXT_LIMIT,
                 "world_settings_count": 0,
                 "world_settings_limit": WORLD_SETTING_CONTEXT_LIMIT,
+                "volumes_count": 0,
+                "volumes_limit": VOLUME_CONTEXT_LIMIT,
                 "chapters_count": 0,
                 "chapters_limit": CHAPTER_CONTEXT_LIMIT,
                 "current_scenes_count": 0,
@@ -2772,6 +3112,8 @@ class AgentWorkflowService:
                 "characters_limit": CHARACTER_CONTEXT_LIMIT,
                 "world_settings_count": len(cast(list[Any], context_data.get("world_settings", []))),
                 "world_settings_limit": WORLD_SETTING_CONTEXT_LIMIT,
+                "volumes_count": len(cast(list[Any], context_data.get("volumes", []))),
+                "volumes_limit": VOLUME_CONTEXT_LIMIT,
                 "chapters_count": len(cast(list[Any], context_data.get("chapters", []))),
                 "chapters_limit": CHAPTER_CONTEXT_LIMIT,
                 "current_scenes_count": len(current_scenes),
@@ -3163,6 +3505,7 @@ class AgentWorkflowService:
         summary = (
             f"已装配项目上下文，人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
             f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
+            f"卷 {len(cast(list[Any], context_data.get('volumes', [])))} / "
             f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
         )
         if current_objects:
@@ -3219,7 +3562,15 @@ class AgentWorkflowService:
         editor_ops = [
             operation
             for operation in operations
-            if operation["tool_name"] in {"update_character", "update_world_setting", "update_chapter", "update_scene"}
+            if operation["tool_name"] in {
+                "update_project_outline",
+                "update_character",
+                "update_world_setting",
+                "create_volume",
+                "update_volume",
+                "update_chapter",
+                "update_scene",
+            }
         ]
         return PlannedSubtaskSpec(
             role="editor",
@@ -3439,10 +3790,12 @@ class AgentWorkflowService:
                 capability_id="project_inventory",
                 name="Project Inventory",
                 kind="read_search",
-                description="读取项目内人物、设定、章节与场景的当前清单。",
+                description="读取项目大纲、卷细纲、人物、设定、章节与场景的当前清单。",
                 tool_scope=[
+                    "resolve_current_project",
                     "list_project_characters",
                     "list_project_world_settings",
+                    "list_project_volumes",
                     "list_project_chapters",
                     "list_project_scenes",
                 ],
@@ -3458,10 +3811,12 @@ class AgentWorkflowService:
                 capability_id="focused_object_resolution",
                 name="Focused Object Resolution",
                 kind="read_search",
-                description="根据当前请求解析聚焦对象，命中人物、设定、章节或场景。",
+                description="根据当前请求解析聚焦对象，命中项目、人物、设定、卷、章节或场景。",
                 tool_scope=[
+                    "resolve_current_project",
                     "resolve_current_character",
                     "resolve_current_world_setting",
+                    "resolve_current_volume",
                     "resolve_current_chapter",
                     "resolve_current_scene",
                 ],
@@ -3548,14 +3903,18 @@ class AgentWorkflowService:
             if key.startswith("current_") and isinstance(value, dict) and value.get("id")
         )
         inventory_tools = [
+            "resolve_current_project",
             "list_project_characters",
             "list_project_world_settings",
+            "list_project_volumes",
             "list_project_chapters",
             "list_project_scenes",
         ]
         resolution_tools = [
+            "resolve_current_project",
             "resolve_current_character",
             "resolve_current_world_setting",
+            "resolve_current_volume",
             "resolve_current_chapter",
             "resolve_current_scene",
         ]
@@ -3571,8 +3930,9 @@ class AgentWorkflowService:
                     tool_scope=inventory_tools,
                     input_summary="读取项目范围对象清单。",
                     output_summary=(
-                        f"人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
+                        f"项目纲 1 / 人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
                         f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
+                        f"卷 {len(cast(list[Any], context_data.get('volumes', [])))} / "
                         f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
                     ),
                 ),
@@ -3590,7 +3950,7 @@ class AgentWorkflowService:
                     output_summary=(
                         f"命中对象：{', '.join(current_targets)}。"
                         if current_targets
-                        else "当前请求没有命中具体人物、设定、章节或场景。"
+                        else "当前请求没有命中具体项目、卷、人物、设定、章节或场景。"
                     ),
                 ),
             ),
@@ -3715,7 +4075,15 @@ class AgentWorkflowService:
             for operation in operations
         )
         editor_required = any(
-            operation["tool_name"] in {"update_character", "update_world_setting", "update_chapter", "update_scene"}
+            operation["tool_name"] in {
+                "update_project_outline",
+                "update_character",
+                "update_world_setting",
+                "create_volume",
+                "update_volume",
+                "update_chapter",
+                "update_scene",
+            }
             for operation in operations
         )
 
@@ -3748,6 +4116,7 @@ class AgentWorkflowService:
             f"已装配 profile={project.agent_profile_id} 的规划上下文，"
             f"人物 {len(cast(list[Any], context_data.get('characters', [])))} / "
             f"设定 {len(cast(list[Any], context_data.get('world_settings', [])))} / "
+            f"卷 {len(cast(list[Any], context_data.get('volumes', [])))} / "
             f"章节 {len(cast(list[Any], context_data.get('chapters', [])))}。"
         )
         if focused_objects:
@@ -3812,7 +4181,15 @@ class AgentWorkflowService:
             for operation in operations
         )
         editor_required = any(
-            operation["tool_name"] in {"update_character", "update_world_setting", "update_chapter", "update_scene"}
+            operation["tool_name"] in {
+                "update_project_outline",
+                "update_character",
+                "update_world_setting",
+                "create_volume",
+                "update_volume",
+                "update_chapter",
+                "update_scene",
+            }
             for operation in operations
         )
         subtask_by_role = {str(subtask["role"]): subtask for subtask in subtasks}
@@ -3992,7 +4369,7 @@ class AgentWorkflowService:
         self,
         *,
         operation: AgentOperation,
-        target: Character | WorldSetting | Chapter | Scene,
+        target: Project | Character | WorldSetting | Volume | Chapter | Scene,
     ) -> tuple[list[str], list[str]]:
         """Verify stable field values for create/update operations."""
         expected_updates = self._field_level_expected_updates(operation)
@@ -4091,7 +4468,7 @@ class AgentWorkflowService:
         *,
         operation: AgentOperation,
         snapshot: Snapshot,
-        target: Character | WorldSetting | Chapter | Scene,
+        target: Project | Character | WorldSetting | Volume | Chapter | Scene,
     ) -> tuple[bool, str]:
         """Verify that the post-operation state matches the semantic transition from the snapshot."""
         actual_data = _serialize_model(target)
@@ -4188,11 +4565,17 @@ class AgentWorkflowService:
         *,
         project_id: uuid.UUID,
         operation: AgentOperation,
-        target: Character | WorldSetting | Chapter | Scene,
+        target: Project | Character | WorldSetting | Volume | Chapter | Scene,
     ) -> tuple[bool, str | None]:
         """Verify domain-level invariants that are not fully covered by field or content checks."""
         passed_checks: list[str] = []
         failed_checks: list[str] = []
+
+        if operation.tool_name == "update_project_outline" and isinstance(target, Project):
+            if (target.story_outline or "").strip():
+                passed_checks.append("story_outline_not_empty")
+            else:
+                failed_checks.append("story_outline_empty")
 
         if operation.tool_name in {"create_character", "update_character"} and isinstance(target, Character):
             trimmed_name = (target.name or "").strip()
@@ -4254,6 +4637,27 @@ class AgentWorkflowService:
                 failed_checks.append("world_setting_name_duplicate")
             else:
                 passed_checks.append("world_setting_name_unique")
+
+        if operation.tool_name in {"create_volume", "update_volume"} and isinstance(target, Volume):
+            if target.project_id != project_id:
+                failed_checks.append("volume_project_mismatch")
+            else:
+                passed_checks.append("volume_project_scope")
+
+            duplicate_volume_stmt = (
+                select(Volume.id)
+                .where(
+                    Volume.project_id == project_id,
+                    Volume.volume_number == target.volume_number,
+                    Volume.id != target.id,
+                )
+                .limit(1)
+            )
+            duplicate_volume = (await db.execute(duplicate_volume_stmt)).scalar_one_or_none()
+            if duplicate_volume is not None:
+                failed_checks.append("volume_number_duplicate")
+            else:
+                passed_checks.append("volume_number_unique")
 
         if operation.tool_name in {"create_chapter", "update_chapter"} and isinstance(target, Chapter):
             if target.volume_id is not None:
@@ -4342,8 +4746,11 @@ class AgentWorkflowService:
                 "world_setting_name_empty": "设定名称不能为空",
                 "world_setting_content_empty": "设定内容不能为空",
                 "world_setting_name_duplicate": "同分类下设定名称重复",
+                "story_outline_empty": "项目大纲不能为空",
+                "volume_number_duplicate": "卷序号重复",
                 "volume_missing": "卷不存在",
                 "volume_project_mismatch": "章节卷归属错误",
+                "volume_project_scope": "卷不属于当前项目",
                 "chapter_number_duplicate": "章节序号重复",
                 "scene_parent_missing": "场景父章节缺失",
                 "scene_project_mismatch": "场景不属于当前项目",
@@ -4367,8 +4774,10 @@ class AgentWorkflowService:
         payload = dict(operation.payload or {})
 
         if operation.tool_name in {
+            "update_project_outline",
             "update_character",
             "update_world_setting",
+            "update_volume",
             "update_chapter",
             "update_scene",
         }:
@@ -4393,13 +4802,27 @@ class AgentWorkflowService:
         self,
         *,
         operation: AgentOperation,
-        target: Character | WorldSetting | Chapter | Scene,
+        target: Project | Character | WorldSetting | Volume | Chapter | Scene,
     ) -> list[str]:
         """Return stable business fields used for snapshot semantic verification."""
+        if isinstance(target, Project):
+            return [
+                "name",
+                "genre",
+                "target_audience",
+                "target_word_count",
+                "status",
+                "summary",
+                "story_outline",
+                "notes",
+                "meta",
+            ]
         if isinstance(target, Character):
             return ["project_id", "name", "role", "profile", "relationships", "arc_state", "notes"]
         if isinstance(target, WorldSetting):
             return ["project_id", "category", "name", "content", "meta"]
+        if isinstance(target, Volume):
+            return ["project_id", "volume_number", "title", "outline", "notes"]
         if isinstance(target, Chapter):
             return ["project_id", "volume_id", "chapter_number", "title", "outline", "content", "status", "notes"]
         if isinstance(target, Scene):
@@ -4438,6 +4861,7 @@ class AgentWorkflowService:
     def _field_level_expected_updates(self, operation: AgentOperation) -> dict[str, Any]:
         """Return comparable expected field values for create/update operations."""
         if operation.tool_name in {
+            "create_volume",
             "create_character",
             "create_world_setting",
             "create_chapter",
@@ -4448,7 +4872,14 @@ class AgentWorkflowService:
                 comparable_fields[str(field_name)] = _json_ready(value)
             return comparable_fields
 
-        if operation.tool_name not in {"update_character", "update_world_setting", "update_chapter", "update_scene"}:
+        if operation.tool_name not in {
+            "update_project_outline",
+            "update_character",
+            "update_world_setting",
+            "update_volume",
+            "update_chapter",
+            "update_scene",
+        }:
             return {}
 
         raw_updates = operation.payload.get("updates", {})
@@ -4468,11 +4899,18 @@ class AgentWorkflowService:
         *,
         project_id: uuid.UUID,
         operation: AgentOperation,
-    ) -> Character | WorldSetting | Chapter | Scene:
+    ) -> Project | Character | WorldSetting | Volume | Chapter | Scene:
         if operation.target_id is None:
             raise BadRequestException("Executed operation is missing target_id")
         payload = operation.payload
         request_context: dict[str, Any] = {}
+        if operation.tool_name == "update_project_outline":
+            return await self._resolve_project(
+                db,
+                project_id=project_id,
+                payload={**payload, "project_id": str(operation.target_id)},
+                request_context=request_context,
+            )
         if operation.tool_name in {"create_character", "update_character"}:
             return await self._resolve_character(
                 db,
@@ -4485,6 +4923,13 @@ class AgentWorkflowService:
                 db,
                 project_id=project_id,
                 payload={**payload, "setting_id": str(operation.target_id)},
+                request_context=request_context,
+            )
+        if operation.tool_name in {"create_volume", "update_volume"}:
+            return await self._resolve_volume(
+                db,
+                project_id=project_id,
+                payload={**payload, "volume_id": str(operation.target_id)},
                 request_context=request_context,
             )
         if operation.tool_name in {"create_chapter", "update_chapter", "write_chapter_content"}:
@@ -4503,26 +4948,34 @@ class AgentWorkflowService:
             )
         raise BadRequestException(f"Unsupported tool '{operation.tool_name}' for verification")
 
-    def _target_summary(self, target: Character | WorldSetting | Chapter | Scene, tool_name: str) -> str:
+    def _target_summary(self, target: Project | Character | WorldSetting | Volume | Chapter | Scene, tool_name: str) -> str:
         if tool_name == "write_chapter_content" and isinstance(target, Chapter):
             return _excerpt(target.content) or ""
         if tool_name == "write_scene_content" and isinstance(target, Scene):
             return _excerpt(target.content) or ""
+        if isinstance(target, Project):
+            return self._project_summary(target)
         if isinstance(target, Character):
             return self._character_summary(target)
         if isinstance(target, WorldSetting):
             return self._world_setting_summary(target)
+        if isinstance(target, Volume):
+            return self._volume_summary(target)
         if isinstance(target, Chapter):
             return self._chapter_summary(target)
         if isinstance(target, Scene):
             return self._scene_summary(target)
         raise BadRequestException(f"Unsupported target for tool '{tool_name}'")
 
-    def _target_content(self, target: Character | WorldSetting | Chapter | Scene) -> str | None:
+    def _target_content(self, target: Project | Character | WorldSetting | Volume | Chapter | Scene) -> str | None:
+        if isinstance(target, Project):
+            return target.story_outline
         if isinstance(target, Character):
             return target.notes
         if isinstance(target, WorldSetting):
             return target.content
+        if isinstance(target, Volume):
+            return target.outline
         if isinstance(target, Chapter):
             return target.content
         if isinstance(target, Scene):

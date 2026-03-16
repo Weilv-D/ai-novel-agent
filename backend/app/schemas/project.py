@@ -32,6 +32,7 @@ class ProjectBase(BaseModel):
     target_audience: str | None = Field(None, max_length=100)
     target_word_count: int | None = Field(None, ge=0)
     summary: str | None = None
+    story_outline: str | None = None
     notes: str | None = None
     agent_profile_id: str = Field(default=DEFAULT_AGENT_PROFILE_ID, min_length=1, max_length=80)
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -52,6 +53,7 @@ class ProjectUpdate(BaseModel):
     target_word_count: int | None = Field(None, ge=0)
     status: ProjectStatusLiteral | None = None
     summary: str | None = None
+    story_outline: str | None = None
     notes: str | None = None
     agent_profile_id: str | None = Field(None, min_length=1, max_length=80)
     meta: dict[str, Any] | None = Field(None)

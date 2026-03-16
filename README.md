@@ -14,8 +14,9 @@ AI Novel Agent 由三部分组成：
 
 ## 核心能力
 
-- 项目管理：维护作品名称、题材、摘要、目标字数与 profile
+- 项目管理：维护作品名称、题材、摘要、项目大纲、目标字数与 profile
 - 人物与世界观：管理角色档案、关系、设定与背景条目
+- 双层规划体系：以 `项目大纲 -> 卷细纲 -> 章纲 -> 场景/正文` 组织长篇创作
 - 章节与场景：按卷、章、场景组织创作内容
 - Agent Workspace：用自然语言提出创作、修改、续写和重构指令
 - Preview-first 流程：Agent 先生成计划和预览，再确认执行
@@ -26,6 +27,26 @@ AI Novel Agent 由三部分组成：
 - Profile / Skill 体系：项目可绑定不同写作 profile，并用文件化 skill 规范 planner 和 operation
 - 记忆检索与导出：支持 embedding、相似检索、TXT / Markdown 导出
 - 项目包导出导入：完整项目数据打包、迁移与恢复
+
+## 数据层级
+
+当前项目结构正式收敛为：
+
+`Project.story_outline（项目大纲） -> Volume.outline（卷细纲） -> Chapter.outline（章纲） -> Scene（写作执行层）`
+
+约定如下：
+
+- `summary` 是项目简介，不承担完整结构规划
+- `story_outline` 是项目级总纲，描述长期目标、主线因果链和阶段推进
+- `Volume` 是正式卷层，`outline` 承载卷级目标、支线网络和卷末收束
+- `Chapter.title + Chapter.outline` 共同构成卷下章纲
+- `Scene` 继续承担正文组织与写作执行，不额外引入 beat 实体
+
+兼容迁移行为：
+
+- 旧项目升级后会自动补一个默认卷（默认标题为“第一卷”）
+- 原先未挂卷的章节会迁入默认卷
+- 旧 `summary / notes` 会参与 `story_outline` 初始回填
 
 ## 运行方式
 
@@ -94,13 +115,17 @@ docker compose up -d
 1. 打开首页。
 2. 如果启用了 `ADMIN_API_KEY`，先在首页保存访问 key。
 3. 创建项目，并为项目选择合适的 Agent profile。
-4. 进入项目详情页，使用 Agent Workspace 提出自然语言指令。
-5. 检查 run 生成的 operation 计划、diff 预览、风险摘要和内部执行摘要。
-6. 完成一次确认；若命中高风险策略，再完成二次确认。
-7. 在人物、设定、章节、场景页面做复核或局部手工调整。
+4. 先补项目大纲，再建立卷细纲与章纲。
+5. 进入项目详情页，使用 Agent Workspace 提出自然语言指令。
+6. 检查 run 生成的 operation 计划、diff 预览、风险摘要和内部执行摘要。
+7. 完成一次确认；若命中高风险策略，再完成二次确认。
+8. 在人物、设定、卷、章节、场景页面做复核或局部手工调整。
 
 Agent Workspace 适合处理这些任务：
 
+- 补写项目大纲
+- 创建或修改卷细纲
+- 按卷拆分章节并补章纲
 - 创建新人物
 - 修改角色关系或设定条目
 - 创建章节、场景与结构信息
@@ -185,6 +210,11 @@ cp .env.example .env
 ./.venv/bin/python -m uvicorn app.main:app --reload --port 8000
 ```
 
+说明：
+
+- `alembic upgrade head` 会创建 `projects.story_outline`
+- 历史项目会自动补默认卷，并把旧章节迁入卷层
+
 ### 前端
 
 ```bash
@@ -257,6 +287,7 @@ ai-novel-agent/
 
 - [API Reference](docs/API_REFERENCE.md)
 - [后端手册](backend/README.md)
+- [技术实现说明](docs/TECH_IMPLEMENTATION.md)
 - [开发手册](docs/DEVELOPMENT.md)
 - [当前技术实现](docs/TECH_IMPLEMENTATION.md)
 - [目标架构](docs/TECH_ARCH.md)

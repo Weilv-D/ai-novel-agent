@@ -239,6 +239,7 @@ class AgentRiskService:
                 tool_scope=[
                     "create_character",
                     "create_world_setting",
+                    "create_volume",
                     "create_chapter",
                     "create_scene",
                 ],
@@ -251,8 +252,10 @@ class AgentRiskService:
                 risk_level=AgentRiskLevel.MEDIUM.value,
                 confirmation_gate="single",
                 tool_scope=[
+                    "update_project_outline",
                     "update_character",
                     "update_world_setting",
+                    "update_volume",
                     "update_chapter",
                     "update_scene",
                 ],
@@ -457,7 +460,7 @@ class AgentRiskService:
         if normalized.tool_name in {"create_chapter", "create_scene"} and touches_content:
             return permission_level, AgentRiskLevel.MEDIUM.value, False
 
-        if normalized.tool_name in {"update_character", "update_world_setting"}:
+        if normalized.tool_name in {"update_project_outline", "update_character", "update_world_setting", "update_volume"}:
             return permission_level, AgentRiskLevel.MEDIUM.value, False
 
         return permission_level, AgentRiskLevel.LOW.value, False

@@ -63,12 +63,14 @@ class TestCreateProject:
             "genre": "Fantasy",
             "target_audience": "Young Adult",
             "target_word_count": 80000,
+            "story_outline": "项目总纲",
         }
 
         mock_response = ProjectResponse(
             id=uuid.uuid4(),
             name="My Novel",
             genre="Fantasy",
+            story_outline="项目总纲",
             status="drafting",
             created_at=datetime.now(),
             updated_at=datetime.now(),
@@ -84,6 +86,7 @@ class TestCreateProject:
             assert response.status_code == status.HTTP_201_CREATED
             data = response.json()
             assert data["name"] == "My Novel"
+            assert data["story_outline"] == "项目总纲"
 
     def test_create_project_accepts_agent_profile_id(self):
         """Project creation should carry the selected agent profile."""
@@ -211,6 +214,7 @@ class TestUpdateProject:
             id=project_id,
             name="Updated Name",
             genre="Fantasy",
+            story_outline="更新后的项目大纲",
             status="drafting",
             created_at=datetime.now(),
             updated_at=datetime.now(),
@@ -224,10 +228,11 @@ class TestUpdateProject:
                 mock_update.return_value = mock_response
 
                 response = client.patch(
-                    f"/api/v1/projects/{project_id}", json={"name": "Updated Name"}
+                    f"/api/v1/projects/{project_id}", json={"name": "Updated Name", "story_outline": "更新后的项目大纲"}
                 )
 
                 assert response.status_code == status.HTTP_200_OK
+                assert response.json()["story_outline"] == "更新后的项目大纲"
 
     def test_update_project_agent_profile_id(self):
         """Project update should expose the selected profile id."""

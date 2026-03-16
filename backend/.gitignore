@@ -67,3 +67,4 @@ Thumbs.db
 # Alembic
 alembic/versions/*.py
 !alembic/versions/.gitkeep
+!alembic/versions/20260316000000_0005_story_outline_volume_hierarchy.py

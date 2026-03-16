@@ -3,6 +3,7 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import BadRequestException
 from app.schemas.chapter import ChapterCreate, SceneCreate, VolumeCreate
 from app.schemas.project import ProjectCreate
 from app.services.chapter import chapter_service, scene_service, volume_service
@@ -293,6 +294,12 @@ class TestChapterServiceCreateWithProject:
         assert result.chapter_number == 1
         assert result.outline == "Our hero begins their journey"
         assert result.project_id == project.id
+        assert result.volume_id is not None
+
+        volumes = await volume_service.get_by_project(db_session, project_id=project.id)
+        assert len(volumes) == 1
+        assert volumes[0].id == result.volume_id
+        assert volumes[0].title == "第一卷"
 
     @pytest.mark.asyncio
     async def test_create_with_project_preserves_volume_id(self, db_session: AsyncSession):
@@ -330,6 +337,32 @@ class TestChapterServiceCreateWithProject:
         volume_chapters = await chapter_service.get_by_volume(db_session, volume_id=volume.id)
         assert len(volume_chapters) == 1, "Chapter should be queryable through volume relationship"
         assert volume_chapters[0].id == result.id
+
+    @pytest.mark.asyncio
+    async def test_delete_volume_with_chapters_is_blocked(self, db_session: AsyncSession):
+        """Non-empty volumes should not be deletable."""
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Volume Guard", genre="Fantasy"),
+        )
+        volume = await volume_service.create_with_project(
+            db_session,
+            obj_in=VolumeCreate(title="Volume 1", volume_number=1, project_id=project.id),
+            project_id=project.id,
+        )
+        await chapter_service.create_with_project(
+            db_session,
+            obj_in=ChapterCreate(
+                title="Chapter 1",
+                chapter_number=1,
+                project_id=project.id,
+                volume_id=volume.id,
+            ),
+            project_id=project.id,
+        )
+
+        with pytest.raises(BadRequestException, match="Cannot delete a volume that still contains chapters"):
+            await volume_service.delete(db_session, id=volume.id)
 
 
 class TestSceneServiceCreateWithChapter:

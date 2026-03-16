@@ -121,6 +121,44 @@ class TestCreateSuggestion:
             assert data["target_type"] == "character"
             assert data["status"] == "draft"
 
+    def test_create_suggestion_for_volume_target(self):
+        """Suggestion targets should include volume records."""
+        client = TestClient(app)
+        project_id = uuid.uuid4()
+        target_id = uuid.uuid4()
+
+        suggestion_data = {
+            "project_id": str(project_id),
+            "target_type": "volume",
+            "target_id": str(target_id),
+            "type": "outline_gen",
+            "content": {"outline": "卷细纲建议"},
+        }
+
+        mock_response = SuggestionResponse(
+            id=uuid.uuid4(),
+            project_id=project_id,
+            target_type="volume",
+            target_id=target_id,
+            type="outline_gen",
+            content={"outline": "卷细纲建议"},
+            status=SuggestionStatus.DRAFT,
+            impact_analysis=None,
+            committed_at=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch(
+            "app.api.v1.suggestions.suggestion_service.create_with_project", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = client.post("/api/v1/suggestions", json=suggestion_data)
+
+            assert response.status_code == status.HTTP_201_CREATED
+            assert response.json()["target_type"] == "volume"
+
     def test_create_suggestion_invalid_schema(self):
         """Test creating a suggestion with invalid schema."""
         client = TestClient(app)

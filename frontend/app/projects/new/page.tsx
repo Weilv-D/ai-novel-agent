@@ -7,7 +7,7 @@ import { agentWorkflowApi, ApiError, projectApi } from "@/lib/api-client";
 import type { AgentProfile, ProjectCreate } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
+import { Input, Textarea } from "@/components/ui/Input";
 
 const FALLBACK_PROFILES: AgentProfile[] = [
   {
@@ -32,6 +32,8 @@ export default function NewProjectPage() {
     genre: "",
     target_audience: "",
     target_word_count: undefined,
+    summary: "",
+    story_outline: "",
     agent_profile_id: "default",
   });
   const [profiles, setProfiles] = useState<AgentProfile[]>(FALLBACK_PROFILES);
@@ -128,6 +130,22 @@ export default function NewProjectPage() {
                     target_word_count: e.target.value ? parseInt(e.target.value, 10) : undefined,
                   })
                 }
+              />
+
+              <Textarea
+                label="项目简介"
+                placeholder="一句话或一段话概括作品定位。"
+                value={formData.summary || ""}
+                onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                rows={3}
+              />
+
+              <Textarea
+                label="项目大纲"
+                placeholder="填写项目级总纲：主线目标、核心冲突、阶段推进与终局方向。"
+                value={formData.story_outline || ""}
+                onChange={(e) => setFormData({ ...formData, story_outline: e.target.value })}
+                rows={8}
               />
 
               <div>

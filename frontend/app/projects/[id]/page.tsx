@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
-import { ApiError, exportApi, projectPackageApi } from "@/lib/api-client";
+import { ApiError, chapterApi, exportApi, projectPackageApi, volumeApi } from "@/lib/api-client";
 import { getProjectStatusMeta } from "@/lib/presentation";
 import { useProjectStore } from "@/lib/stores/projectStore";
+import type { Chapter, Volume } from "@/lib/types";
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -29,6 +30,8 @@ export default function ProjectDetailPage() {
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [volumes, setVolumes] = useState<Volume[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -39,6 +42,16 @@ export default function ProjectDetailPage() {
       clearCurrentProject();
     };
   }, [id, fetchProject, clearCurrentProject]);
+
+  useEffect(() => {
+    if (!id) {
+      return;
+    }
+    void Promise.all([
+      volumeApi.list(id).then((data) => setVolumes(data as Volume[])).catch(() => setVolumes([])),
+      chapterApi.list(id).then((data) => setChapters(data as Chapter[])).catch(() => setChapters([])),
+    ]);
+  }, [id]);
 
   async function handleDelete() {
     try {
@@ -91,6 +104,12 @@ export default function ProjectDetailPage() {
   }
 
   const statusMeta = getProjectStatusMeta(project.status);
+  const chapterCountByVolume = chapters.reduce<Record<string, number>>((acc, chapter) => {
+    if (chapter.volume_id) {
+      acc[chapter.volume_id] = (acc[chapter.volume_id] || 0) + 1;
+    }
+    return acc;
+  }, {});
 
   return (
     <main className="ink-page">
@@ -159,6 +178,9 @@ export default function ProjectDetailPage() {
                   <Button href={`/projects/${project.id}/chapters`} size="sm">
                     章节
                   </Button>
+                  <Button variant="outline" href={`/projects/${project.id}/volumes`} size="sm">
+                    卷
+                  </Button>
                   <Button variant="outline" href={`/projects/${project.id}/characters`} size="sm">
                     人物
                   </Button>
@@ -185,6 +207,62 @@ export default function ProjectDetailPage() {
           </Card>
 
           <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="text-lg">项目大纲</CardTitle>
+                  <Button variant="outline" href={`/projects/${project.id}/edit`} size="sm">
+                    编辑大纲
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">
+                  {project.story_outline || "尚未整理项目大纲。建议先明确主线目标、核心冲突与阶段推进。"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="text-lg">卷细纲概览</CardTitle>
+                  <Button variant="outline" href={`/projects/${project.id}/volumes`} size="sm">
+                    管理卷细纲
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {volumes.length === 0 ? (
+                  <div className="rounded-[1rem] border border-dashed border-[rgba(var(--line),0.18)] px-4 py-5 text-sm leading-7 text-[rgb(var(--ink-800))]">
+                    还没有卷。建议先建立卷细纲，再把章节归入对应卷中。
+                  </div>
+                ) : (
+                  volumes.map((volume) => (
+                    <Link
+                      key={volume.id}
+                      href={`/projects/${project.id}/volumes/${volume.id}`}
+                      className="block rounded-[1.15rem] border border-[rgba(var(--line),0.14)] bg-[var(--surface-elevated)] px-4 py-4 transition-colors hover:bg-[var(--surface-strong)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-[rgb(var(--ink-950))]">
+                            第 {volume.volume_number || "?"} 卷 {volume.title || "未命名卷"}
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
+                            {volume.outline || "尚未填写卷细纲总述。"}
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
+                          章节 {chapterCountByVolume[volume.id] || 0}
+                        </span>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
             {project.notes && (
               <Card>
                 <CardHeader>

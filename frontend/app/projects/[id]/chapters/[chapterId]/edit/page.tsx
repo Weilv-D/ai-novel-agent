@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+
 import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
-import { chapterApi, agentApi } from "@/lib/api-client";
-import type { Chapter, ChapterUpdate, ChapterStatus } from "@/lib/types";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, agentApi, chapterApi, volumeApi } from "@/lib/api-client";
+import type { Chapter, ChapterStatus, ChapterUpdate, Volume } from "@/lib/types";
 
 export default function EditChapterPage() {
   const params = useParams();
@@ -18,44 +18,50 @@ export default function EditChapterPage() {
   const chapterId = params.chapterId as string;
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [volumes, setVolumes] = useState<Volume[]>([]);
   const [formData, setFormData] = useState<ChapterUpdate>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadChapter = useCallback(async () => {
+  const loadPage = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await chapterApi.get(chapterId) as Chapter;
-      setChapter(data);
+      const [chapterData, volumeData] = await Promise.all([
+        chapterApi.get(chapterId) as Promise<Chapter>,
+        volumeApi.list(projectId) as Promise<Volume[]>,
+      ]);
+      setChapter(chapterData);
+      setVolumes(volumeData.sort((a, b) => (a.volume_number || 0) - (b.volume_number || 0)));
       setFormData({
-        chapter_number: data.chapter_number,
-        title: data.title,
-        outline: data.outline,
-        content: data.content,
-        notes: data.notes,
-        status: data.status,
+        volume_id: chapterData.volume_id,
+        chapter_number: chapterData.chapter_number,
+        title: chapterData.title,
+        outline: chapterData.outline,
+        content: chapterData.content,
+        notes: chapterData.notes,
+        status: chapterData.status,
       });
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.detail);
-      } else {
-        setError("加载章节失败");
-      }
+      setError(err instanceof ApiError ? err.detail : "加载章节失败");
     } finally {
       setLoading(false);
     }
-  }, [chapterId]);
+  }, [chapterId, projectId]);
 
   useEffect(() => {
-    loadChapter();
-  }, [loadChapter]);
+    loadPage();
+  }, [loadPage]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.title?.trim() && !formData.content?.trim()) {
-      setError("章节标题或内容不能为空");
+    if (!formData.volume_id) {
+      setError("请选择所属卷");
+      return;
+    }
+    if (!formData.title?.trim() && !formData.outline?.trim() && !formData.content?.trim()) {
+      setError("章节标题、章纲或正文至少填写一项");
       return;
     }
 
@@ -63,47 +69,40 @@ export default function EditChapterPage() {
       setSaving(true);
       setError(null);
       await chapterApi.update(chapterId, formData);
-      // Auto-summarize in background if content exists
       if (formData.content && formData.content.length > 100) {
         agentApi.autoSummarize({
           project_id: projectId,
           chapter_id: chapterId,
           content: formData.content,
-        }).catch(() => { /* background task, ignore errors */ });
+        }).catch(() => {});
       }
       router.push(`/projects/${projectId}/chapters/${chapterId}`);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.detail);
-      } else {
-        setError("保存章节失败");
-      }
+      setError(err instanceof ApiError ? err.detail : "保存章节失败");
     } finally {
       setSaving(false);
     }
   }
 
-  // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="max-w-2xl mx-auto px-4 py-8">
+      <main className="ink-page">
+        <div className="mx-auto max-w-3xl px-4 py-10">
           <LoadingSpinner size="lg" text="加载章节中..." />
         </div>
       </main>
     );
   }
 
-  // Error state
   if (error && !chapter) {
     return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="max-w-2xl mx-auto px-4 py-8">
+      <main className="ink-page">
+        <div className="mx-auto max-w-3xl px-4 py-10">
           <Card padding="lg">
             <CardContent>
-              <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">加载失败</h3>
-                <p className="text-gray-600 mb-6">{error}</p>
+              <div className="py-8 text-center">
+                <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">加载失败</h3>
+                <p className="mb-6 text-[rgb(var(--ink-800))]">{error}</p>
                 <Button href={`/projects/${projectId}/chapters/${chapterId}`}>返回章节</Button>
               </div>
             </CardContent>
@@ -114,72 +113,86 @@ export default function EditChapterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Header */}
+    <main className="ink-page">
+      <div className="mx-auto max-w-3xl px-4 py-10">
         <div className="mb-8">
-          <Link
-            href={`/projects/${projectId}/chapters/${chapterId}`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
-          >
+          <Link href={`/projects/${projectId}/chapters/${chapterId}`} className="ink-backlink mb-4">
             ← 返回章节
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">编辑章节</h1>
+          <p className="ink-kicker">Edit Chapter</p>
+          <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">编辑章节</h1>
+          <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-800))]">
+            调整所属卷、章纲与正文，使章节继续保持在卷细纲的推进路径上。
+          </p>
         </div>
 
-        {/* Form */}
         <Card>
           <CardHeader>
-            <CardTitle>章节信息</CardTitle>
+            <CardTitle>章纲信息</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="ink-label">所属卷 *</label>
+                <select
+                  value={formData.volume_id || ""}
+                  onChange={(e) => setFormData({ ...formData, volume_id: e.target.value })}
+                  className="ink-select"
+                >
+                  {volumes.map((volume) => (
+                    <option key={volume.id} value={volume.id}>
+                      第{volume.volume_number || "?"}卷 {volume.title || "未命名卷"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <Input
                 label="章节号 *"
                 type="number"
                 min="1"
                 value={formData.chapter_number ?? 1}
-                onChange={(e) => setFormData({ ...formData, chapter_number: parseInt(e.target.value) || 1 })}
+                onChange={(e) => setFormData({ ...formData, chapter_number: parseInt(e.target.value, 10) || 1 })}
                 required
               />
 
               <Input
                 label="章节标题"
-                placeholder="例如：第一章 开始"
+                placeholder="例如：山门夜审"
                 value={formData.title || ""}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               />
 
               <Textarea
-                label="大纲"
-                placeholder="简要描述本章节的主要内容..."
+                label="章纲"
+                placeholder="描述本章的目标、冲突、转折与收束压力。"
                 value={formData.outline || ""}
                 onChange={(e) => setFormData({ ...formData, outline: e.target.value })}
-                rows={3}
+                rows={5}
               />
 
               <Textarea
-                label="内容"
-                placeholder="章节正文..."
+                label="正文草稿"
+                placeholder="维护章节正文。"
                 value={formData.content || ""}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                rows={8}
+                rows={10}
               />
 
               <Textarea
                 label="备注"
-                placeholder="写作笔记、待办事项等..."
+                placeholder="记录伏笔、修订点或写作提醒。"
                 value={formData.notes || ""}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                rows={3}
+                rows={4}
               />
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">状态</label>
+                <label className="ink-label">状态</label>
                 <select
                   value={formData.status || "draft"}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as ChapterStatus })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="ink-select"
                 >
                   <option value="draft">草稿</option>
                   <option value="writing">写作中</option>
@@ -187,19 +200,10 @@ export default function EditChapterPage() {
                 </select>
               </div>
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
+              {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 
               <div className="flex gap-4 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  href={`/projects/${projectId}/chapters/${chapterId}`}
-                  fullWidth
-                >
+                <Button type="button" variant="outline" href={`/projects/${projectId}/chapters/${chapterId}`} fullWidth>
                   取消
                 </Button>
                 <Button type="submit" disabled={saving} fullWidth>

@@ -288,6 +288,11 @@ export const chapterApi = {
       `/api/v1/chapters/project/${projectId}${buildQueryString(params || {})}`
     ),
 
+  listByVolume: (volumeId: string, params?: { skip?: number; limit?: number }) =>
+    fetchApi<unknown[]>(
+      `/api/v1/chapters/volume/${volumeId}${buildQueryString(params || {})}`
+    ),
+
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/chapters/${id}`),
 
@@ -305,6 +310,37 @@ export const chapterApi = {
 
   delete: (id: string) =>
     fetchApi<void>(`/api/v1/chapters/${id}`, {
+      method: "DELETE",
+    }),
+};
+
+// ============================================================================
+// Volume API
+// ============================================================================
+
+export const volumeApi = {
+  list: (projectId: string, params?: { skip?: number; limit?: number }) =>
+    fetchApi<unknown[]>(
+      `/api/v1/volumes/project/${projectId}${buildQueryString(params || {})}`
+    ),
+
+  get: (id: string) =>
+    fetchApi<unknown>(`/api/v1/volumes/${id}`),
+
+  create: (data: unknown) =>
+    fetchApi<unknown>("/api/v1/volumes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: unknown) =>
+    fetchApi<unknown>(`/api/v1/volumes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    fetchApi<void>(`/api/v1/volumes/${id}`, {
       method: "DELETE",
     }),
 };

@@ -168,7 +168,7 @@ class TestSuggestionSchemas:
         """Test valid target_type values."""
         project_id = uuid.uuid4()
         target_id = uuid.uuid4()
-        for target_type in ["character", "world_setting", "chapter", "scene"]:
+        for target_type in ["project", "character", "world_setting", "volume", "chapter", "scene"]:
             schema = SuggestionCreate(
                 project_id=project_id,
                 target_type=target_type,

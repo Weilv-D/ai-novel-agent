@@ -83,6 +83,12 @@ cd backend
 ./.venv/bin/python -m uvicorn app.main:app --reload --port 8000
 ```
 
+迁移说明：
+
+- 最新迁移会新增 `projects.story_outline`
+- 旧项目如无卷层，会自动补默认卷“第一卷”
+- 旧章节会迁入默认卷，后续前端按卷展示章纲
+
 ### 4.2 前端（本地）
 
 ```bash
@@ -163,13 +169,30 @@ curl -X POST 'http://localhost:8000/api/v1/projects' \
     "name": "示例项目",
     "genre": "xianxia",
     "target_audience": "adult",
+    "story_outline": "项目大纲：主角从入局、立势到改写格局，按三卷推进。",
     "agent_profile_id": "default"
   }'
 ```
 
 预期结果：返回 `201` 与 `ProjectResponse`。
 
-### 7.2 Agent 生成待确认计划
+### 7.2 创建卷细纲
+
+```bash
+curl -X POST 'http://localhost:8000/api/v1/volumes' \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -d '{
+    "project_id": "<project_id>",
+    "volume_number": 1,
+    "title": "第一卷 北地试锋",
+    "outline": "卷细纲：完成入局、资源争夺、支线铺设与卷末翻盘。"
+  }'
+```
+
+预期结果：返回 `201` 与 `VolumeResponse`。
+
+### 7.3 Agent 生成待确认计划
 
 ```bash
 curl -X POST 'http://localhost:8000/api/v1/agent/threads' \
@@ -182,12 +205,12 @@ curl -X POST 'http://localhost:8000/api/v1/agent/threads' \
 curl -X POST 'http://localhost:8000/api/v1/agent/threads/<thread_id>/messages' \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: <ADMIN_API_KEY>' \
-  -d '{"content":"创建一个测试人物","context":{},"stream":false}'
+  -d '{"content":"先补项目大纲，再创建第一卷细纲并拆成三个章纲","context":{},"stream":false}'
 ```
 
 预期结果：返回 `run.status=awaiting_confirmation`（或按风险策略返回高风险待确认态）。
 
-### 7.3 导出项目包
+### 7.4 导出项目包
 
 ```bash
 curl -X GET 'http://localhost:8000/api/v1/projects/<project_id>/package' \
@@ -203,6 +226,7 @@ curl -X GET 'http://localhost:8000/api/v1/projects/<project_id>/package' \
 
 - 长线程项目建议关注 `AgentThreadCheckpoint` 规模与 compact 触发频率。
 - 大型项目导入导出会放大 I/O 与序列化耗时，建议在低峰执行。
+- 章节在前端创建时要求选择卷；API 若未提供 `volume_id`，会自动落到项目默认卷。
 
 ### 8.2 安全
 
@@ -213,3 +237,4 @@ curl -X GET 'http://localhost:8000/api/v1/projects/<project_id>/package' \
 
 - SQLite 主要用于测试和 E2E，不建议作为生产主库。
 - 变更 embedding 模型时必须同步 `EMBEDDING_DIMENSION`，否则检索与导入会出现降级行为。
+- 项目包 `1.1.0` 起正式包含 `story_outline` 与卷层级数据。
