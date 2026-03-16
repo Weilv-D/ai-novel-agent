@@ -118,7 +118,7 @@ export default function ChapterDetailPage() {
             <div className="flex-1">
               <p className="ink-kicker">Chapter Detail</p>
               <div className="mb-2 mt-3 flex flex-wrap items-center gap-3">
-                <span className="text-sm font-medium text-[rgb(var(--ink-600))]">
+                <span className="text-sm font-medium text-[rgb(var(--ink-700))]">
                   第 {chapter.chapter_number} 章
                 </span>
                 <h1 className="ink-display text-4xl font-semibold text-[rgb(var(--ink-950))]">
@@ -191,7 +191,7 @@ export default function ChapterDetailPage() {
           </CardHeader>
           <CardContent>
             {scenes.length === 0 ? (
-              <div className="py-8 text-center text-[rgb(var(--ink-600))]">
+              <div className="py-8 text-center text-[rgb(var(--ink-700))]">
                 <p>暂无场景</p>
                 <Button
                   variant="outline"
@@ -211,7 +211,7 @@ export default function ChapterDetailPage() {
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-[rgb(var(--ink-600))]">场景 {scene.scene_order}</span>
+                        <span className="text-sm text-[rgb(var(--ink-700))]">场景 {scene.scene_order}</span>
                         {scene.location && (
                           <span className="text-sm text-[rgb(var(--ink-700))]">📍 {scene.location}</span>
                         )}

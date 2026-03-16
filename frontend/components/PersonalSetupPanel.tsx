@@ -83,7 +83,7 @@ export function PersonalSetupPanel() {
           <div className="space-y-6 animate-fade-in">
             {health && (
               <div className="rounded-xl border border-seal/20 bg-seal/5 p-5 text-sm text-ink-800 tracking-wide shadow-inner">
-                <div className="flex gap-2 items-center mb-2 font-medium text-seal/90">
+                <div className="flex gap-2 items-center mb-2 font-medium text-seal-dark">
                   <span className="w-1.5 h-1.5 rounded-full bg-seal shadow-[0_0_8px_rgba(200,70,57,0.6)]"></span>
                   砚台状态
                 </div>
@@ -122,7 +122,7 @@ export function PersonalSetupPanel() {
               </div>
 
               {message && (
-                <p className="text-sm text-ink-600 font-serif italic tracking-wide animate-fade-in block">
+                <p className="text-sm text-ink-700 font-serif italic tracking-wide animate-fade-in block">
                   {message}
                 </p>
               )}

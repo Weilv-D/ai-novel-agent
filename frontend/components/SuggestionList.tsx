@@ -43,7 +43,7 @@ export function SuggestionList({ projectId, status, className = "" }: Suggestion
 
   if (suggestions.length === 0) {
     return (
-      <div className={`rounded-[1.2rem] border border-dashed border-[rgba(var(--line),0.18)] py-6 text-center text-sm text-[rgb(var(--ink-600))] ${className}`}>
+      <div className={`rounded-[1.2rem] border border-dashed border-[rgba(var(--line),0.18)] py-6 text-center text-sm text-[rgb(var(--ink-700))] ${className}`}>
         暂无待处理的建议
       </div>
     );

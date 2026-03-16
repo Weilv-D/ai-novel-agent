@@ -9,7 +9,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className = "", id, testId, ...props }, ref) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, "-");
-    const baseStyles = "w-full rounded-lg border border-line/60 bg-white/70 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-600/60 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60";
+    const baseStyles = "w-full rounded-lg border border-line/60 bg-white/70 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-700 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60";
     const errorStyles = error ? "border-red-700/50 focus:border-red-700/60 focus:ring-red-700/30 bg-red-50/60" : "";
 
     return (
@@ -48,7 +48,7 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, className = "", id, testId, ...props }, ref) => {
     const textareaId = id || label?.toLowerCase().replace(/\s+/g, "-");
-    const baseStyles = "min-h-[120px] w-full rounded-lg border border-line/60 bg-white/70 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-600/60 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60";
+    const baseStyles = "min-h-[120px] w-full rounded-lg border border-line/60 bg-white/70 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-700 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60";
     const errorStyles = error ? "border-red-700/50 focus:border-red-700/60 focus:ring-red-700/30 bg-red-50/60" : "";
 
     return (

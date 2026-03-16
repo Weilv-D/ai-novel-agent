@@ -18,7 +18,7 @@ interface ImpactAnalysisProps {
 
 export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
   if (!analysis) {
-    return <div className="text-sm text-[rgb(var(--ink-600))]">暂无影响分析</div>;
+    return <div className="text-sm text-[rgb(var(--ink-700))]">暂无影响分析</div>;
   }
 
   const objects = analysis.affected_objects || [];
@@ -28,7 +28,7 @@ export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
     <div className="space-y-3">
       {objects.length > 0 && (
         <div>
-          <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--ink-600))]">影响范围</div>
+          <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--ink-700))]">影响范围</div>
           <div className="flex flex-wrap gap-2">
             {objects.map((obj, i) => (
               <div
@@ -43,7 +43,7 @@ export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
       )}
       {risks.length > 0 && (
         <div>
-          <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--ink-600))]">风险提示</div>
+          <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--ink-700))]">风险提示</div>
           <ul className="list-disc space-y-1 pl-5 text-sm text-[rgb(var(--danger))]">
             {risks.map((risk, i) => (
               <li key={i}>{risk}</li>
@@ -52,7 +52,7 @@ export function ImpactAnalysis({ analysis }: ImpactAnalysisProps) {
         </div>
       )}
       {objects.length === 0 && risks.length === 0 && (
-        <div className="text-sm text-[rgb(var(--ink-600))]">无已知影响</div>
+        <div className="text-sm text-[rgb(var(--ink-700))]">无已知影响</div>
       )}
     </div>
   );

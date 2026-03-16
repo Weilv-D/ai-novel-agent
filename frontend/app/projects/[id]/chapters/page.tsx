@@ -101,7 +101,7 @@ export default function ChaptersPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="mb-2 flex items-center gap-3">
-                          <span className="text-sm font-medium text-[rgb(var(--ink-600))]">
+                          <span className="text-sm font-medium text-[rgb(var(--ink-700))]">
                             第 {chapter.chapter_number} 章
                           </span>
                           <h3 className="ink-display text-2xl font-semibold text-[rgb(var(--ink-950))]">
@@ -114,7 +114,7 @@ export default function ChaptersPage() {
                             {chapter.outline}
                           </p>
                         )}
-                        <div className="flex items-center gap-4 text-sm text-[rgb(var(--ink-600))]">
+                        <div className="flex items-center gap-4 text-sm text-[rgb(var(--ink-700))]">
                           <span>更新于 {new Date(chapter.updated_at).toLocaleDateString("zh-CN")}</span>
                         </div>
                       </div>

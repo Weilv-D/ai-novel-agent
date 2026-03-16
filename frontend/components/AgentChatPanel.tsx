@@ -64,7 +64,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
-          <div className="mt-8 text-center text-sm text-[rgb(var(--ink-600))]">
+          <div className="mt-8 text-center text-sm text-[rgb(var(--ink-700))]">
             <p>你好！我是 AI 写作助手。</p>
             <p className="mt-1">你可以问我关于世界观、人物、大纲、写作等问题。</p>
           </div>
@@ -102,7 +102,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
             onKeyDown={handleKeyDown}
             placeholder="输入消息..."
             rows={1}
-            className="min-h-[46px] flex-1 resize-none rounded-[1rem] border border-[rgba(var(--line),0.18)] bg-[rgba(255,255,255,0.64)] px-4 py-3 text-sm text-[rgb(var(--ink-950))] placeholder:text-[rgb(var(--ink-600))] focus:outline-none focus:ring-4 focus:ring-[rgba(var(--accent),0.08)]"
+            className="min-h-[46px] flex-1 resize-none rounded-[1rem] border border-[rgba(var(--line),0.18)] bg-[rgba(255,255,255,0.64)] px-4 py-3 text-sm text-[rgb(var(--ink-950))] placeholder:text-[rgb(var(--ink-700))] focus:outline-none focus:ring-4 focus:ring-[rgba(var(--accent),0.08)]"
             disabled={loading || streaming}
           />
           <Button

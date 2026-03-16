@@ -148,7 +148,7 @@ export default function CharactersPage() {
                     </p>
                   )}
 
-                  <p className="mt-4 text-xs text-[rgb(var(--ink-600))]">
+                  <p className="mt-4 text-xs text-[rgb(var(--ink-700))]">
                     更新于 {new Date(character.updated_at).toLocaleDateString("zh-CN")}
                   </p>
                 </CardContent>

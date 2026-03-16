@@ -255,7 +255,7 @@ export default function EditProjectPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-600))]">
+                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-700))]">
                   {(profiles.find((profile) => profile.id === (formData.agent_profile_id || "default")) || profiles[0])?.description}
                 </p>
               </div>

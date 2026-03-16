@@ -125,7 +125,7 @@ export default function WorldSettingsPage() {
                         <p className="line-clamp-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
                           {setting.content}
                         </p>
-                        <p className="mt-3 text-xs text-[rgb(var(--ink-600))]">
+                        <p className="mt-3 text-xs text-[rgb(var(--ink-700))]">
                           更新于 {new Date(setting.updated_at).toLocaleDateString("zh-CN")}
                         </p>
                       </CardContent>

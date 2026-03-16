@@ -18,7 +18,7 @@
   --ink-900: 55 55 55; /* #373737 - 对比度 9.8:1 */
   --ink-800: 75 75 75; /* #4B4B4B - 对比度 6.8:1 */
   --ink-700: 95 95 95; /* #5F5F5F - 对比度 5.0:1 */
-  --ink-600: 120 120 120; /* #787878 - 对比度 3.7:1 (大文本可用) */
+  --ink-600: 120 120 120; /* #787878 - 对比度 3.7:1 (仅限图标/装饰，勿用于文本) */
   
   /* Lines and Shadows - Subtle ink wash effect */
   --line: 200 195 185; /* #C8C3B9 - 水墨线条 */
@@ -470,7 +470,7 @@ select:focus-visible {
     --ink-950: 245 243 235;
     --ink-900: 220 218 210;
     --ink-800: 180 175 170;
-    --ink-700: 140 135 130;
+    --ink-700: 155 150 145;
     --ink-600: 100 95 90;
     --line: 80 75 70;
     --shadow: 0 0 0;
@@ -499,7 +499,7 @@ select:focus-visible {
 
 /* Input placeholder styling */
 ::placeholder {
-  color: rgb(var(--ink-600) / 0.6);
+  color: rgb(var(--ink-700));
   opacity: 1;
 }
 

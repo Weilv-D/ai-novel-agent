@@ -50,7 +50,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
       {/* Settings button */}
       <button
         onClick={openPanel}
-        className="flex h-10 w-10 items-center justify-center rounded-[0.75rem] text-[rgb(var(--ink-600))] transition-colors hover:bg-[rgba(var(--ink-950),0.04)] hover:text-[rgb(var(--ink-900))]"
+        className="flex h-10 w-10 items-center justify-center rounded-[0.75rem] text-[rgb(var(--ink-700))] transition-colors hover:bg-[rgba(var(--ink-950),0.04)] hover:text-[rgb(var(--ink-900))]"
         aria-label="Open settings"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -85,7 +85,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             <h2 className="text-lg font-medium text-[rgb(var(--ink-950))]">设置</h2>
             <button
               onClick={closePanel}
-              className="flex h-8 w-8 items-center justify-center rounded-[0.5rem] text-[rgb(var(--ink-600))] transition-colors hover:bg-[rgba(var(--ink-950),0.04)]"
+              className="flex h-8 w-8 items-center justify-center rounded-[0.5rem] text-[rgb(var(--ink-700))] transition-colors hover:bg-[rgba(var(--ink-950),0.04)]"
               aria-label="Close settings"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -119,7 +119,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                           </svg>
                         )}
                       </div>
-                      <p className="mt-1 text-xs text-[rgb(var(--ink-600))]">{option.description}</p>
+                      <p className="mt-1 text-xs text-[rgb(var(--ink-700))]">{option.description}</p>
                     </button>
                   ))}
                 </div>
@@ -140,7 +140,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                       }`}
                     >
                       <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{option.label}</div>
-                      <div className="mt-1 text-xs text-[rgb(var(--ink-600))]">{option.preview}</div>
+                      <div className="mt-1 text-xs text-[rgb(var(--ink-700))]">{option.preview}</div>
                     </button>
                   ))}
                 </div>
@@ -153,7 +153,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   <div className="flex items-center justify-between rounded-[0.75rem] border border-[rgba(var(--line),0.2)] p-3">
                     <div>
                       <div className="text-sm font-medium text-[rgb(var(--ink-900))]">自动保存草稿</div>
-                      <div className="text-xs text-[rgb(var(--ink-600))]">自动保存表单数据到本地</div>
+                      <div className="text-xs text-[rgb(var(--ink-700))]">自动保存表单数据到本地</div>
                     </div>
                     <button
                       onClick={toggleAutoSaveDraft}
@@ -174,7 +174,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   <div className="flex items-center justify-between rounded-[0.75rem] border border-[rgba(var(--line),0.2)] p-3">
                     <div>
                       <div className="text-sm font-medium text-[rgb(var(--ink-900))]">紧凑模式</div>
-                      <div className="text-xs text-[rgb(var(--ink-600))]">减少界面间距</div>
+                      <div className="text-xs text-[rgb(var(--ink-700))]">减少界面间距</div>
                     </div>
                     <button
                       onClick={toggleCompactMode}
