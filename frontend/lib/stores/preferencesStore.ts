@@ -89,18 +89,20 @@ export function getFontSizeValue(fontSize: FontSize): string {
 
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
+  root.classList.remove("light", "dark");
+
   if (theme === "dark") {
     root.classList.add("dark");
-  } else if (theme === "light") {
-    root.classList.remove("dark");
-  } else {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (prefersDark) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    return;
   }
+
+  if (theme === "light") {
+    root.classList.add("light");
+    return;
+  }
+
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.classList.add(prefersDark ? "dark" : "light");
 }
 
 export function applyFontSize(fontSize: FontSize): void {

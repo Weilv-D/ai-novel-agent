@@ -9,8 +9,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className = "", id, testId, ...props }, ref) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, "-");
-    const baseStyles = "w-full rounded-lg border border-line/60 bg-white/70 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-700 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60";
-    const errorStyles = error ? "border-red-700/50 focus:border-red-700/60 focus:ring-red-700/30 bg-red-50/60" : "";
+    const baseStyles = "w-full rounded-lg border border-line/60 bg-[var(--field-surface)] px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-700 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-[var(--field-surface-focus)] disabled:cursor-not-allowed disabled:opacity-60";
+    const errorStyles = error ? "border-[rgba(var(--danger),0.45)] focus:border-[rgba(var(--danger),0.6)] focus:ring-[rgba(var(--danger),0.3)] bg-[rgba(var(--danger),0.08)]" : "";
 
     return (
       <div className="w-full" data-testid={testId ? `${testId}-wrapper` : undefined}>
@@ -30,7 +30,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {error && (
-          <p className="mt-2 text-xs text-red-800 tracking-wide">{error}</p>
+          <p className="mt-2 text-xs text-[rgb(var(--danger))] tracking-wide">{error}</p>
         )}
       </div>
     );
@@ -48,8 +48,8 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, className = "", id, testId, ...props }, ref) => {
     const textareaId = id || label?.toLowerCase().replace(/\s+/g, "-");
-    const baseStyles = "min-h-[120px] w-full rounded-lg border border-line/60 bg-white/70 px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-700 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60";
-    const errorStyles = error ? "border-red-700/50 focus:border-red-700/60 focus:ring-red-700/30 bg-red-50/60" : "";
+    const baseStyles = "min-h-[120px] w-full rounded-lg border border-line/60 bg-[var(--field-surface)] px-4 py-3 text-ink-950 shadow-inner backdrop-blur-sm transition-all duration-300 placeholder:text-ink-700 focus:outline-none focus:ring-2 focus:ring-seal/30 focus:border-seal/50 focus:bg-[var(--field-surface-focus)] disabled:cursor-not-allowed disabled:opacity-60";
+    const errorStyles = error ? "border-[rgba(var(--danger),0.45)] focus:border-[rgba(var(--danger),0.6)] focus:ring-[rgba(var(--danger),0.3)] bg-[rgba(var(--danger),0.08)]" : "";
 
     return (
       <div className="w-full" data-testid={testId ? `${testId}-wrapper` : undefined}>
@@ -69,7 +69,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...props}
         />
         {error && (
-          <p className="mt-2 text-xs text-red-800 tracking-wide">{error}</p>
+          <p className="mt-2 text-xs text-[rgb(var(--danger))] tracking-wide">{error}</p>
         )}
       </div>
     );

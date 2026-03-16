@@ -32,8 +32,8 @@
 
 系统采用前后端分离的单体部署形态：
 
-- 前端：Next.js App Router
-- 后端：FastAPI + SQLAlchemy
+- 前端：Next.js 15 App Router + React 19
+- 后端：FastAPI + SQLAlchemy 2.0 (async)
 - 数据层：PostgreSQL + pgvector
 - 运行依赖：Redis
 - 模型接口：OpenAI 兼容 LLM / Embedding API
@@ -72,31 +72,39 @@
 
 ### 创作对象
 
-- `Project`
-- `Character`
-- `WorldSetting`
-- `Volume`
-- `Chapter`
-- `Scene`
+| 模型 | 主要字段 |
+|------|----------|
+| `Project` | id, name, genre, target_audience, target_word_count, status, summary, notes, agent_profile_id, meta |
+| `Character` | id, project_id, name, role, profile, relationships, arc_state, notes |
+| `WorldSetting` | id, project_id, category, name, content, meta |
+| `Volume` | id, project_id, volume_number, title, outline, notes |
+| `Chapter` | id, project_id, volume_id, chapter_number, title, outline, content, status, notes |
+| `Scene` | id, chapter_id, scene_order, pov_character_id, location, content, meta |
 
 ### Agent 工作流对象
 
-- `AgentThread`
-- `AgentMessage`
-- `AgentRun`
-- `AgentOperation`
-- `AgentSubtask`
-- `AgentThreadCheckpoint`
+| 模型 | 主要字段 |
+|------|----------|
+| `AgentThread` | id, project_id, title, is_default, meta |
+| `AgentMessage` | id, thread_id, role, content, meta |
+| `AgentRun` | id, thread_id, project_id, status, summary, risk_summary, execution_contract, verification_status |
+| `AgentOperation` | id, run_id, position, tool_name, target_type, target_id, description, payload, preview, status |
+| `AgentSubtask` | id, run_id, position, role, title, status, summary, child_trace |
+| `AgentThreadCheckpoint` | id, thread_id, profile_id, thread_summary, active_object_bundle, recent_run_digest |
 
 ### 一致性与回溯对象
 
-- `Snapshot`
-- `Dependency`
-- `Suggestion`
+| 模型 | 用途 |
+|------|------|
+| `Snapshot` | 对象状态快照，用于回溯和版本管理 |
+| `Dependency` | 对象间依赖关系 |
+| `Suggestion` | 创作建议 |
 
 ### 检索对象
 
-- `Memory`
+| 模型 | 主要字段 |
+|------|----------|
+| `Memory` | id, project_id, memory_type, content, embedding, meta |
 
 当前系统不维护 `User` 实体，也不为 `Project` 绑定 owner。
 
@@ -140,12 +148,12 @@
 
 当前内部角色包括：
 
-- `planner`
-- `researcher`
-- `writer`
-- `editor`
-- `continuity`
-- `executor`
+- `planner`：规划器
+- `researcher`：研究员
+- `writer`：写作者
+- `editor`：编辑者
+- `continuity`：连续性检查
+- `executor`：执行器
 
 这些角色已经具备：
 
@@ -162,7 +170,7 @@
 
 ### 已实现
 
-- `Project.meta.agent_profile_id`
+- `Project.meta.agent_profile_id`（实际存储在 `agent_profile_id` 字段）
 - 内置 `default`
 - 内置 `xianxia_intrigue`
 - `AGENT_SKILLS_DIR` profile 根目录覆盖
@@ -178,30 +186,60 @@
 
 ### Execution Contract
 
-- phases
-- child units
-- capability registry
-- capability execution record
+```json
+{
+  "registry_version": "string",
+  "phases": [
+    {
+      "phase": "plan | build",
+      "mode": "restricted | gated",
+      "allowed_permission_levels": ["read_search", "standard_write", "high_risk_write"],
+      "tool_scope": ["..."],
+      "role_scope": ["planner", "researcher", "writer", "editor", "continuity"],
+      "confirmation_gate": "none | single | double",
+      "requires_confirmation": false,
+      "requires_secondary_confirmation": false,
+      "operation_count": 0,
+      "child_units": [...],
+      "capabilities": [...]
+    }
+  ]
+}
+```
 
 ### Risk Contract
 
-- risk policy registry
-- applied policies
-- run risk summary
+```json
+{
+  "policy_version": "string",
+  "overall_risk_level": "low | medium | high",
+  "confirmation_gate": "none | single | double",
+  "requires_confirmation": true,
+  "requires_secondary_confirmation": false,
+  "total_operations": 1,
+  "low_risk_operation_count": 1,
+  "medium_risk_operation_count": 0,
+  "high_risk_operation_count": 0,
+  "high_risk_operation_positions": [],
+  "secondary_confirmation_operation_positions": [],
+  "applied_policies": [...],
+  "summary": "string"
+}
+```
 
 ### Verification Contract
 
-- verification status
-- verification summary
-- operation execution result
+- verification_status: `pending | passed | failed | skipped`
+- verification_summary: 详细验证结果
+- operation execution_result: 每个操作的执行结果
 
 ### Compact Contract
 
-- compact policy
-- planner window
-- retained window
-- active bundle contract
-- checkpoint compaction boundary
+- compact_policy: 压缩策略配置
+- planner_window: 规划器窗口
+- retained_window: 保留窗口
+- active_bundle_contract: 活跃数据包契约
+- compaction_boundary: 压缩边界
 
 前端和测试都直接消费这些字段，不需要再从非结构化 `meta` 反推状态。
 
@@ -221,22 +259,28 @@
 
 #### Character
 
-- `character_name_empty`：名称不能为空
-- `character_name_duplicate`：同项目下名称唯一
-- `character_age_invalid`：年龄必须为非负整数
+| 规则 ID | 描述 |
+|---------|------|
+| `character_name_empty` | 名称不能为空 |
+| `character_name_duplicate` | 同项目下名称唯一 |
+| `character_age_invalid` | 年龄必须为非负整数 |
 
 #### WorldSetting
 
-- `world_setting_name_empty`：名称不能为空
-- `world_setting_content_empty`：内容不能为空
-- `world_setting_name_duplicate`：同分类下名称唯一
+| 规则 ID | 描述 |
+|---------|------|
+| `world_setting_name_empty` | 名称不能为空 |
+| `world_setting_content_empty` | 内容不能为空 |
+| `world_setting_name_duplicate` | 同分类下名称唯一 |
 
 #### Chapter/Scene
 
-- 章节序号唯一
-- 场景序号唯一
-- 卷归属
-- POV 人物归属
+| 规则 ID | 描述 |
+|---------|------|
+| 章节序号唯一 | 同项目内 chapter_number 唯一 |
+| 场景序号唯一 | 同章节内 scene_order 唯一 |
+| 卷归属 | volume_id 必须属于同一项目 |
+| POV 人物归属 | pov_character_id 必须属于同一项目 |
 
 ## E2E 测试基础设施
 
@@ -279,6 +323,7 @@
 | `status` | init, load_context, compact_check, prepare_operations, risk_assessment | 状态更新 |
 | `thinking` | planning, plan_complete | Agent 思考过程 |
 | `operation_progress` | prepare | 操作准备进度 |
+| `verification` | - | 验证结果 |
 | `message_chunk` | assistant_message | 助手消息分块 |
 | `result` | complete | 最终执行结果 |
 | `error` | - | 错误信息 |
@@ -299,7 +344,7 @@ Content-Type: application/json
 响应使用 SSE 格式：
 
 ```
-data: {"type": "status", "stage": "init", "message": "正在初始化 Agent 工作流...", "timestamp": "..."}
+data: {"type": "status", "stage": "init", "message": "正在初始化 Agent 工作流...", "timestamp": "...", "detail": {}}
 
 data: {"type": "thinking", "stage": "planning", "message": "Agent 正在分析您的请求并规划操作...", "detail": {...}}
 
@@ -362,6 +407,7 @@ GET /api/v1/projects/{project_id}/package
 
 ```
 POST /api/v1/projects/import
+Content-Type: multipart/form-data
 ```
 
 导入策略：
@@ -402,23 +448,23 @@ POST /api/v1/projects/import
 
 长线程通过 checkpoint 压缩上下文。当前 planner 有两种输入模式：
 
-- `recent_window`
-- `checkpoint_delta`
+- `recent_window`：使用最近消息窗口
+- `checkpoint_delta`：使用检查点增量
 
 checkpoint 当前保存：
 
-- `thread_summary`
-- `recent_run_digest`
-- `active_object_bundle`
-- `profile_id`
+- `thread_summary`：线程摘要
+- `recent_run_digest`：最近运行摘要
+- `active_object_bundle`：活跃对象包
+- `profile_id`：配置文件 ID
 
 compact 行为通过以下 contract 对外可见：
 
-- `compact_policy`
-- `planner_window`
-- `retained_window`
-- `active_bundle_contract`
-- `compaction_boundary`
+- `compact_policy`：压缩策略
+- `planner_window`：规划器窗口
+- `retained_window`：保留窗口
+- `active_bundle_contract`：活跃数据包契约
+- `compaction_boundary`：压缩边界
 
 ## 用户体验优化
 
@@ -509,3 +555,53 @@ compact 行为通过以下 contract 对外可见：
 - 面向公网的完整安全加固
 
 这些边界由产品定位决定，不代表系统内部结构不完整。
+
+## API 端点总览
+
+### 创作对象 API
+
+| 端点前缀 | 功能 |
+|----------|------|
+| `/api/v1/projects` | 项目 CRUD |
+| `/api/v1/characters` | 人物 CRUD |
+| `/api/v1/world-settings` | 世界观 CRUD |
+| `/api/v1/volumes` | 卷 CRUD |
+| `/api/v1/chapters` | 章节 CRUD |
+| `/api/v1/scenes` | 场景 CRUD |
+| `/api/v1/memories` | 记忆 CRUD + 向量搜索 |
+| `/api/v1/suggestions` | 建议 CRUD |
+| `/api/v1/dependencies` | 依赖关系 CRUD |
+| `/api/v1/snapshots` | 快照 CRUD |
+
+### Agent 工作流 API
+
+| 端点 | 功能 |
+|------|------|
+| `POST /api/v1/agent/threads` | 创建/获取项目线程 |
+| `GET /api/v1/agent/threads/{thread_id}` | 获取线程状态 |
+| `POST /api/v1/agent/threads/{thread_id}/messages` | 发送消息（支持流式） |
+| `GET /api/v1/agent/runs/{run_id}` | 获取运行状态 |
+| `POST /api/v1/agent/runs/{run_id}/confirm` | 确认执行 |
+| `POST /api/v1/agent/runs/{run_id}/confirm-high-risk` | 高风险二次确认 |
+| `POST /api/v1/agent/runs/{run_id}/cancel` | 取消运行 |
+| `GET /api/v1/agent/profiles` | 获取可用配置 |
+| `GET /api/v1/agent/capabilities` | 获取能力注册表 |
+| `GET /api/v1/agent/risk-policies` | 获取风险策略注册表 |
+| `GET /api/v1/agent/skills` | 获取技能目录 |
+
+### 导出/导入 API
+
+| 端点 | 功能 |
+|------|------|
+| `GET /api/v1/projects/{id}/export` | 导出为 TXT/Markdown |
+| `GET /api/v1/projects/{id}/package` | 导出为 ZIP 包 |
+| `POST /api/v1/projects/import` | 从 ZIP 包导入 |
+
+### Legacy API
+
+| 端点 | 功能 |
+|------|------|
+| `POST /api/v1/agent/chat` | 传统聊天接口 |
+| `POST /api/v1/agent/chat/stream` | 传统流式聊天 |
+| `POST /api/v1/agent/auto-summarize` | 自动摘要 |
+| `POST /api/v1/agent/continuity-check` | 连续性检查 |

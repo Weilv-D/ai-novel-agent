@@ -32,7 +32,7 @@ type ButtonProps = ButtonAsButton | ButtonAsLink;
 const variantStyles: Record<Variant, string> = {
   primary: "border-transparent bg-ink-950 text-paper-soft shadow-lg hover:-translate-y-[2px] hover:bg-ink-900 hover:shadow-xl active:translate-y-0 active:scale-[0.98] focus-visible:ring-seal/40",
   secondary: "border-transparent bg-seal text-white shadow-md hover:-translate-y-[2px] hover:bg-seal-dark hover:shadow-lg active:translate-y-0 active:scale-[0.98] focus-visible:ring-seal/40",
-  outline: "border-line/50 bg-white/60 text-ink-900 hover:-translate-y-[2px] hover:bg-white/90 hover:border-line/70 active:translate-y-0 active:scale-[0.98] focus-visible:ring-seal/30 backdrop-blur-sm",
+  outline: "border-line/50 bg-[var(--button-outline-surface)] text-ink-900 shadow-lg shadow-ink-950/5 hover:-translate-y-[2px] hover:bg-[var(--button-outline-hover)] hover:border-line/70 active:translate-y-0 active:scale-[0.98] focus-visible:ring-seal/30 backdrop-blur-sm",
   ghost: "border-transparent bg-transparent text-ink-800 hover:bg-ink-950/8 active:scale-[0.98] focus-visible:ring-seal/30",
   danger: "border-transparent bg-red-800 text-white shadow-md hover:-translate-y-[2px] hover:bg-red-700 hover:shadow-lg active:translate-y-0 active:scale-[0.98] focus-visible:ring-red-800/40",
 };

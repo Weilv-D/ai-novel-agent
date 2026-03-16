@@ -68,21 +68,21 @@ export function PersonalSetupPanel() {
   ), []);
 
   return (
-    <Card className="overflow-hidden rounded-2xl border-none p-0 bg-white/40 shadow-xl shadow-ink-900/5 backdrop-blur-md transition-all will-change-transform">
+    <Card className="overflow-hidden rounded-2xl border border-line/50 bg-[var(--surface-elevated)] p-0 shadow-xl shadow-ink-900/8 backdrop-blur-md transition-all will-change-transform">
       <CardHeader className="border-b border-line/30 bg-gradient-to-r from-paper-deep/40 to-transparent px-8 py-6">
         <p className="ink-kicker">Personal Mode</p>
         <CardTitle className="mt-2 text-2xl tracking-widest font-serif font-medium">个人的小书斋</CardTitle>
-        <CardDescription className="text-ink-700 tracking-wide mt-2">
+        <CardDescription className="mt-2 tracking-wide text-ink-800">
           单人沉浸式工作台。每一笔灵光，皆归于本心。
         </CardDescription>
       </CardHeader>
-      <CardContent className="px-8 py-8 bg-paper-soft/40 relative min-h-[300px]">
+      <CardContent className="relative min-h-[300px] bg-[var(--surface-subtle)] px-8 py-8">
         {isLoading ? (
           SkeletonLoader
         ) : (
           <div className="space-y-6 animate-fade-in">
             {health && (
-              <div className="rounded-xl border border-seal/20 bg-seal/5 p-5 text-sm text-ink-800 tracking-wide shadow-inner">
+              <div className="rounded-xl border border-seal/30 bg-[var(--surface-seal-soft)] p-5 text-sm tracking-wide text-ink-800 shadow-inner">
                 <div className="flex gap-2 items-center mb-2 font-medium text-seal-dark">
                   <span className="w-1.5 h-1.5 rounded-full bg-seal shadow-[0_0_8px_rgba(200,70,57,0.6)]"></span>
                   砚台状态
@@ -98,7 +98,7 @@ export function PersonalSetupPanel() {
             )}
 
             {loadError && (
-              <div className="rounded-xl border border-red-800/20 bg-red-800/5 p-4 text-sm text-red-800 shadow-inner">
+              <div className="rounded-xl border border-[rgba(var(--danger),0.3)] bg-[rgba(var(--danger),0.1)] p-4 text-sm text-[rgb(var(--danger))] shadow-inner">
                 后阁未开，墨香难达：{loadError}
               </div>
             )}
@@ -122,7 +122,7 @@ export function PersonalSetupPanel() {
               </div>
 
               {message && (
-                <p className="text-sm text-ink-700 font-serif italic tracking-wide animate-fade-in block">
+                <p className="block animate-fade-in text-sm font-serif italic tracking-wide text-ink-800">
                   {message}
                 </p>
               )}
