@@ -25,7 +25,7 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - preview-first、confirm-then-execute
 - 项目级 profile
 - 文件化 planner / operation skills
-- 风险摘要与高风险二次确认
+- 风险摘要与动态确认门禁（命中高风险策略时二次确认）
 - execution contract、child unit contract、capability record
 - hook trace、subtask trace、checkpoint trace
 - 流式事件系统（SSE）
@@ -74,10 +74,12 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 当前实测结果：
 
 - 后端测试：`441 passed` ✅
+- 后端覆盖率（statement）：`75%` ⚠️（未达 95% 目标）
 - 后端 lint：通过 ✅
 - 后端类型检查：通过 ✅
 - 前端 lint：通过 ✅
 - 前端构建：通过 ✅
+- E2E：`7 passed` ✅
 
 ## 交付边界
 

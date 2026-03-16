@@ -19,7 +19,7 @@ AI Novel Agent 由三部分组成：
 - 章节与场景：按卷、章、场景组织创作内容
 - Agent Workspace：用自然语言提出创作、修改、续写和重构指令
 - Preview-first 流程：Agent 先生成计划和预览，再确认执行
-- 风险控制：高风险正文覆盖需要二次确认
+- 风险控制：按风险策略动态门禁，长文本覆盖或多对象重写会触发二次确认
 - Verification Gate：落库结果经过字段、快照、内容迁移和业务语义校验
 - Domain Verification：人物名称唯一性、年龄合法性；设定内容完整性、分类唯一性
 - 长线程压缩：使用 checkpoint、planner window、retained window 和 active bundle contract 管理长期上下文
@@ -96,7 +96,7 @@ docker compose up -d
 3. 创建项目，并为项目选择合适的 Agent profile。
 4. 进入项目详情页，使用 Agent Workspace 提出自然语言指令。
 5. 检查 run 生成的 operation 计划、diff 预览、风险摘要和内部执行摘要。
-6. 完成一次确认，必要时完成高风险二次确认。
+6. 完成一次确认；若命中高风险策略，再完成二次确认。
 7. 在人物、设定、章节、场景页面做复核或局部手工调整。
 
 Agent Workspace 适合处理这些任务：
@@ -263,6 +263,7 @@ ai-novel-agent/
 - [项目状态](docs/STATUS.md)
 - [演进计划](docs/IMPLEMENTATION_PLAN.md)
 - [业务逻辑审查报告](docs/REVIEW_REPORT.md)
+- [测试报告](docs/TEST_REPORT.md)
 
 ## License
 

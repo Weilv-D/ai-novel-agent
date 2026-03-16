@@ -1,332 +1,215 @@
-# 开发手册
+# 开发与部署指南
 
-本文档面向仓库维护者，说明本地环境、运行方式、质量门、清理规则和文档分工。
+最后更新：2026-03-16
 
-## 工作区约定
+## 1. 环境要求
 
-当前仓库默认使用这些本地环境：
+### 后端
 
-- `backend/.venv`：后端 Python 虚拟环境
-- `frontend/node_modules`：前端依赖目录
-- `backend/.env`：后端本地配置
-- `frontend/.env.local`：前端本地配置
+- Python >= 3.11
+- PostgreSQL >= 16（生产建议，需 pgvector）
+- Redis >= 7
 
-仓库根目录的 `/.venv` 不参与项目运行。
+### 前端
 
-## 开发模式
+- Node.js >= 18
+- npm >= 9
 
-仓库当前围绕独立实例模式开发，主要约定如下：
+### 可选（端到端测试）
 
-- 不维护 `User` 实体和项目归属用户
-- 访问控制保留为实例级 `ADMIN_API_KEY`
-- Agent 主流程是 `thread / run / operation`
-- 主交互入口是项目详情页内的 `AgentWorkspace`
-- 所有结构化写入都走 preview-first、confirm-then-execute
-- 长线程通过 checkpoint compact flow 管理上下文
+- Playwright 浏览器依赖（`npx playwright install --with-deps chromium`）
 
-## 后端开发
+## 2. 依赖安装
 
-### 环境要求
-
-| 依赖 | 版本要求 |
-|------|----------|
-| Python | >= 3.11 |
-| PostgreSQL | >= 16 (with pgvector) |
-| Redis | >= 7 |
-
-### 初始化
+### 后端
 
 ```bash
 cd backend
 python3 -m venv .venv
 ./.venv/bin/python -m pip install -e ".[dev]"
 cp .env.example .env
-./.venv/bin/alembic upgrade head
 ```
 
-### 环境变量配置
-
-| 变量名 | 必需 | 默认值 | 说明 |
-|--------|------|--------|------|
-| DATABASE_URL | 是 | - | PostgreSQL 连接字符串 |
-| REDIS_URL | 否 | redis://localhost:6379 | Redis 连接字符串 |
-| OPENAI_API_KEY | 是 | - | OpenAI API 密钥 |
-| OPENAI_BASE_URL | 否 | - | OpenAI API 基础 URL（用于兼容 API） |
-| OPENAI_MODEL | 否 | gpt-4o | 使用的模型名称 |
-| EMBEDDING_MODEL | 否 | text-embedding-3-small | Embedding 模型名称 |
-| EMBEDDING_DIMENSION | 否 | 1536 | Embedding 向量维度 |
-| ADMIN_API_KEY | 否 | - | 管理员 API 密钥（启用后所有业务接口需要认证） |
-| API_KEY_HEADER | 否 | X-API-Key | API Key 请求头名称 |
-| AGENT_SKILLS_DIR | 否 | - | Agent Skills 根目录覆盖 |
-| AGENT_E2E_MODE | 否 | - | E2E 测试模式（fixture） |
-| AGENT_E2E_FIXTURE_PATH | 否 | - | E2E 测试 fixture 文件路径 |
-
-### 常用命令
-
-```bash
-# 完整验证
-./.venv/bin/python verify.py
-
-# 运行测试
-./.venv/bin/python -m pytest
-
-# 运行测试（带覆盖率）
-./.venv/bin/python -m pytest --cov=app --cov-report=html
-
-# 代码检查
-./.venv/bin/ruff check app tests scripts
-
-# 类型检查
-./.venv/bin/python -m mypy app
-
-# 启动开发服务器
-./.venv/bin/python -m uvicorn app.main:app --reload --port 8000
-```
-
-### 运行约定
-
-- 后端命令应在 `backend/` 目录执行，以便 `Settings` 正确解析 `.env`
-- shell 环境变量优先级高于 `.env`
-- SQLite 仅用于测试和轻量验证；目标运行环境仍是 PostgreSQL + pgvector
-- `AGENT_SKILLS_DIR` 是 profile 根目录覆盖入口
-- `GET /api/v1/agent/profiles`、`/skills`、`/risk-policies`、`/capabilities` 是运行期排障的第一批接口
-
-## 前端开发
-
-### 环境要求
-
-| 依赖 | 版本要求 |
-|------|----------|
-| Node.js | >= 18 |
-| npm | >= 9 |
-
-### 初始化
+### 前端
 
 ```bash
 cd frontend
 npm install
 ```
 
-### 环境变量配置
-
-| 变量名 | 必需 | 默认值 | 说明 |
-|--------|------|--------|------|
-| NEXT_PUBLIC_API_URL | 否 | http://localhost:8000 | 后端 API 地址 |
-
-### 常用命令
+### E2E（仓库根目录）
 
 ```bash
-# 开发模式
-npm run dev
-
-# 代码检查
-npm run lint
-
-# 构建
-npm run build
-
-# 启动生产服务器
-npm run start
+npm install
+npx playwright install --with-deps chromium
 ```
 
-### 运行约定
+## 3. 配置说明
 
-- Next.js 配置位于 `frontend/next.config.mjs`
-- 全局样式入口由 `frontend/app/layout.tsx` 引入 `frontend/app/globals.css`
-- 前端脚本通过 `node` 直接调用本地 CLI，不依赖 `node_modules/.bin` 的可执行位
-- 页面主入口是 `frontend/app/projects/[id]/page.tsx`
-- `frontend/.next-docker` 是 Docker 前端运行目录，不应在服务运行时被删除
+后端配置文件：`backend/.env`
 
-## Docker 联调
+关键参数：
 
-Docker Compose 提供完整本地环境：
+| 变量 | 是否必填 | 说明 |
+|---|---|---|
+| `DATABASE_URL` | 是 | 数据库连接串（生产建议 PostgreSQL） |
+| `REDIS_URL` | 建议 | Redis 连接串 |
+| `LLM_API_KEY` | 建议 | Agent 规划与生成所需 |
+| `LLM_BASE_URL` | 否 | OpenAI 兼容接口地址 |
+| `LLM_MODEL` | 否 | 聊天模型 |
+| `EMBEDDING_API_KEY` | 可选 | 留空时复用 LLM key |
+| `EMBEDDING_BASE_URL` | 可选 | 留空时复用 LLM base url |
+| `EMBEDDING_MODEL` | 否 | embedding 模型 |
+| `EMBEDDING_DIMENSION` | 是 | 必须与 embedding 实际维度一致 |
+| `ADMIN_API_KEY` | 可选 | 配置后业务接口要求鉴权 |
+| `API_KEY_HEADER` | 否 | 默认 `X-API-Key` |
+| `AGENT_SKILLS_DIR` | 可选 | 自定义 profile/skill 根目录 |
+| `AGENT_E2E_MODE` | 可选 | E2E fixture 模式开关 |
+| `AGENT_E2E_FIXTURE_PATH` | 可选 | fixture 路径 |
+
+前端配置文件：`frontend/.env.local`
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | 后端地址 |
+
+## 4. 本地启动步骤
+
+### 4.1 后端（本地）
+
+```bash
+cd backend
+./.venv/bin/alembic upgrade head
+./.venv/bin/python -m uvicorn app.main:app --reload --port 8000
+```
+
+### 4.2 前端（本地）
+
+```bash
+cd frontend
+npm run dev
+```
+
+访问：
+
+- 前端：`http://localhost:3000`
+- Swagger：`http://localhost:8000/docs`
+- 健康检查：`http://localhost:8000/api/v1/health`
+
+## 5. Docker 部署（推荐联调）
 
 ```bash
 cd infra
 docker compose up -d
 docker compose logs -f backend
 docker compose logs -f frontend
+```
+
+默认端口：
+
+- 前端：`3000`
+- 后端：`8000`
+- PostgreSQL：`5433`
+- Redis：`6379`
+
+停止：
+
+```bash
+cd infra
 docker compose down
 ```
 
-默认访问地址：
+## 6. 验证方法
 
-| 服务 | 地址 |
-|------|------|
-| 前端工作台 | http://localhost:3000 |
-| 后端 API | http://localhost:8000 |
-| API 文档 | http://localhost:8000/docs |
-| 健康检查 | http://localhost:8000/api/v1/health |
-| PostgreSQL | localhost:5433 |
-| Redis | localhost:6379 |
+### 6.1 后端质量门
 
-### Docker Compose 服务
+```bash
+cd backend
+./.venv/bin/ruff check app tests
+./.venv/bin/python -m mypy app
+./.venv/bin/python -m pytest tests
+```
 
-| 服务 | 说明 |
-|------|------|
-| postgres | PostgreSQL 16 + pgvector |
-| redis | Redis 7 |
-| backend | FastAPI 后端 |
-| frontend | Next.js 前端 |
+### 6.2 前端质量门
 
-## 验证路径
+```bash
+cd frontend
+npm run lint
+npm run build
+```
 
-### 仓库级验证
+### 6.3 E2E
+
+```bash
+cd /path/to/ai-novel-agent
+npm run e2e
+```
+
+### 6.4 一键验证（仓库根目录）
 
 ```bash
 make verify
 ```
 
-包含：
+## 7. 使用示例（开发调试）
 
-- 后端 lint
-- 后端类型检查
-- 后端测试
-- 前端 lint
-- 前端构建
-
-### E2E 测试
+### 7.1 创建项目
 
 ```bash
-make e2e
+curl -X POST 'http://localhost:8000/api/v1/projects' \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -d '{
+    "name": "示例项目",
+    "genre": "xianxia",
+    "target_audience": "adult",
+    "agent_profile_id": "default"
+  }'
 ```
 
-E2E 测试使用 Playwright，运行时会启动隔离的后端（SQLite 临时库）和前端服务。
+预期结果：返回 `201` 与 `ProjectResponse`。
 
-### 后端独立验证
+### 7.2 Agent 生成待确认计划
 
 ```bash
-make backend-verify
-cd backend && ./.venv/bin/python scripts/verify_sqlite_integration.py
-cd backend && ./.venv/bin/python scripts/verify_api_integration.py
+curl -X POST 'http://localhost:8000/api/v1/agent/threads' \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -d '{"project_id":"<project_id>"}'
 ```
-
-### 快速结构检查
 
 ```bash
-cd backend
-./.venv/bin/python verify.py
+curl -X POST 'http://localhost:8000/api/v1/agent/threads/<thread_id>/messages' \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -d '{"content":"创建一个测试人物","context":{},"stream":false}'
 ```
 
-它覆盖导入、OpenAPI、路由和 Alembic 基本健康度。
+预期结果：返回 `run.status=awaiting_confirmation`（或按风险策略返回高风险待确认态）。
 
-## 清理规则
+### 7.3 导出项目包
 
 ```bash
-make clean
+curl -X GET 'http://localhost:8000/api/v1/projects/<project_id>/package' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -o project_package.zip
 ```
 
-`make clean` 会清理缓存和临时构建产物，但不会删除：
+预期结果：下载 zip，包含 `manifest.json` 和 `project_bundle.json`。
 
-- `backend/.venv`
-- `frontend/node_modules`
-- 本地 `.env` 文件
-- `frontend/.next-docker`
+## 8. 注意事项
 
-## 文档分工
+### 8.1 性能
 
-| 文档 | 用途 |
-|------|------|
-| [README.md](../README.md) | 使用者手册 |
-| [backend/README.md](../backend/README.md) | 后端运行与结构说明 |
-| [TECH_IMPLEMENTATION.md](TECH_IMPLEMENTATION.md) | 当前实现 |
-| [TECH_ARCH.md](TECH_ARCH.md) | 目标架构 |
-| [STATUS.md](STATUS.md) | 交付状态与边界 |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 演进计划 |
-| [API_REFERENCE.md](API_REFERENCE.md) | API 参考文档 |
-| [PRD.md](PRD.md) | 产品需求文档 |
+- 长线程项目建议关注 `AgentThreadCheckpoint` 规模与 compact 触发频率。
+- 大型项目导入导出会放大 I/O 与序列化耗时，建议在低峰执行。
 
-## 测试策略
+### 8.2 安全
 
-### 后端测试
+- 生产环境必须设置强随机 `ADMIN_API_KEY` 与 `SECRET_KEY`。
+- 建议在网关层补充限流、IP 白名单与审计日志。
 
-| 测试类型 | 目录 | 说明 |
-|----------|------|------|
-| API 集成测试 | `tests/test_api/` | 测试 API 端点 |
-| 服务层单元测试 | `tests/test_services/` | 测试业务逻辑 |
-| Schema 验证测试 | `tests/test_schemas/` | 测试 Pydantic 模型 |
-| 核心模块测试 | `tests/test_core/` | 测试配置、异常等 |
-| 集成测试 | `tests/test_integration/` | 端到端集成测试 |
+### 8.3 兼容性
 
-### 测试配置
-
-- 测试框架：pytest + pytest-asyncio
-- 测试数据库：SQLite（隔离测试）
-- 覆盖率工具：pytest-cov
-
-### 运行特定测试
-
-```bash
-# 运行单个测试文件
-./.venv/bin/python -m pytest tests/test_api/test_projects.py -v
-
-# 运行特定测试类
-./.venv/bin/python -m pytest tests/test_api/test_projects.py::TestProjects -v
-
-# 运行特定测试方法
-./.venv/bin/python -m pytest tests/test_api/test_projects.py::TestProjects::test_create_project -v
-
-# 运行带标记的测试
-./.venv/bin/python -m pytest -m "not slow" -v
-```
-
-## 常见问题
-
-### 数据库迁移
-
-```bash
-# 生成迁移文件
-./.venv/bin/alembic revision --autogenerate -m "description"
-
-# 应用迁移
-./.venv/bin/alembic upgrade head
-
-# 回滚迁移
-./.venv/bin/alembic downgrade -1
-```
-
-### 依赖更新
-
-```bash
-# 后端依赖更新
-cd backend
-./.venv/bin/pip install --upgrade pip
-./.venv/bin/pip install -e ".[dev]"
-
-# 前端依赖更新
-cd frontend
-npm update
-```
-
-### 日志调试
-
-后端使用 structlog 进行结构化日志记录：
-
-```python
-import structlog
-logger = structlog.get_logger()
-logger.info("message", key="value")
-```
-
-日志级别可通过环境变量 `LOG_LEVEL` 控制。
-
-## 性能考量
-
-### 后端
-
-- 使用异步 SQLAlchemy 2.0 提高并发性能
-- 数据库连接池配置在 `app/core/config.py`
-- Redis 用于缓存和会话管理
-
-### 前端
-
-- Next.js 15 App Router 支持服务端渲染
-- 使用 Zustand 进行轻量级状态管理
-- 骨架屏提升感知性能
-
-## 安全注意事项
-
-- `ADMIN_API_KEY` 启用后，所有业务接口需要认证
-- API Key 通过自定义请求头传递（默认 `X-API-Key`）
-- 生产环境应配置 HTTPS
-- 敏感配置应通过环境变量传递，不要提交到代码仓库
+- SQLite 主要用于测试和 E2E，不建议作为生产主库。
+- 变更 embedding 模型时必须同步 `EMBEDDING_DIMENSION`，否则检索与导入会出现降级行为。

@@ -1,1398 +1,3219 @@
 # API Reference
 
-Last Updated: 2026-03-16
+最后更新：2026-03-16
 
-## Overview
+本文档基于当前代码实时导出的 OpenAPI 规格（62 个 path，85 个 schema）生成。
 
-AI Novel Agent provides a RESTful API for managing novel creation projects, characters, world settings, chapters, scenes, and Agent workflow operations. All endpoints are prefixed with `/api/v1`.
+## 基础信息
 
-## Authentication
+- Base URL: `http://localhost:8000/api/v1`
+- 鉴权: 除 `GET /api/v1/health` 外，业务接口在配置 `ADMIN_API_KEY` 后需携带请求头。
+- 默认鉴权头: `X-API-Key: <ADMIN_API_KEY>`（可由 `API_KEY_HEADER` 覆盖）
+- JSON 请求默认头: `Content-Type: application/json`
+- 文件上传请求头: `Content-Type: multipart/form-data`
 
-When `ADMIN_API_KEY` is configured in the backend environment, all business endpoints require authentication via a custom header:
+## 统一响应与错误
 
-```
-X-API-Key: your-admin-api-key
-```
-
-The header name can be customized via `API_KEY_HEADER` environment variable.
-
-## Base URL
-
-```
-http://localhost:8000/api/v1
-```
-
-## Response Format
-
-All responses are in JSON format. Error responses follow this structure:
+- 成功响应: 2xx + 对应 schema（见每个接口的“成功响应”）
+- 业务异常（400/404/409/503/500 等）默认结构：
 
 ```json
 {
-  "detail": "Error message"
-}
-```
-
----
-
-## Health Check
-
-### GET /health
-
-Check system health status.
-
-**Response:**
-
-```json
-{
-  "status": "healthy",
-  "mode": "standalone",
-  "database": "healthy",
-  "redis": "healthy"
-}
-```
-
----
-
-## Projects
-
-### POST /projects
-
-Create a new project.
-
-**Request Body:**
-
-```json
-{
-  "name": "string (required, 1-255 chars)",
-  "genre": "string | null (max 100 chars)",
-  "target_audience": "string | null (max 100 chars)",
-  "target_word_count": "integer | null (>= 0)",
-  "status": "drafting | writing | revising | completed (default: drafting)",
-  "summary": "string | null",
-  "notes": "string | null",
-  "agent_profile_id": "string (default: 'default', 1-80 chars)",
-  "meta": "object (default: {})"
-}
-```
-
-**Response:** `201 Created`
-
-```json
-{
-  "id": "uuid",
-  "name": "string",
-  "genre": "string | null",
-  "target_audience": "string | null",
-  "target_word_count": "integer | null",
-  "status": "string",
-  "summary": "string | null",
-  "notes": "string | null",
-  "agent_profile_id": "string",
-  "meta": "object",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /projects
-
-List all projects.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-```json
-[
-  {
-    "id": "uuid",
-    "name": "string",
-    ...
-  }
-]
-```
-
-### GET /projects/{project_id}
-
-Get a project by ID.
-
-**Response:** `200 OK`
-
-### PATCH /projects/{project_id}
-
-Update a project.
-
-**Request Body:** Partial project fields
-
-**Response:** `200 OK`
-
-### DELETE /projects/{project_id}
-
-Delete a project.
-
-**Response:** `200 OK`
-
----
-
-## Characters
-
-### POST /characters
-
-Create a new character.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "uuid (required)",
-  "name": "string (required, 1-255 chars)",
-  "role": "string | null (max 100 chars)",
-  "profile": "object (default: {})",
-  "relationships": "object (default: {})",
-  "arc_state": "object (default: {})",
-  "notes": "string | null"
-}
-```
-
-**Field Descriptions:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| name | string | Character name (required) |
-| role | string | Character role (protagonist, antagonist, etc.) |
-| profile | object | Character profile data (appearance, personality, background, etc.) |
-| relationships | object | Relationship network with other characters |
-| arc_state | object | Character arc progression state |
-| notes | string | Additional notes |
-
-**Response:** `201 Created`
-
-```json
-{
-  "id": "uuid",
-  "project_id": "uuid",
-  "name": "string",
-  "role": "string | null",
-  "profile": "object",
-  "relationships": "object",
-  "arc_state": "object",
-  "notes": "string | null",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /characters/project/{project_id}
-
-List all characters for a project.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /characters/{character_id}
-
-Get a character by ID.
-
-**Response:** `200 OK`
-
-### PATCH /characters/{character_id}
-
-Update a character.
-
-**Request Body:**
-
-```json
-{
-  "name": "string | null (1-255 chars)",
-  "role": "string | null (max 100 chars)",
-  "profile": "object | null",
-  "relationships": "object | null",
-  "arc_state": "object | null",
-  "notes": "string | null"
-}
-```
-
-**Response:** `200 OK`
-
-### DELETE /characters/{character_id}
-
-Delete a character.
-
-**Response:** `200 OK`
-
----
-
-## World Settings
-
-### POST /world-settings
-
-Create a new world setting.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "uuid (required)",
-  "category": "string (required, see categories below)",
-  "name": "string (required, 1-255 chars)",
-  "content": "string | null",
-  "meta": "object (default: {})"
-}
-```
-
-**Category Values:**
-
-| Category | Description |
-|----------|-------------|
-| magic_system | Magic or power system |
-| geography | World geography |
-| history | World history |
-| organization | Organizations and factions |
-| technology | Technology level |
-| culture | Cultural elements |
-| religion | Religious systems |
-| economy | Economic systems |
-| rules | World rules and laws |
-| other | Other settings |
-
-**Response:** `201 Created`
-
-```json
-{
-  "id": "uuid",
-  "project_id": "uuid",
-  "category": "string",
-  "name": "string",
-  "content": "string | null",
-  "meta": "object",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /world-settings/project/{project_id}
-
-List all world settings for a project.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /world-settings/project/{project_id}/category/{category}
-
-List world settings by category.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /world-settings/{setting_id}
-
-Get a world setting by ID.
-
-**Response:** `200 OK`
-
-### PATCH /world-settings/{setting_id}
-
-Update a world setting.
-
-**Request Body:**
-
-```json
-{
-  "category": "string | null",
-  "name": "string | null (1-255 chars)",
-  "content": "string | null",
-  "meta": "object | null"
-}
-```
-
-**Response:** `200 OK`
-
-### DELETE /world-settings/{setting_id}
-
-Delete a world setting.
-
-**Response:** `200 OK`
-
----
-
-## Volumes
-
-### POST /volumes
-
-Create a new volume.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "uuid (required)",
-  "volume_number": "integer | null (>= 1)",
-  "title": "string | null (max 255 chars)",
-  "outline": "string | null",
-  "notes": "string | null"
-}
-```
-
-**Response:** `201 Created`
-
-```json
-{
-  "id": "uuid",
-  "project_id": "uuid",
-  "volume_number": "integer | null",
-  "title": "string | null",
-  "outline": "string | null",
-  "notes": "string | null",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /volumes/project/{project_id}
-
-List all volumes for a project.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /volumes/{volume_id}
-
-Get a volume by ID.
-
-**Response:** `200 OK`
-
-### PATCH /volumes/{volume_id}
-
-Update a volume.
-
-**Request Body:**
-
-```json
-{
-  "volume_number": "integer | null (>= 1)",
-  "title": "string | null (max 255 chars)",
-  "outline": "string | null",
-  "notes": "string | null"
-}
-```
-
-**Response:** `200 OK`
-
-### DELETE /volumes/{volume_id}
-
-Delete a volume.
-
-**Response:** `200 OK`
-
----
-
-## Chapters
-
-### POST /chapters
-
-Create a new chapter.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "uuid (required)",
-  "volume_id": "uuid | null",
-  "chapter_number": "integer (required, >= 1)",
-  "title": "string | null (max 255 chars)",
-  "outline": "string | null",
-  "content": "string | null",
-  "status": "draft | writing | completed (default: draft)",
-  "notes": "string | null"
-}
-```
-
-**Response:** `201 Created`
-
-```json
-{
-  "id": "uuid",
-  "project_id": "uuid",
-  "volume_id": "uuid | null",
-  "chapter_number": "integer",
-  "title": "string | null",
-  "outline": "string | null",
-  "content": "string | null",
-  "status": "string",
-  "notes": "string | null",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /chapters/project/{project_id}
-
-List all chapters for a project.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /chapters/volume/{volume_id}
-
-List all chapters for a volume.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /chapters/{chapter_id}
-
-Get a chapter by ID.
-
-**Response:** `200 OK`
-
-### PATCH /chapters/{chapter_id}
-
-Update a chapter.
-
-**Request Body:**
-
-```json
-{
-  "chapter_number": "integer | null (>= 1)",
-  "title": "string | null (max 255 chars)",
-  "outline": "string | null",
-  "content": "string | null",
-  "status": "draft | writing | completed | null",
-  "notes": "string | null",
-  "volume_id": "uuid | null"
-}
-```
-
-**Response:** `200 OK`
-
-### DELETE /chapters/{chapter_id}
-
-Delete a chapter.
-
-**Response:** `200 OK`
-
----
-
-## Scenes
-
-### POST /scenes
-
-Create a new scene.
-
-**Request Body:**
-
-```json
-{
-  "chapter_id": "uuid (required)",
-  "scene_order": "integer (required, >= 1)",
-  "pov_character_id": "uuid | null",
-  "location": "string | null (max 255 chars)",
-  "content": "string | null",
-  "meta": "object (default: {})"
-}
-```
-
-**Response:** `201 Created`
-
-```json
-{
-  "id": "uuid",
-  "chapter_id": "uuid",
-  "scene_order": "integer",
-  "pov_character_id": "uuid | null",
-  "location": "string | null",
-  "content": "string | null",
-  "meta": "object",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /scenes/chapter/{chapter_id}
-
-List all scenes for a chapter.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /scenes/{scene_id}
-
-Get a scene by ID.
-
-**Response:** `200 OK`
-
-### PATCH /scenes/{scene_id}
-
-Update a scene.
-
-**Request Body:**
-
-```json
-{
-  "scene_order": "integer | null (>= 1)",
-  "pov_character_id": "uuid | null",
-  "location": "string | null (max 255 chars)",
-  "content": "string | null",
-  "meta": "object | null"
-}
-```
-
-**Response:** `200 OK`
-
-### DELETE /scenes/{scene_id}
-
-Delete a scene.
-
-**Response:** `200 OK`
-
----
-
-## Memories
-
-Memories store narrative facts with vector embeddings for semantic search.
-
-### POST /memories
-
-Create a new memory with optional embedding.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "uuid (required)",
-  "memory_type": "string (required)",
-  "content": "string (required)",
-  "meta": "object (default: {})",
-  "embedding": "array of floats | null",
-  "auto_embed": "boolean (default: false)"
-}
-```
-
-**Memory Types:**
-
-| Type | Description |
-|------|-------------|
-| episode | Event summaries |
-| semantic | World rules, character traits |
-| fact | Specific facts that may be referenced |
-
-**Field Descriptions:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| memory_type | string | Type of memory |
-| content | string | Memory content text |
-| embedding | array | Vector embedding (dimension matches EMBEDDING_DIMENSION config) |
-| auto_embed | boolean | Automatically generate embedding from content |
-
-**Response:** `201 Created`
-
-```json
-{
-  "id": "uuid",
-  "project_id": "uuid",
-  "memory_type": "string",
-  "content": "string",
-  "meta": "object",
-  "embedding": "array | null",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /memories
-
-List all memories for a project.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| project_id | uuid | required | Project ID |
-| memory_type | string | null | Filter by memory type |
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /memories/type/{memory_type}
-
-List memories of a specific type for a project.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| project_id | uuid | required | Project ID |
-| skip | integer | 0 | Number of records to skip |
-| limit | integer | 100 | Maximum number of records |
-
-**Response:** `200 OK`
-
-### GET /memories/count
-
-Count memories for a project.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| project_id | uuid | required | Project ID |
-| memory_type | string | null | Filter by memory type |
-
-**Response:** `200 OK`
-
-```json
-{
-  "count": 10,
-  "project_id": "uuid",
-  "memory_type": "string | null"
-}
-```
-
-### POST /memories/search
-
-Search memories by vector embedding similarity.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| project_id | uuid | required | Project ID |
-
-**Request Body:**
-
-```json
-{
-  "query_embedding": "array of floats (required, dimension matches EMBEDDING_DIMENSION)",
-  "limit": "integer (default: 10, range: 1-100)",
-  "threshold": "float (default: 0.7, range: 0.0-1.0)",
-  "memory_type": "string | null"
-}
-```
-
-**Response:** `200 OK`
-
-```json
-{
-  "matches": [
-    {
-      "id": "uuid",
-      "memory_type": "string",
-      "content": "string",
-      "meta": "object",
-      "similarity": 0.85
-    }
-  ],
-  "total_count": 5,
-  "search_summary": "Found 5 memories with similarity >= 0.7"
-}
-```
-
-### GET /memories/{memory_id}
-
-Get a memory by ID.
-
-**Response:** `200 OK`
-
-### PATCH /memories/{memory_id}
-
-Update a memory.
-
-**Request Body:**
-
-```json
-{
-  "content": "string | null",
-  "memory_type": "string | null",
-  "meta": "object | null",
-  "embedding": "array | null",
-  "auto_embed": "boolean | null"
-}
-```
-
-**Response:** `200 OK`
-
-### DELETE /memories/{memory_id}
-
-Delete a memory.
-
-**Response:** `200 OK`
-
----
-
-## Suggestions
-
-### POST /suggestions
-
-Create a new suggestion.
-
-### GET /suggestions/project/{project_id}
-
-List all suggestions for a project.
-
-### GET /suggestions/{suggestion_id}
-
-Get a suggestion by ID.
-
-### PATCH /suggestions/{suggestion_id}
-
-Update a suggestion.
-
-### DELETE /suggestions/{suggestion_id}
-
-Delete a suggestion.
-
----
-
-## Dependencies
-
-### POST /dependencies
-
-Create a new dependency.
-
-### GET /dependencies/project/{project_id}
-
-List all dependencies for a project.
-
-### GET /dependencies/{dependency_id}
-
-Get a dependency by ID.
-
-### PATCH /dependencies/{dependency_id}
-
-Update a dependency.
-
-### DELETE /dependencies/{dependency_id}
-
-Delete a dependency.
-
----
-
-## Snapshots
-
-### POST /snapshots
-
-Create a new snapshot.
-
-### GET /snapshots/project/{project_id}
-
-List all snapshots for a project.
-
-### GET /snapshots/{snapshot_id}
-
-Get a snapshot by ID.
-
-### PATCH /snapshots/{snapshot_id}
-
-Update a snapshot.
-
-### DELETE /snapshots/{snapshot_id}
-
-Delete a snapshot.
-
----
-
-## Agent Workflow
-
-### POST /agent/threads
-
-Create or get the default thread for a project.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "uuid"
-}
-```
-
-**Response:** `200 OK`
-
-```json
-{
-  "id": "uuid",
-  "project_id": "uuid",
-  "title": "string",
-  "is_default": true,
-  "meta": "object",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-### GET /agent/threads/{thread_id}
-
-Get thread state with messages and recent runs.
-
-**Response:** `200 OK`
-
-```json
-{
-  "thread": {
-    "id": "uuid",
-    "project_id": "uuid",
-    "title": "string",
-    "is_default": true,
-    "meta": "object",
-    "created_at": "datetime",
-    "updated_at": "datetime"
-  },
-  "messages": [
-    {
-      "id": "uuid",
-      "thread_id": "uuid",
-      "role": "user | assistant | system",
-      "content": "string",
-      "meta": "object",
-      "created_at": "datetime",
-      "updated_at": "datetime"
-    }
-  ],
-  "recent_runs": [ ... ],
-  "current_run": { ... } | null,
-  "latest_checkpoint": { ... } | null
-}
-```
-
-### POST /agent/threads/{thread_id}/messages
-
-Send a message to an agent thread and receive a planned run.
-
-**Request Body:**
-
-```json
-{
-  "content": "string (required, min 1 char)",
-  "context": "object (default: {})",
-  "stream": "boolean (default: false)"
-}
-```
-
-**Non-streaming Response:** `200 OK`
-
-```json
-{
-  "thread": { ... },
-  "user_message": { ... },
-  "assistant_message": { ... },
-  "run": {
-    "id": "uuid",
-    "thread_id": "uuid",
-    "project_id": "uuid",
-    "user_message_id": "uuid | null",
-    "assistant_message_id": "uuid | null",
-    "revision_of_run_id": "uuid | null",
-    "status": "awaiting_confirmation | awaiting_high_risk_confirmation | ...",
-    "summary": "string | null",
-    "error_message": "string | null",
-    "warning_message": "string | null",
-    "verification_status": "pending | passed | failed | skipped",
-    "verification_summary": "string | null",
-    "execution_contract": { ... },
-    "risk_summary": {
-      "policy_version": "string",
-      "overall_risk_level": "low | medium | high",
-      "confirmation_gate": "none | single | double",
-      "requires_confirmation": true,
-      "requires_secondary_confirmation": false,
-      "total_operations": 1,
-      "low_risk_operation_count": 1,
-      "medium_risk_operation_count": 0,
-      "high_risk_operation_count": 0,
-      "high_risk_operation_positions": [],
-      "secondary_confirmation_operation_positions": [],
-      "applied_policies": [ ... ],
-      "summary": "string"
-    },
-    "compact_policy": { ... },
-    "planner_window": { ... },
-    "retained_window": { ... },
-    "active_bundle_contract": { ... },
-    "meta": "object",
-    "confirmed_at": "datetime | null",
-    "secondary_confirmed_at": "datetime | null",
-    "started_at": "datetime | null",
-    "completed_at": "datetime | null",
-    "created_at": "datetime",
-    "updated_at": "datetime",
-    "operations": [ ... ],
-    "subtasks": [ ... ]
+  "error": {
+    "message": "错误描述",
+    "details": {}
   }
 }
 ```
 
-**Streaming Response:** SSE format
-
-```
-data: {"type": "status", "stage": "init", "message": "...", "timestamp": "...", "detail": {}}
-
-data: {"type": "thinking", "stage": "planning", "message": "...", "detail": {...}}
-
-data: {"type": "operation_progress", "stage": "prepare", "message": "...", "detail": {...}}
-
-data: {"type": "result", "stage": "complete", "message": "...", "detail": {...}}
-
-data: [DONE]
-```
-
-**Stream Event Types:**
-
-| Type | Stage | Description |
-|------|-------|-------------|
-| status | init, load_context, compact_check, prepare_operations, risk_assessment | Status updates |
-| thinking | planning, plan_complete | Agent thinking process |
-| operation_progress | prepare | Operation preparation progress |
-| verification | - | Verification results |
-| message_chunk | assistant_message | Assistant message chunks |
-| result | complete | Final execution result |
-| error | - | Error information |
-
-### GET /agent/runs/{run_id}
-
-Get a single run with operation previews/results.
-
-**Response:** `200 OK`
-
-### POST /agent/runs/{run_id}/confirm
-
-Confirm and execute a planned run.
-
-**Response:** `200 OK`
+- 参数校验异常（422）为 FastAPI 默认结构：
 
 ```json
 {
-  "run": {
-    "status": "completed | failed",
-    "verification_status": "passed | failed",
-    "operations": [ ... ],
-    ...
-  }
-}
-```
-
-### POST /agent/runs/{run_id}/confirm-high-risk
-
-Execute a run after secondary confirmation for high-risk writes.
-
-**Response:** `200 OK`
-
-### POST /agent/runs/{run_id}/cancel
-
-Cancel a run that has not been executed.
-
-**Response:** `200 OK`
-
----
-
-## Agent Configuration
-
-### GET /agent/profiles
-
-List available agent profiles.
-
-**Response:** `200 OK`
-
-```json
-[
-  {
-    "id": "default",
-    "name": "Default Profile",
-    "description": "string",
-    "builtin": true,
-    "root": "/path/to/profile"
-  }
-]
-```
-
-### GET /agent/capabilities
-
-Get the capability registry.
-
-**Response:** `200 OK`
-
-```json
-{
-  "registry_version": "string",
-  "capabilities": [
-    {
-      "capability_id": "string",
-      "name": "string",
-      "kind": "read_search | planning | writing | editing | verification",
-      "description": "string",
-      "tool_scope": ["..."],
-      "policy": {
-        "execution_phase": "plan | build",
-        "source_role": "planner | researcher | writer | editor | continuity | executor",
-        "confirmation_gate": "none | single | double",
-        "internal_only": true,
-        "requires_confirmation": false
-      },
-      "execution_record": {
-        "record_id": "string",
-        "source_role": "string",
-        "status": "planned | completed | failed | skipped",
-        "tool_scope": ["..."],
-        "input_summary": "string | null",
-        "output_summary": "string | null",
-        "attempt_count": 1
-      }
-    }
+  "detail": [
+    {"loc": ["body", "field"], "msg": "...", "type": "..."}
   ]
 }
 ```
 
-### GET /agent/risk-policies
+## 接口清单
 
-Get the risk policy registry.
+### 1. Root
 
-**Query Parameters:**
+- 接口名称: `Root`
+- 标签: `untagged`
+- 请求方法: `GET`
+- URL 路径: `/`
+- 请求头: 无鉴权要求
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: object
+- 错误码: 无
+- 请求示例:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| project_id | uuid | Filter by project |
-| profile_id | string | Filter by profile |
-
-**Response:** `200 OK`
-
-```json
-{
-  "policy_version": "string",
-  "policies": [
-    {
-      "policy_id": "create_only | standard_updates | content_append | content_rewrite | long_form_overwrite | multi_object_write",
-      "name": "string",
-      "scope": "operation | run",
-      "description": "string",
-      "risk_level": "low | medium | high",
-      "confirmation_gate": "none | single | double",
-      "requires_secondary_confirmation": false,
-      "tool_scope": ["..."]
-    }
-  ]
-}
+```bash
+curl -X GET \
+  'http://localhost:8000/'
 ```
 
-### GET /agent/skills
+### 2. Auto Summarize
 
-Get the active skill catalog.
+- 接口名称: `Auto Summarize`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/auto-summarize`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `AutoSummarizeRequest`
+- 成功响应: 200 -> application/json: AutoSummarizeResponse
+- 错误码: 422
+- 请求示例:
 
-**Query Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| project_id | uuid | Get project-specific skills |
-
-**Response:** `200 OK`
-
-```json
-{
-  "profile_id": "string",
-  "profile_name": "string",
-  "builtin": true,
-  "source_roots": ["..."],
-  "planner": {
-    "name": "string",
-    "description": "string",
-    "kind": "planner",
-    "source": "string",
-    "payload_contract": "string | null",
-    "references": ["..."]
-  },
-  "operations": [
-    {
-      "name": "string",
-      "description": "string",
-      "kind": "operation",
-      "tool_name": "string | null",
-      "source": "string",
-      "payload_contract": "string | null",
-      "references": ["..."]
-    }
-  ]
-}
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/auto-summarize' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* AutoSummarizeRequest */ }'
 ```
 
----
+### 3. Get Agent Capabilities
 
-## Export
+- 接口名称: `Get Agent Capabilities`
+- 标签: `agent`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/agent/capabilities`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentCapabilityRegistryResponse
+- 错误码: 无
+- 请求示例:
 
-### GET /projects/{project_id}/export
-
-Export project content.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| format | string | txt | Export format: `txt` or `markdown` |
-
-**Response:** Plain text file download
-
----
-
-## Project Package
-
-### GET /projects/{project_id}/package
-
-Export a project as a downloadable ZIP package.
-
-**Response:** ZIP file download
-
-The ZIP contains:
-- `manifest.json`: Package metadata
-- `project_bundle.json`: Complete project data
-
-### POST /projects/import
-
-Import a project from an uploaded ZIP package.
-
-**Request:** `multipart/form-data`
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| file | file | yes | ZIP package file |
-| new_name | string | no | New project name |
-
-**Response:** `200 OK`
-
-```json
-{
-  "project_id": "uuid",
-  "project_name": "string",
-  "imported_counts": {
-    "characters": 5,
-    "world_settings": 10,
-    "volumes": 2,
-    "chapters": 20,
-    "scenes": 50,
-    "dependencies": 30,
-    "snapshots": 100,
-    "memories": 15
-  },
-  "warnings": [
-    {
-      "code": "embedding_dimension_mismatch",
-      "message": "string",
-      "details": {}
-    }
-  ]
-}
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/agent/capabilities' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
 ```
 
----
+### 4. Agent Chat
 
-## Legacy Endpoints
+- 接口名称: `Agent Chat`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/chat`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `AgentChatRequest`
+- 成功响应: 200 -> application/json: AgentChatResponse
+- 错误码: 422
+- 请求示例:
 
-These endpoints are maintained for backward compatibility.
-
-### POST /agent/chat
-
-Legacy chat endpoint.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "string (required)",
-  "message": "string (required, min 1 char)",
-  "history": "array of objects (default: [])",
-  "context": "object (default: {})"
-}
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/chat' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* AgentChatRequest */ }'
 ```
 
-**Response:** `200 OK`
+### 5. Agent Chat Stream
 
-```json
-{
-  "message": "string",
-  "suggestions": [],
-  "metadata": {}
-}
+- 接口名称: `Agent Chat Stream`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/chat/stream`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `AgentChatRequest`
+- 成功响应: 200 -> application/json: -
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/chat/stream' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* AgentChatRequest */ }'
 ```
 
-### POST /agent/chat/stream
+### 6. Continuity Check
 
-Legacy streaming chat endpoint.
+- 接口名称: `Continuity Check`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/continuity-check`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `ContinuityCheckRequest`
+- 成功响应: 200 -> application/json: AgentChatResponse
+- 错误码: 422
+- 请求示例:
 
-**Response:** SSE format
-
-### POST /agent/auto-summarize
-
-Legacy auto-summarize endpoint.
-
-**Request Body:**
-
-```json
-{
-  "project_id": "string",
-  "chapter_id": "string",
-  "content": "string (required, min 1 char)"
-}
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/continuity-check' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* ContinuityCheckRequest */ }'
 ```
 
-**Response:** `200 OK`
+### 7. List Agent Profiles
 
-```json
-{
-  "memories": [],
-  "count": 0
-}
+- 接口名称: `List Agent Profiles`
+- 标签: `agent`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/agent/profiles`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<AgentProfileResponse>
+- 错误码: 无
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/agent/profiles' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
 ```
 
-### POST /agent/continuity-check
+### 8. Get Agent Risk Policies
 
-Legacy continuity check endpoint.
+- 接口名称: `Get Agent Risk Policies`
+- 标签: `agent`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/agent/risk-policies`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string | null, 可选)；`profile_id` (string | null, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentRiskPolicyRegistryResponse
+- 错误码: 422
+- 请求示例:
 
-**Request Body:**
-
-```json
-{
-  "project_id": "string",
-  "content": "string (required, min 1 char)"
-}
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/agent/risk-policies' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
 ```
 
-**Response:** `200 OK`
+### 9. Get Run
 
-```json
-{
-  "message": "string",
-  "suggestions": [],
-  "metadata": {}
-}
+- 接口名称: `Get Run`
+- 标签: `agent`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/agent/runs/{run_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `run_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentRunResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/agent/runs/<run_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
 ```
 
----
+### 10. Cancel Run
 
-## Error Codes
+- 接口名称: `Cancel Run`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/runs/{run_id}/cancel`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `run_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentRunActionResponse
+- 错误码: 422
+- 请求示例:
 
-| HTTP Status | Description |
-|-------------|-------------|
-| 400 | Bad Request - Invalid input data |
-| 401 | Unauthorized - Missing or invalid API key |
-| 403 | Forbidden - Valid API key but insufficient permissions |
-| 404 | Not Found - Resource does not exist |
-| 422 | Unprocessable Entity - Validation error |
-| 500 | Internal Server Error |
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/runs/<run_id>/cancel' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
 
----
+### 11. Confirm Run
 
-## Run Status Values
+- 接口名称: `Confirm Run`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/runs/{run_id}/confirm`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `run_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentRunActionResponse
+- 错误码: 422
+- 请求示例:
 
-| Status | Description |
-|--------|-------------|
-| draft | Initial state |
-| awaiting_confirmation | Plan ready, waiting for user confirmation |
-| awaiting_high_risk_confirmation | High-risk operation, needs secondary confirmation |
-| executing | Currently executing |
-| completed | Successfully completed |
-| failed | Execution failed |
-| cancelled | Cancelled by user |
-| superseded | Replaced by a newer run |
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/runs/<run_id>/confirm' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
 
----
+### 12. Confirm High Risk Run
 
-## Operation Status Values
+- 接口名称: `Confirm High Risk Run`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/runs/{run_id}/confirm-high-risk`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `run_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentRunActionResponse
+- 错误码: 422
+- 请求示例:
 
-| Status | Description |
-|--------|-------------|
-| planned | Planned but not executed |
-| executed | Successfully executed |
-| failed | Execution failed |
-| cancelled | Cancelled |
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/runs/<run_id>/confirm-high-risk' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
 
----
+### 13. Get Agent Skills
 
-## Risk Levels
+- 接口名称: `Get Agent Skills`
+- 标签: `agent`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/agent/skills`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string | null, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentSkillCatalogResponse
+- 错误码: 422
+- 请求示例:
 
-| Level | Description |
-|-------|-------------|
-| low | Low risk, no confirmation required |
-| medium | Medium risk, single confirmation required |
-| high | High risk, secondary confirmation required |
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/agent/skills' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
 
----
+### 14. Create Or Get Thread
 
-## Verification Status
+- 接口名称: `Create Or Get Thread`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/threads`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `AgentThreadCreateRequest`
+- 成功响应: 200 -> application/json: AgentThreadResponse
+- 错误码: 422
+- 请求示例:
 
-| Status | Description |
-|--------|-------------|
-| pending | Verification not yet performed |
-| passed | All verifications passed |
-| failed | One or more verifications failed |
-| skipped | Verification skipped |
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/threads' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* AgentThreadCreateRequest */ }'
+```
 
----
+### 15. Get Thread
 
-## Domain Verification Rules
+- 接口名称: `Get Thread`
+- 标签: `agent`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/agent/threads/{thread_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `thread_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: AgentThreadStateResponse
+- 错误码: 422
+- 请求示例:
 
-### Character
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/agent/threads/<thread_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
 
-| Rule ID | Description |
-|---------|-------------|
-| character_name_empty | Name cannot be empty |
-| character_name_duplicate | Name must be unique within project |
-| character_age_invalid | Age must be non-negative integer |
+### 16. Create Thread Message
 
-### WorldSetting
+- 接口名称: `Create Thread Message`
+- 标签: `agent`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/agent/threads/{thread_id}/messages`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `thread_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `AgentThreadMessageRequest`
+- 成功响应: 200 -> application/json: AgentThreadMessageResponse
+- 错误码: 422
+- 请求示例:
 
-| Rule ID | Description |
-|---------|-------------|
-| world_setting_name_empty | Name cannot be empty |
-| world_setting_content_empty | Content cannot be empty |
-| world_setting_name_duplicate | Name must be unique within category |
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/agent/threads/<thread_id>/messages' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* AgentThreadMessageRequest */ }'
+```
 
-### Chapter/Scene
+### 17. Create Chapter
 
-| Rule ID | Description |
-|---------|-------------|
-| chapter_number_unique | Chapter number must be unique within project |
-| scene_order_unique | Scene order must be unique within chapter |
+- 接口名称: `Create Chapter`
+- 标签: `chapters`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/chapters`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `ChapterCreate`
+- 成功响应: 201 -> application/json: ChapterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/chapters' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* ChapterCreate */ }'
+```
+
+### 18. List Chapters By Project
+
+- 接口名称: `List Chapters By Project`
+- 标签: `chapters`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/chapters/project/{project_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<ChapterResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/chapters/project/<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 19. List Chapters By Volume
+
+- 接口名称: `List Chapters By Volume`
+- 标签: `chapters`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/chapters/volume/{volume_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `volume_id` (string, 必填)
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<ChapterResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/chapters/volume/<volume_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 20. Get Chapter
+
+- 接口名称: `Get Chapter`
+- 标签: `chapters`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/chapters/{chapter_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `chapter_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: ChapterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/chapters/<chapter_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 21. Update Chapter
+
+- 接口名称: `Update Chapter`
+- 标签: `chapters`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/chapters/{chapter_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `chapter_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `ChapterUpdate`
+- 成功响应: 200 -> application/json: ChapterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/chapters/<chapter_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* ChapterUpdate */ }'
+```
+
+### 22. Delete Chapter
+
+- 接口名称: `Delete Chapter`
+- 标签: `chapters`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/chapters/{chapter_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `chapter_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: ChapterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/chapters/<chapter_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 23. Create Character
+
+- 接口名称: `Create Character`
+- 标签: `characters`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/characters`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `CharacterCreate`
+- 成功响应: 201 -> application/json: CharacterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/characters' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* CharacterCreate */ }'
+```
+
+### 24. List Characters By Project
+
+- 接口名称: `List Characters By Project`
+- 标签: `characters`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/characters/project/{project_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<CharacterResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/characters/project/<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 25. Get Character
+
+- 接口名称: `Get Character`
+- 标签: `characters`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/characters/{character_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `character_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: CharacterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/characters/<character_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 26. Update Character
+
+- 接口名称: `Update Character`
+- 标签: `characters`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/characters/{character_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `character_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `CharacterUpdate`
+- 成功响应: 200 -> application/json: CharacterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/characters/<character_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* CharacterUpdate */ }'
+```
+
+### 27. Delete Character
+
+- 接口名称: `Delete Character`
+- 标签: `characters`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/characters/{character_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `character_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: CharacterResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/characters/<character_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 28. Query Dependencies
+
+- 接口名称: `Query Dependencies`
+- 标签: `dependencies`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/dependencies`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)；`source_type` (string | null, 可选)；`source_id` (string | null, 可选)；`target_type` (string | null, 可选)；`target_id` (string | null, 可选)；`dependency_type` (string | null, 可选)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<DependencyResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/dependencies?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 29. Create Dependency
+
+- 接口名称: `Create Dependency`
+- 标签: `dependencies`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/dependencies`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `DependencyCreate`
+- 成功响应: 201 -> application/json: DependencyResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/dependencies' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* DependencyCreate */ }'
+```
+
+### 30. Analyze Impact
+
+- 接口名称: `Analyze Impact`
+- 标签: `dependencies`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/dependencies/analyze`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)
+- 请求参数（Body）: `ImpactAnalysisRequest`
+- 成功响应: 200 -> application/json: ImpactAnalysisResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/dependencies/analyze?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* ImpactAnalysisRequest */ }'
+```
+
+### 31. Analyze Reverse Impact
+
+- 接口名称: `Analyze Reverse Impact`
+- 标签: `dependencies`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/dependencies/analyze/reverse/{target_type}/{target_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `target_type` (string, 必填)；`target_id` (string, 必填)
+- 查询参数: `project_id` (string, 必填)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: ImpactAnalysisResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/dependencies/analyze/reverse/<target_type>/<target_id>?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 32. List Source Dependencies
+
+- 接口名称: `List Source Dependencies`
+- 标签: `dependencies`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/dependencies/source/{source_type}/{source_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `source_type` (string, 必填)；`source_id` (string, 必填)
+- 查询参数: `project_id` (string, 必填)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<DependencyResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/dependencies/source/<source_type>/<source_id>?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 33. List Target Dependencies
+
+- 接口名称: `List Target Dependencies`
+- 标签: `dependencies`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/dependencies/target/{target_type}/{target_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `target_type` (string, 必填)；`target_id` (string, 必填)
+- 查询参数: `project_id` (string, 必填)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<DependencyResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/dependencies/target/<target_type>/<target_id>?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 34. Get Dependency
+
+- 接口名称: `Get Dependency`
+- 标签: `dependencies`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/dependencies/{dependency_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `dependency_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: DependencyResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/dependencies/<dependency_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 35. Update Dependency
+
+- 接口名称: `Update Dependency`
+- 标签: `dependencies`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/dependencies/{dependency_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `dependency_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `DependencyUpdate`
+- 成功响应: 200 -> application/json: DependencyResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/dependencies/<dependency_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* DependencyUpdate */ }'
+```
+
+### 36. Delete Dependency
+
+- 接口名称: `Delete Dependency`
+- 标签: `dependencies`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/dependencies/{dependency_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `dependency_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: DependencyResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/dependencies/<dependency_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 37. Health Check
+
+- 接口名称: `Health Check`
+- 标签: `health`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/health`
+- 请求头: 无鉴权要求
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: HealthResponse
+- 错误码: 无
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/health'
+```
+
+### 38. List Memories
+
+- 接口名称: `List Memories`
+- 标签: `memories`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/memories`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)；`memory_type` (string | null, 可选)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<MemoryResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/memories?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 39. Create Memory
+
+- 接口名称: `Create Memory`
+- 标签: `memories`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/memories`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `MemoryCreate`
+- 成功响应: 201 -> application/json: MemoryResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/memories' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* MemoryCreate */ }'
+```
+
+### 40. Count Memories
+
+- 接口名称: `Count Memories`
+- 标签: `memories`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/memories/count`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)；`memory_type` (string | null, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: object
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/memories/count?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 41. Search Memories By Embedding
+
+- 接口名称: `Search Memories By Embedding`
+- 标签: `memories`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/memories/search`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)
+- 请求参数（Body）: `VectorSearchRequest`
+- 成功响应: 200 -> application/json: VectorSearchResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/memories/search?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* VectorSearchRequest */ }'
+```
+
+### 42. List Memories By Type
+
+- 接口名称: `List Memories By Type`
+- 标签: `memories`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/memories/type/{memory_type}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `memory_type` (string, 必填)
+- 查询参数: `project_id` (string, 必填)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<MemoryResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/memories/type/<memory_type>?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 43. Get Memory
+
+- 接口名称: `Get Memory`
+- 标签: `memories`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/memories/{memory_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `memory_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: MemoryResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/memories/<memory_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 44. Update Memory
+
+- 接口名称: `Update Memory`
+- 标签: `memories`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/memories/{memory_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `memory_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `MemoryUpdate`
+- 成功响应: 200 -> application/json: MemoryResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/memories/<memory_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* MemoryUpdate */ }'
+```
+
+### 45. Delete Memory
+
+- 接口名称: `Delete Memory`
+- 标签: `memories`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/memories/{memory_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `memory_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: MemoryResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/memories/<memory_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 46. List Projects
+
+- 接口名称: `List Projects`
+- 标签: `projects`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/projects`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<ProjectResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/projects' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 47. Create Project
+
+- 接口名称: `Create Project`
+- 标签: `projects`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/projects`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `ProjectCreate`
+- 成功响应: 201 -> application/json: ProjectResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/projects' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* ProjectCreate */ }'
+```
+
+### 48. Import Project Package
+
+- 接口名称: `Import Project Package`
+- 标签: `project-package`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/projects/import`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: multipart/form-data`
+- 路径参数: 无
+- 查询参数: `new_name` (string | null, 可选)
+- 请求参数（Body）: `Body_import_project_package_api_v1_projects_import_post`
+- 成功响应: 200 -> application/json: ProjectImportResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/projects/import' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'file=@<path-to-file>'
+```
+
+### 49. Get Project
+
+- 接口名称: `Get Project`
+- 标签: `projects`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/projects/{project_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: ProjectResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/projects/<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 50. Update Project
+
+- 接口名称: `Update Project`
+- 标签: `projects`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/projects/{project_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `ProjectUpdate`
+- 成功响应: 200 -> application/json: ProjectResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/projects/<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* ProjectUpdate */ }'
+```
+
+### 51. Delete Project
+
+- 接口名称: `Delete Project`
+- 标签: `projects`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/projects/{project_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: ProjectResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/projects/<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 52. Export Project
+
+- 接口名称: `Export Project`
+- 标签: `export`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/projects/{project_id}/export`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: `format` (string, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: -
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/projects/<project_id>/export' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 53. Export Project Package
+
+- 接口名称: `Export Project Package`
+- 标签: `project-package`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/projects/{project_id}/package`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: -
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/projects/<project_id>/package' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 54. Create Scene
+
+- 接口名称: `Create Scene`
+- 标签: `scenes`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/scenes`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `SceneCreate`
+- 成功响应: 201 -> application/json: SceneResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/scenes' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* SceneCreate */ }'
+```
+
+### 55. List Scenes By Chapter
+
+- 接口名称: `List Scenes By Chapter`
+- 标签: `scenes`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/scenes/chapter/{chapter_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `chapter_id` (string, 必填)
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<SceneResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/scenes/chapter/<chapter_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 56. Get Scene
+
+- 接口名称: `Get Scene`
+- 标签: `scenes`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/scenes/{scene_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `scene_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: SceneResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/scenes/<scene_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 57. Update Scene
+
+- 接口名称: `Update Scene`
+- 标签: `scenes`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/scenes/{scene_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `scene_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `SceneUpdate`
+- 成功响应: 200 -> application/json: SceneResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/scenes/<scene_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* SceneUpdate */ }'
+```
+
+### 58. Delete Scene
+
+- 接口名称: `Delete Scene`
+- 标签: `scenes`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/scenes/{scene_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `scene_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: SceneResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/scenes/<scene_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 59. List Snapshots
+
+- 接口名称: `List Snapshots`
+- 标签: `snapshots`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/snapshots`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<SnapshotResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/snapshots?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 60. Create Snapshot
+
+- 接口名称: `Create Snapshot`
+- 标签: `snapshots`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/snapshots`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `SnapshotCreate`
+- 成功响应: 201 -> application/json: SnapshotResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/snapshots' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* SnapshotCreate */ }'
+```
+
+### 61. Count Snapshots
+
+- 接口名称: `Count Snapshots`
+- 标签: `snapshots`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/snapshots/count`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)；`target_type` (string | null, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: object
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/snapshots/count?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 62. Rollback To Snapshot
+
+- 接口名称: `Rollback To Snapshot`
+- 标签: `snapshots`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/snapshots/rollback`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)
+- 请求参数（Body）: `RollbackRequest`
+- 成功响应: 200 -> application/json: RollbackResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/snapshots/rollback?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* RollbackRequest */ }'
+```
+
+### 63. List Target Snapshots
+
+- 接口名称: `List Target Snapshots`
+- 标签: `snapshots`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/snapshots/target/{target_type}/{target_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `target_type` (string, 必填)；`target_id` (string, 必填)
+- 查询参数: `project_id` (string, 必填)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<SnapshotResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/snapshots/target/<target_type>/<target_id>?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 64. Get Latest Snapshot
+
+- 接口名称: `Get Latest Snapshot`
+- 标签: `snapshots`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/snapshots/target/{target_type}/{target_id}/latest`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `target_type` (string, 必填)；`target_id` (string, 必填)
+- 查询参数: `project_id` (string, 必填)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: SnapshotResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/snapshots/target/<target_type>/<target_id>/latest?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 65. Get Snapshot
+
+- 接口名称: `Get Snapshot`
+- 标签: `snapshots`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/snapshots/{snapshot_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `snapshot_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: SnapshotResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/snapshots/<snapshot_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 66. Update Snapshot
+
+- 接口名称: `Update Snapshot`
+- 标签: `snapshots`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/snapshots/{snapshot_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `snapshot_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `SnapshotUpdate`
+- 成功响应: 200 -> application/json: SnapshotResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/snapshots/<snapshot_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* SnapshotUpdate */ }'
+```
+
+### 67. Delete Snapshot
+
+- 接口名称: `Delete Snapshot`
+- 标签: `snapshots`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/snapshots/{snapshot_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `snapshot_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: SnapshotResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/snapshots/<snapshot_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 68. Get Snapshot Data
+
+- 接口名称: `Get Snapshot Data`
+- 标签: `snapshots`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/snapshots/{snapshot_id}/data`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `snapshot_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: object
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/snapshots/<snapshot_id>/data' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 69. List Suggestions
+
+- 接口名称: `List Suggestions`
+- 标签: `suggestions`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/suggestions`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)；`skip` (integer, 可选)；`limit` (integer, 可选)；`status` (string | null, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<SuggestionResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/suggestions?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 70. Create Suggestion
+
+- 接口名称: `Create Suggestion`
+- 标签: `suggestions`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/suggestions`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `SuggestionCreate`
+- 成功响应: 201 -> application/json: SuggestionResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/suggestions' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* SuggestionCreate */ }'
+```
+
+### 71. Count Pending Suggestions
+
+- 接口名称: `Count Pending Suggestions`
+- 标签: `suggestions`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/suggestions/pending/count`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: 无
+- 查询参数: `project_id` (string, 必填)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: object
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/suggestions/pending/count?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 72. List Target Suggestions
+
+- 接口名称: `List Target Suggestions`
+- 标签: `suggestions`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/suggestions/target/{target_type}/{target_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `target_type` (string, 必填)；`target_id` (string, 必填)
+- 查询参数: `project_id` (string, 必填)；`skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<SuggestionResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/suggestions/target/<target_type>/<target_id>?project_id=<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 73. Get Suggestion
+
+- 接口名称: `Get Suggestion`
+- 标签: `suggestions`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/suggestions/{suggestion_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `suggestion_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: SuggestionResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/suggestions/<suggestion_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 74. Update Suggestion
+
+- 接口名称: `Update Suggestion`
+- 标签: `suggestions`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/suggestions/{suggestion_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `suggestion_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `SuggestionUpdate`
+- 成功响应: 200 -> application/json: SuggestionResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/suggestions/<suggestion_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* SuggestionUpdate */ }'
+```
+
+### 75. Delete Suggestion
+
+- 接口名称: `Delete Suggestion`
+- 标签: `suggestions`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/suggestions/{suggestion_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `suggestion_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: SuggestionResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/suggestions/<suggestion_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 76. Suggestion Action
+
+- 接口名称: `Suggestion Action`
+- 标签: `suggestions`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/suggestions/{suggestion_id}/action`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `suggestion_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `SuggestionActionRequest`
+- 成功响应: 200 -> application/json: SuggestionActionResult
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/suggestions/<suggestion_id>/action' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* SuggestionActionRequest */ }'
+```
+
+### 77. Create Volume
+
+- 接口名称: `Create Volume`
+- 标签: `volumes`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/volumes`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `VolumeCreate`
+- 成功响应: 201 -> application/json: VolumeResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/volumes' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* VolumeCreate */ }'
+```
+
+### 78. List Volumes By Project
+
+- 接口名称: `List Volumes By Project`
+- 标签: `volumes`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/volumes/project/{project_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<VolumeResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/volumes/project/<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 79. Get Volume
+
+- 接口名称: `Get Volume`
+- 标签: `volumes`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/volumes/{volume_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `volume_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: VolumeResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/volumes/<volume_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 80. Update Volume
+
+- 接口名称: `Update Volume`
+- 标签: `volumes`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/volumes/{volume_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `volume_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `VolumeUpdate`
+- 成功响应: 200 -> application/json: VolumeResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/volumes/<volume_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* VolumeUpdate */ }'
+```
+
+### 81. Delete Volume
+
+- 接口名称: `Delete Volume`
+- 标签: `volumes`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/volumes/{volume_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `volume_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: VolumeResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/volumes/<volume_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 82. Create World Setting
+
+- 接口名称: `Create World Setting`
+- 标签: `world-settings`
+- 请求方法: `POST`
+- URL 路径: `/api/v1/world-settings`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: 无
+- 查询参数: 无
+- 请求参数（Body）: `WorldSettingCreate`
+- 成功响应: 201 -> application/json: WorldSettingResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X POST \
+  'http://localhost:8000/api/v1/world-settings' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* WorldSettingCreate */ }'
+```
+
+### 83. List World Settings By Project
+
+- 接口名称: `List World Settings By Project`
+- 标签: `world-settings`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/world-settings/project/{project_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<WorldSettingResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/world-settings/project/<project_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 84. List World Settings By Category
+
+- 接口名称: `List World Settings By Category`
+- 标签: `world-settings`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/world-settings/project/{project_id}/category/{category}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `project_id` (string, 必填)；`category` (string, 必填)
+- 查询参数: `skip` (integer, 可选)；`limit` (integer, 可选)
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: array<WorldSettingResponse>
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/world-settings/project/<project_id>/category/<category>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 85. Get World Setting
+
+- 接口名称: `Get World Setting`
+- 标签: `world-settings`
+- 请求方法: `GET`
+- URL 路径: `/api/v1/world-settings/{setting_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `setting_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: WorldSettingResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X GET \
+  'http://localhost:8000/api/v1/world-settings/<setting_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 86. Update World Setting
+
+- 接口名称: `Update World Setting`
+- 标签: `world-settings`
+- 请求方法: `PATCH`
+- URL 路径: `/api/v1/world-settings/{setting_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数: `setting_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `WorldSettingUpdate`
+- 成功响应: 200 -> application/json: WorldSettingResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X PATCH \
+  'http://localhost:8000/api/v1/world-settings/<setting_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ /* WorldSettingUpdate */ }'
+```
+
+### 87. Delete World Setting
+
+- 接口名称: `Delete World Setting`
+- 标签: `world-settings`
+- 请求方法: `DELETE`
+- URL 路径: `/api/v1/world-settings/{setting_id}`
+- 请求头:
+  - `X-API-Key: <ADMIN_API_KEY>`
+- 路径参数: `setting_id` (string, 必填)
+- 查询参数: 无
+- 请求参数（Body）: `-`
+- 成功响应: 200 -> application/json: WorldSettingResponse
+- 错误码: 422
+- 请求示例:
+
+```bash
+curl -X DELETE \
+  'http://localhost:8000/api/v1/world-settings/<setting_id>' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+## 常见错误码说明
+
+| 错误码 | 含义 | 常见触发场景 |
+|---|---|---|
+| 400 | 业务参数不合法 | 业务校验失败、fixture 缺失、策略冲突 |
+| 401 | 未认证 | 缺少 `X-API-Key` |
+| 403 | 禁止访问 | `X-API-Key` 错误 |
+| 404 | 资源不存在 | 项目/章节/快照等 ID 不存在 |
+| 409 | 冲突 | 唯一约束冲突 |
+| 422 | 协议校验失败 | 请求体或参数类型不匹配 |
+| 500 | 服务器错误 | 未捕获异常 |
+| 503 | 外部服务不可用 | LLM/Embedding 服务不可达 |
+
+## 关键业务示例
+
+### 示例 1：创建项目
+```bash
+curl -X POST 'http://localhost:8000/api/v1/projects' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "长篇测试项目",
+    "genre": "xianxia",
+    "target_audience": "adult",
+    "agent_profile_id": "default"
+  }'
+```
+
+### 示例 2：生成并确认 Agent 计划
+```bash
+curl -X POST 'http://localhost:8000/api/v1/agent/threads' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id": "<project_id>"}'
+
+curl -X POST 'http://localhost:8000/api/v1/agent/threads/<thread_id>/messages' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{"content": "创建一个测试人物", "context": {}, "stream": false}'
+
+curl -X POST 'http://localhost:8000/api/v1/agent/runs/<run_id>/confirm' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+### 示例 3：导出并导入项目包
+```bash
+curl -X GET 'http://localhost:8000/api/v1/projects/<project_id>/package' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' -o project_package.zip
+
+curl -X POST 'http://localhost:8000/api/v1/projects/import?new_name=导入副本' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' \
+  -F 'file=@./project_package.zip'
+```
+
+## Schema 字段索引
+
+以下字段定义用于补充“请求参数/响应格式”的结构化说明。
+
+### AgentActiveBundleCollectionsResponse
+
+- 类型: `object`
+- 描述: Collection limits and realized counts included in the planner bundle.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `characters_count` | `integer` | 否 |  |
+| `characters_limit` | `integer` | 否 |  |
+| `world_settings_count` | `integer` | 否 |  |
+| `world_settings_limit` | `integer` | 否 |  |
+| `chapters_count` | `integer` | 否 |  |
+| `chapters_limit` | `integer` | 否 |  |
+| `current_scenes_count` | `integer` | 否 |  |
+| `current_scenes_limit` | `integer` | 否 |  |
+| `recent_run_digest_count` | `integer` | 否 |  |
+| `recent_run_digest_limit` | `integer` | 否 |  |
+
+### AgentActiveBundleContractResponse
+
+- 类型: `object`
+- 描述: Stable description of which context sections were assembled for planning.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `contract_version` | `string` | 是 |  |
+| `source` | `string(live_context, checkpoint_plus_live_context, checkpoint_snapshot)` | 是 |  |
+| `included_sections` | `array<string>` | 否 |  |
+| `focused_object_types` | `array<string>` | 否 |  |
+| `checkpoint_id` | `string \| null` | 否 |  |
+| `includes_thread_summary` | `boolean` | 否 |  |
+| `includes_recent_run_digest` | `boolean` | 否 |  |
+| `collections` | `AgentActiveBundleCollectionsResponse` | 是 |  |
+
+### AgentAppliedRiskPolicyResponse
+
+- 类型: `object`
+- 描述: One policy application recorded on a concrete run.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `policy_id` | `string(create_only, standard_updates, content_append, content_rewrite, long_form_overwrite, multi_object_write)` | 是 |  |
+| `name` | `string` | 是 |  |
+| `scope` | `string(operation, run)` | 是 |  |
+| `description` | `string` | 是 |  |
+| `risk_level` | `string(low, medium, high)` | 是 |  |
+| `confirmation_gate` | `string(none, single, double)` | 是 |  |
+| `requires_secondary_confirmation` | `boolean` | 否 |  |
+| `matched_operation_positions` | `array<integer>` | 否 |  |
+
+### AgentCapabilityExecutionRecordResponse
+
+- 类型: `object`
+- 描述: Execution record for one internal capability.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `record_id` | `string` | 是 |  |
+| `source_role` | `string(planner, researcher, writer, editor, continuity, executor)` | 是 |  |
+| `status` | `string(planned, completed, failed, skipped)` | 是 |  |
+| `tool_scope` | `array<string>` | 否 |  |
+| `input_summary` | `string \| null` | 否 |  |
+| `output_summary` | `string \| null` | 否 |  |
+| `attempt_count` | `integer` | 否 |  |
+
+### AgentCapabilityPolicyResponse
+
+- 类型: `object`
+- 描述: Stable policy contract for one internal capability.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `execution_phase` | `string(plan, build)` | 是 |  |
+| `source_role` | `string(planner, researcher, writer, editor, continuity, executor)` | 是 |  |
+| `confirmation_gate` | `string(none, single, double)` | 是 |  |
+| `internal_only` | `boolean` | 否 |  |
+| `requires_confirmation` | `boolean` | 否 |  |
+
+### AgentCapabilityRegistryResponse
+
+- 类型: `object`
+- 描述: Stable registry of capability contracts available to the workflow.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `registry_version` | `string` | 是 |  |
+| `capabilities` | `array<AgentCapabilityResponse>` | 否 |  |
+
+### AgentCapabilityResponse
+
+- 类型: `object`
+- 描述: One stable internal capability exposed with the run contract.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `capability_id` | `string` | 是 |  |
+| `name` | `string` | 是 |  |
+| `kind` | `string(read_search, planning, writing, editing, verification)` | 是 |  |
+| `description` | `string` | 是 |  |
+| `tool_scope` | `array<string>` | 否 |  |
+| `policy` | `AgentCapabilityPolicyResponse` | 是 |  |
+| `execution_record` | `AgentCapabilityExecutionRecordResponse \| null` | 否 |  |
+
+### AgentChatRequest
+
+- 类型: `object`
+- 描述: Legacy request schema for the previous chat endpoint.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `project_id` | `string` | 是 | Project UUID |
+| `message` | `string` | 是 | User message |
+| `history` | `array<object>` | 否 | Chat history |
+| `context` | `object` | 否 | Extra context data |
+
+### AgentChatResponse
+
+- 类型: `object`
+- 描述: Legacy response schema for the previous chat endpoint.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `message` | `string` | 是 | Agent response message |
+| `suggestions` | `array<object>` | 否 | Generated suggestions |
+| `metadata` | `object` | 否 | Agent metadata |
+
+### AgentCompactPolicyResponse
+
+- 类型: `object`
+- 描述: Stable compact policy applied by the thread planner.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `policy_version` | `string` | 是 |  |
+| `message_threshold` | `integer` | 是 |  |
+| `run_threshold` | `integer` | 是 |  |
+| `char_threshold` | `integer` | 是 |  |
+| `recent_window_limit` | `integer` | 是 |  |
+| `checkpoint_delta_limit` | `integer` | 是 |  |
+
+### AgentCompactionBoundaryResponse
+
+- 类型: `object`
+- 描述: Boundary metadata captured when a checkpoint was created.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `history_mode` | `string(recent_window, checkpoint_delta)` | 是 |  |
+| `source_message_count` | `integer` | 是 |  |
+| `source_run_count` | `integer` | 是 |  |
+
+### AgentExecutionChildUnitResponse
+
+- 类型: `object`
+- 描述: Stable contract for one internal child unit inside a workflow phase.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `unit_id` | `string` | 是 |  |
+| `role` | `string(planner, researcher, writer, editor, continuity, executor)` | 是 |  |
+| `phase` | `string(plan, build)` | 是 |  |
+| `stage` | `string(preview, pre_execution, execution)` | 是 |  |
+| `mode` | `string(restricted, gated)` | 是 |  |
+| `title` | `string` | 是 |  |
+| `description` | `string` | 是 |  |
+| `tool_scope` | `array<string>` | 否 |  |
+| `capability_ids` | `array<string>` | 否 |  |
+| `depends_on` | `array<string>` | 否 |  |
+| `operation_positions` | `array<integer>` | 否 |  |
+| `confirmation_gate` | `string(none, single, double)` | 是 |  |
+| `requires_confirmation` | `boolean` | 否 |  |
+| `internal_only` | `boolean` | 否 |  |
+
+### AgentExecutionContractResponse
+
+- 类型: `object`
+- 描述: Stable child unit contract surfaced with each run.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `registry_version` | `string` | 是 |  |
+| `phases` | `array<AgentExecutionPhaseResponse>` | 否 |  |
+
+### AgentExecutionPhaseResponse
+
+- 类型: `object`
+- 描述: Stable run-level contract for one workflow phase.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `phase` | `string(plan, build)` | 是 |  |
+| `mode` | `string(restricted, gated)` | 是 |  |
+| `allowed_permission_levels` | `array<string(read_search, standard_write, high_risk_write)>` | 否 |  |
+| `tool_scope` | `array<string>` | 否 |  |
+| `role_scope` | `array<string(planner, researcher, writer, editor, continuity)>` | 否 |  |
+| `confirmation_gate` | `string(none, single, double)` | 是 |  |
+| `requires_confirmation` | `boolean` | 否 |  |
+| `requires_secondary_confirmation` | `boolean` | 否 |  |
+| `operation_count` | `integer` | 否 |  |
+| `child_units` | `array<AgentExecutionChildUnitResponse>` | 否 |  |
+| `capabilities` | `array<AgentCapabilityResponse>` | 否 |  |
+
+### AgentMessageResponse
+
+- 类型: `object`
+- 描述: Message persisted in an agent thread.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `thread_id` | `string` | 是 |  |
+| `role` | `string(user, assistant, system)` | 是 |  |
+| `content` | `string` | 是 |  |
+| `meta` | `object` | 否 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### AgentOperationResponse
+
+- 类型: `object`
+- 描述: A single planned or executed operation.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `run_id` | `string` | 是 |  |
+| `position` | `integer` | 是 |  |
+| `tool_name` | `string` | 是 |  |
+| `target_type` | `string \| null` | 否 |  |
+| `target_id` | `string \| null` | 否 |  |
+| `target_display` | `string \| null` | 否 |  |
+| `description` | `string` | 是 |  |
+| `reason` | `string \| null` | 否 |  |
+| `payload` | `object` | 是 |  |
+| `preview` | `OperationPreview` | 是 |  |
+| `permission_level` | `string(read_search, standard_write, high_risk_write)` | 是 |  |
+| `risk_level` | `string(low, medium, high)` | 是 |  |
+| `requires_secondary_confirmation` | `boolean` | 是 |  |
+| `status` | `string(planned, executed, failed, cancelled)` | 是 |  |
+| `verification_status` | `string(pending, passed, failed, skipped)` | 是 |  |
+| `verification_summary` | `string \| null` | 否 |  |
+| `execution_result` | `object \| null` | 否 |  |
+| `error_message` | `string \| null` | 否 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### AgentPlannerWindowResponse
+
+- 类型: `object`
+- 描述: Resolved planner input window for one run.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `history_mode` | `string(recent_window, checkpoint_delta)` | 是 |  |
+| `history_message_count` | `integer` | 是 |  |
+| `retained_message_limit` | `integer` | 是 |  |
+| `checkpoint_id` | `string \| null` | 否 |  |
+| `checkpoint_available` | `boolean` | 否 |  |
+| `compact_policy_version` | `string \| null` | 否 |  |
+
+### AgentProfileResponse
+
+- 类型: `object`
+- 描述: Available project-level agent profile.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `name` | `string` | 是 |  |
+| `description` | `string` | 是 |  |
+| `builtin` | `boolean` | 是 |  |
+| `root` | `string` | 是 |  |
+
+### AgentRetainedWindowResponse
+
+- 类型: `object`
+- 描述: Concrete history slice retained for one planner invocation.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `history_mode` | `string(recent_window, checkpoint_delta)` | 是 |  |
+| `message_count` | `integer` | 是 |  |
+| `character_count` | `integer` | 是 |  |
+| `retained_message_limit` | `integer` | 是 |  |
+| `oldest_message_id` | `string \| null` | 否 |  |
+| `newest_message_id` | `string \| null` | 否 |  |
+| `checkpoint_id` | `string \| null` | 否 |  |
+| `compact_policy_version` | `string \| null` | 否 |  |
+| `roles` | `array<string>` | 否 |  |
+
+### AgentRiskPolicyRegistryResponse
+
+- 类型: `object`
+- 描述: Stable registry of risk policies used by the run classifier.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `policy_version` | `string` | 是 |  |
+| `policies` | `array<AgentRiskPolicyResponse>` | 否 |  |
+
+### AgentRiskPolicyResponse
+
+- 类型: `object`
+- 描述: Stable risk classification policy exposed independently from one run.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `policy_id` | `string(create_only, standard_updates, content_append, content_rewrite, long_form_overwrite, multi_object_write)` | 是 |  |
+| `name` | `string` | 是 |  |
+| `scope` | `string(operation, run)` | 是 |  |
+| `description` | `string` | 是 |  |
+| `risk_level` | `string(low, medium, high)` | 是 |  |
+| `confirmation_gate` | `string(none, single, double)` | 是 |  |
+| `requires_secondary_confirmation` | `boolean` | 否 |  |
+| `tool_scope` | `array<string>` | 否 |  |
+
+### AgentRunActionResponse
+
+- 类型: `object`
+- 描述: Response for confirm/cancel actions.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `run` | `AgentRunResponse` | 是 |  |
+
+### AgentRunResponse
+
+- 类型: `object`
+- 描述: An executable plan generated from one user request.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `thread_id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `user_message_id` | `string \| null` | 否 |  |
+| `assistant_message_id` | `string \| null` | 否 |  |
+| `revision_of_run_id` | `string \| null` | 否 |  |
+| `status` | `string(draft, awaiting_confirmation, awaiting_high_risk_confirmation, executing, completed, failed, cancelled, superseded)` | 是 |  |
+| `summary` | `string \| null` | 否 |  |
+| `error_message` | `string \| null` | 否 |  |
+| `warning_message` | `string \| null` | 否 |  |
+| `verification_status` | `string(pending, passed, failed, skipped)` | 是 |  |
+| `verification_summary` | `string \| null` | 否 |  |
+| `execution_contract` | `AgentExecutionContractResponse \| null` | 否 |  |
+| `risk_summary` | `AgentRunRiskSummaryResponse \| null` | 否 |  |
+| `compact_policy` | `AgentCompactPolicyResponse \| null` | 否 |  |
+| `planner_window` | `AgentPlannerWindowResponse \| null` | 否 |  |
+| `retained_window` | `AgentRetainedWindowResponse \| null` | 否 |  |
+| `active_bundle_contract` | `AgentActiveBundleContractResponse \| null` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `confirmed_at` | `string \| null` | 否 |  |
+| `secondary_confirmed_at` | `string \| null` | 否 |  |
+| `started_at` | `string \| null` | 否 |  |
+| `completed_at` | `string \| null` | 否 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+| `operations` | `array<AgentOperationResponse>` | 否 |  |
+| `subtasks` | `array<AgentSubtaskResponse>` | 否 |  |
+
+### AgentRunRiskSummaryResponse
+
+- 类型: `object`
+- 描述: Stable run-level aggregation of write risk and confirmation gates.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `policy_version` | `string` | 是 |  |
+| `overall_risk_level` | `string(low, medium, high)` | 是 |  |
+| `confirmation_gate` | `string(none, single, double)` | 是 |  |
+| `requires_confirmation` | `boolean` | 是 |  |
+| `requires_secondary_confirmation` | `boolean` | 是 |  |
+| `total_operations` | `integer` | 否 |  |
+| `low_risk_operation_count` | `integer` | 否 |  |
+| `medium_risk_operation_count` | `integer` | 否 |  |
+| `high_risk_operation_count` | `integer` | 否 |  |
+| `high_risk_operation_positions` | `array<integer>` | 否 |  |
+| `secondary_confirmation_operation_positions` | `array<integer>` | 否 |  |
+| `applied_policies` | `array<AgentAppliedRiskPolicyResponse>` | 否 |  |
+| `summary` | `string` | 是 |  |
+
+### AgentSkillCatalogResponse
+
+- 类型: `object`
+- 描述: Active planner and operation skill catalog.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `profile_id` | `string` | 是 |  |
+| `profile_name` | `string` | 是 |  |
+| `builtin` | `boolean` | 是 |  |
+| `source_roots` | `array<string>` | 否 |  |
+| `planner` | `AgentSkillSummaryResponse` | 是 |  |
+| `operations` | `array<AgentSkillSummaryResponse>` | 否 |  |
+
+### AgentSkillSummaryResponse
+
+- 类型: `object`
+- 描述: Serializable metadata for one loaded planner or operation skill.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | `string` | 是 |  |
+| `description` | `string` | 是 |  |
+| `kind` | `string` | 是 |  |
+| `tool_name` | `string \| null` | 否 |  |
+| `source` | `string` | 是 |  |
+| `payload_contract` | `string \| null` | 否 |  |
+| `references` | `array<string>` | 否 |  |
+
+### AgentSubtaskAttemptResponse
+
+- 类型: `object`
+- 描述: One attempt within a child execution unit.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `attempt_number` | `integer` | 是 |  |
+| `source` | `string` | 是 |  |
+| `accepted` | `boolean` | 是 |  |
+| `validation_status` | `string(passed, recovered, failed)` | 是 |  |
+| `summary` | `string` | 是 |  |
+
+### AgentSubtaskResponse
+
+- 类型: `object`
+- 描述: Internal subtask summary exposed with a run.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `run_id` | `string` | 是 |  |
+| `position` | `integer` | 是 |  |
+| `role` | `string(planner, researcher, writer, editor, continuity)` | 是 |  |
+| `title` | `string` | 是 |  |
+| `status` | `string(planned, completed, failed, skipped)` | 是 |  |
+| `summary` | `string \| null` | 否 |  |
+| `error_message` | `string \| null` | 否 |  |
+| `child_trace` | `AgentSubtaskTraceResponse \| null` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### AgentSubtaskTraceResponse
+
+- 类型: `object`
+- 描述: Stable child execution trace for one internal subtask.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `unit_id` | `string` | 是 |  |
+| `role` | `string(planner, researcher, writer, editor, continuity)` | 是 |  |
+| `execution_phase` | `string(plan, build_validation)` | 是 |  |
+| `retry_strategy` | `string(service_only, planner_then_service_fallback)` | 是 |  |
+| `depends_on` | `array<string>` | 否 |  |
+| `operation_positions` | `array<integer>` | 否 |  |
+| `tool_scope` | `array<string>` | 否 |  |
+| `input_summary` | `string \| null` | 否 |  |
+| `output_summary` | `string \| null` | 否 |  |
+| `attempts` | `array<AgentSubtaskAttemptResponse>` | 否 |  |
+
+### AgentThreadCheckpointResponse
+
+- 类型: `object`
+- 描述: Compressed thread state snapshot exposed to the workspace.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `thread_id` | `string` | 是 |  |
+| `profile_id` | `string` | 是 |  |
+| `thread_summary` | `string` | 是 |  |
+| `active_object_bundle` | `object` | 否 |  |
+| `recent_run_digest` | `object` | 否 |  |
+| `source_message_count` | `integer` | 是 |  |
+| `source_run_count` | `integer` | 是 |  |
+| `total_context_characters` | `integer` | 是 |  |
+| `compact_policy` | `AgentCompactPolicyResponse \| null` | 否 |  |
+| `compaction_boundary` | `AgentCompactionBoundaryResponse \| null` | 否 |  |
+| `active_bundle_contract` | `AgentActiveBundleContractResponse \| null` | 否 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### AgentThreadCreateRequest
+
+- 类型: `object`
+- 描述: Create or fetch the default thread for a project.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `project_id` | `string` | 是 |  |
+
+### AgentThreadMessageRequest
+
+- 类型: `object`
+- 描述: User message sent into a thread.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `content` | `string` | 是 |  |
+| `context` | `object` | 否 |  |
+| `stream` | `boolean` | 否 |  |
+
+### AgentThreadMessageResponse
+
+- 类型: `object`
+- 描述: Planner response for a new thread message.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `thread` | `AgentThreadResponse` | 是 |  |
+| `user_message` | `AgentMessageResponse` | 是 |  |
+| `assistant_message` | `AgentMessageResponse` | 是 |  |
+| `run` | `AgentRunResponse \| null` | 否 |  |
+
+### AgentThreadResponse
+
+- 类型: `object`
+- 描述: Thread metadata.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `title` | `string` | 是 |  |
+| `is_default` | `boolean` | 是 |  |
+| `meta` | `object` | 否 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### AgentThreadStateResponse
+
+- 类型: `object`
+- 描述: Thread view used by the Agent Workspace.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `thread` | `AgentThreadResponse` | 是 |  |
+| `messages` | `array<AgentMessageResponse>` | 否 |  |
+| `recent_runs` | `array<AgentRunResponse>` | 否 |  |
+| `current_run` | `AgentRunResponse \| null` | 否 |  |
+| `latest_checkpoint` | `AgentThreadCheckpointResponse \| null` | 否 |  |
+
+### AutoSummarizeRequest
+
+- 类型: `object`
+- 描述: Request schema for legacy auto-summarize.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `project_id` | `string` | 是 |  |
+| `chapter_id` | `string` | 是 |  |
+| `content` | `string` | 是 |  |
+
+### AutoSummarizeResponse
+
+- 类型: `object`
+- 描述: Response schema for legacy auto-summarize.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `memories` | `array<object>` | 是 |  |
+| `count` | `integer` | 是 |  |
+
+### Body_import_project_package_api_v1_projects_import_post
+
+- 类型: `object`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `file` | `string` | 是 |  |
+
+### ChapterCreate
+
+- 类型: `object`
+- 描述: Schema for creating a chapter.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `chapter_number` | `integer` | 是 |  |
+| `title` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 |  |
+| `content` | `string \| null` | 否 |  |
+| `status` | `string(draft, writing, completed)` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `project_id` | `string` | 是 |  |
+| `volume_id` | `string \| null` | 否 |  |
+
+### ChapterResponse
+
+- 类型: `object`
+- 描述: Schema for chapter response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `chapter_number` | `integer` | 是 |  |
+| `title` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 |  |
+| `content` | `string \| null` | 否 |  |
+| `status` | `string(draft, writing, completed)` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `volume_id` | `string \| null` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### ChapterUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a chapter.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `chapter_number` | `integer \| null` | 否 |  |
+| `title` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 |  |
+| `content` | `string \| null` | 否 |  |
+| `status` | `string(draft, writing, completed) \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `volume_id` | `string \| null` | 否 |  |
+
+### CharacterCreate
+
+- 类型: `object`
+- 描述: Schema for creating a character.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | `string` | 是 |  |
+| `role` | `string \| null` | 否 |  |
+| `profile` | `object` | 否 |  |
+| `relationships` | `object` | 否 |  |
+| `arc_state` | `object` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `project_id` | `string` | 是 |  |
+
+### CharacterResponse
+
+- 类型: `object`
+- 描述: Schema for character response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | `string` | 是 |  |
+| `role` | `string \| null` | 否 |  |
+| `profile` | `object` | 否 |  |
+| `relationships` | `object` | 否 |  |
+| `arc_state` | `object` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### CharacterUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a character.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | `string \| null` | 否 |  |
+| `role` | `string \| null` | 否 |  |
+| `profile` | `object \| null` | 否 |  |
+| `relationships` | `object \| null` | 否 |  |
+| `arc_state` | `object \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+
+### ContinuityCheckRequest
+
+- 类型: `object`
+- 描述: Request schema for legacy continuity check.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `project_id` | `string` | 是 |  |
+| `content` | `string` | 是 |  |
+
+### DependencyCreate
+
+- 类型: `object`
+- 描述: Schema for creating a dependency.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `source_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 | Type of the source object |
+| `source_id` | `string` | 是 | ID of the source object |
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 | Type of the target object |
+| `target_id` | `string` | 是 | ID of the target object |
+| `dependency_type` | `string(references, influences, contains, precedes) \| null` | 否 | Type of dependency relationship |
+| `project_id` | `string` | 是 |  |
+
+### DependencyResponse
+
+- 类型: `object`
+- 描述: Schema for dependency response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `source_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 | Type of the source object |
+| `source_id` | `string` | 是 | ID of the source object |
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 | Type of the target object |
+| `target_id` | `string` | 是 | ID of the target object |
+| `dependency_type` | `string(references, influences, contains, precedes) \| null` | 否 | Type of dependency relationship |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### DependencyUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a dependency.<br><br>Note: Only dependency_type can be updated via PATCH.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `dependency_type` | `string(references, influences, contains, precedes) \| null` | 否 |  |
+
+### HTTPValidationError
+
+- 类型: `object`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `detail` | `array<ValidationError>` | 否 |  |
+
+### HealthResponse
+
+- 类型: `object`
+- 描述: Health check response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `status` | `string` | 是 |  |
+| `version` | `string` | 是 |  |
+| `mode` | `string` | 是 |  |
+| `auth_required` | `boolean` | 是 |  |
+| `api_key_header` | `string \| null` | 否 |  |
+| `database` | `string \| null` | 否 |  |
+| `redis` | `string \| null` | 否 |  |
+
+### ImpactAnalysisRequest
+
+- 类型: `object`
+- 描述: Schema for impact analysis request.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `source_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 | Type of the source object being modified |
+| `source_id` | `string` | 是 | ID of the source object being modified |
+
+### ImpactAnalysisResponse
+
+- 类型: `object`
+- 描述: Schema for impact analysis response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `source_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 |  |
+| `source_id` | `string` | 是 |  |
+| `impacted_objects` | `array<ImpactDetail>` | 是 |  |
+| `total_count` | `integer` | 是 |  |
+| `analysis_summary` | `string \| null` | 否 |  |
+
+### ImpactDetail
+
+- 类型: `object`
+- 描述: Detail of a single impact.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 |  |
+| `target_id` | `string` | 是 |  |
+| `dependency_type` | `string(references, influences, contains, precedes) \| null` | 是 |  |
+| `description` | `string \| null` | 否 |  |
+
+### MemoryCreate
+
+- 类型: `object`
+- 描述: Schema for creating a memory.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `memory_type` | `string` | 是 | Type of memory (episode, semantic, fact) |
+| `content` | `string` | 是 | Memory content text |
+| `meta` | `object` | 否 | Additional metadata |
+| `project_id` | `string` | 是 | Project ID this memory belongs to |
+| `embedding` | `array<number> \| null` | 否 | Vector embedding (4096 dimensions) |
+| `auto_embed` | `boolean` | 否 | Automatically generate embedding from content |
+
+### MemoryMatch
+
+- 类型: `object`
+- 描述: A single memory match from vector search.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | `string` | 是 |  |
+| `memory_type` | `string` | 是 |  |
+| `content` | `string` | 是 |  |
+| `meta` | `object` | 是 |  |
+| `similarity` | `number` | 是 | Cosine similarity score (0-1) |
+
+### MemoryResponse
+
+- 类型: `object`
+- 描述: Schema for memory response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `memory_type` | `string` | 是 | Type of memory (episode, semantic, fact) |
+| `content` | `string` | 是 | Memory content text |
+| `meta` | `object` | 否 | Additional metadata |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `embedding` | `array<number> \| null` | 否 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### MemoryUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a memory.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `content` | `string \| null` | 否 |  |
+| `memory_type` | `string \| null` | 否 |  |
+| `meta` | `object \| null` | 否 |  |
+| `embedding` | `array<number> \| null` | 否 |  |
+| `auto_embed` | `boolean \| null` | 否 | Automatically regenerate embedding from content if content changes |
+
+### OperationPreview
+
+- 类型: `object`
+- 描述: Preview payload shown before execution.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `changed_fields` | `array<string>` | 否 |  |
+| `before_summary` | `string \| null` | 否 |  |
+| `after_summary` | `string \| null` | 否 |  |
+| `diff` | `string \| null` | 否 |  |
+| `reason` | `string \| null` | 否 |  |
+
+### ProjectCreate
+
+- 类型: `object`
+- 描述: Schema for creating a project.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | `string` | 是 |  |
+| `genre` | `string \| null` | 否 |  |
+| `target_audience` | `string \| null` | 否 |  |
+| `target_word_count` | `integer \| null` | 否 |  |
+| `summary` | `string \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `agent_profile_id` | `string` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `status` | `string(drafting, writing, revising, completed)` | 否 |  |
+
+### ProjectImportResponse
+
+- 类型: `object`
+- 描述: Response for project import operation.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `project_id` | `string` | 是 | New project ID |
+| `project_name` | `string` | 是 | New project name |
+| `imported_counts` | `object` | 是 | Counts of imported objects by type |
+| `warnings` | `array<ProjectImportWarning>` | 否 | Warnings generated during import |
+
+### ProjectImportWarning
+
+- 类型: `object`
+- 描述: A warning generated during project import.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `code` | `string` | 是 | Warning code |
+| `message` | `string` | 是 | Human-readable warning message |
+| `details` | `object \| null` | 否 | Additional details |
+
+### ProjectResponse
+
+- 类型: `object`
+- 描述: Schema for project response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | `string` | 是 |  |
+| `genre` | `string \| null` | 否 |  |
+| `target_audience` | `string \| null` | 否 |  |
+| `target_word_count` | `integer \| null` | 否 |  |
+| `summary` | `string \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `agent_profile_id` | `string` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `id` | `string` | 是 |  |
+| `status` | `string(drafting, writing, revising, completed)` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### ProjectUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a project.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | `string \| null` | 否 |  |
+| `genre` | `string \| null` | 否 |  |
+| `target_audience` | `string \| null` | 否 |  |
+| `target_word_count` | `integer \| null` | 否 |  |
+| `status` | `string(drafting, writing, revising, completed) \| null` | 否 |  |
+| `summary` | `string \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `agent_profile_id` | `string \| null` | 否 |  |
+| `meta` | `object \| null` | 否 |  |
+
+### RollbackRequest
+
+- 类型: `object`
+- 描述: Schema for rolling back to a snapshot.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `snapshot_id` | `string` | 是 | ID of the snapshot to rollback to |
+
+### RollbackResponse
+
+- 类型: `object`
+- 描述: Schema for rollback response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `snapshot_id` | `string` | 是 |  |
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 |  |
+| `target_id` | `string` | 是 |  |
+| `rolled_back_at` | `string` | 是 |  |
+| `message` | `string` | 是 | Confirmation message about the rollback operation |
+
+### SceneCreate
+
+- 类型: `object`
+- 描述: Schema for creating a scene.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `scene_order` | `integer` | 是 |  |
+| `pov_character_id` | `string \| null` | 否 |  |
+| `location` | `string \| null` | 否 |  |
+| `content` | `string \| null` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `chapter_id` | `string` | 是 |  |
+
+### SceneResponse
+
+- 类型: `object`
+- 描述: Schema for scene response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `scene_order` | `integer` | 是 |  |
+| `pov_character_id` | `string \| null` | 否 |  |
+| `location` | `string \| null` | 否 |  |
+| `content` | `string \| null` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `id` | `string` | 是 |  |
+| `chapter_id` | `string` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### SceneUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a scene.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `scene_order` | `integer \| null` | 否 |  |
+| `pov_character_id` | `string \| null` | 否 |  |
+| `location` | `string \| null` | 否 |  |
+| `content` | `string \| null` | 否 |  |
+| `meta` | `object \| null` | 否 |  |
+
+### SnapshotCreate
+
+- 类型: `object`
+- 描述: Schema for creating a snapshot.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 | Type of the target object |
+| `target_id` | `string` | 是 | ID of the target object |
+| `data` | `object` | 是 | JSON representation of the object state |
+| `project_id` | `string` | 是 | Project ID this snapshot belongs to |
+
+### SnapshotResponse
+
+- 类型: `object`
+- 描述: Schema for snapshot response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `target_type` | `string(project, character, world_setting, volume, chapter, scene, suggestion)` | 是 | Type of the target object |
+| `target_id` | `string` | 是 | ID of the target object |
+| `data` | `object` | 是 | JSON representation of the object state |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### SnapshotUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a snapshot.<br><br>Note: Only data can be updated via PATCH (for corrections).
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `data` | `object \| null` | 否 |  |
+
+### SuggestionActionRequest
+
+- 类型: `object`
+- 描述: Schema for suggestion actions (confirm, discard, commit).
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `action` | `string(confirm, discard, commit)` | 是 | Action to perform: confirm, discard, or commit |
+| `impact_analysis` | `object \| null` | 否 | Impact analysis results (required for commit) |
+
+### SuggestionActionResult
+
+- 类型: `object`
+- 描述: Schema for action result.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `success` | `boolean` | 是 |  |
+| `message` | `string` | 是 |  |
+| `suggestion_id` | `string` | 是 |  |
+| `action` | `string(confirm, discard, commit)` | 是 |  |
+
+### SuggestionCreate
+
+- 类型: `object`
+- 描述: Schema for creating a suggestion.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `target_type` | `string(character, world_setting, chapter, scene)` | 是 | Type of target object (character, world_setting, chapter, scene) |
+| `target_id` | `string` | 是 | ID of the target object |
+| `type` | `string(character_edit, world_edit, chapter_edit, scene_edit, content_gen, outline_gen, continuity_fix)` | 是 | Type of suggestion |
+| `content` | `object` | 是 | Suggestion content (JSON) |
+| `project_id` | `string` | 是 |  |
+| `status` | `string(draft, patched, committed, discarded)` | 否 |  |
+
+### SuggestionResponse
+
+- 类型: `object`
+- 描述: Schema for suggestion response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `target_type` | `string(character, world_setting, chapter, scene)` | 是 | Type of target object (character, world_setting, chapter, scene) |
+| `target_id` | `string` | 是 | ID of the target object |
+| `type` | `string(character_edit, world_edit, chapter_edit, scene_edit, content_gen, outline_gen, continuity_fix)` | 是 | Type of suggestion |
+| `content` | `object` | 是 | Suggestion content (JSON) |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `status` | `string(draft, patched, committed, discarded)` | 是 |  |
+| `impact_analysis` | `object \| null` | 是 |  |
+| `committed_at` | `string \| null` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### SuggestionUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a suggestion.<br><br>Note: Only 'content' can be updated via PATCH. Status changes must go through<br>the confirm/discard/commit actions to ensure proper state transitions.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `content` | `object \| null` | 否 |  |
+
+### ValidationError
+
+- 类型: `object`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `loc` | `array<string \| integer>` | 是 |  |
+| `msg` | `string` | 是 |  |
+| `type` | `string` | 是 |  |
+| `input` | `-` | 否 |  |
+| `ctx` | `object` | 否 |  |
+
+### VectorSearchRequest
+
+- 类型: `object`
+- 描述: Schema for vector similarity search request.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `query_embedding` | `array<number>` | 是 | Query vector embedding for similarity search |
+| `limit` | `integer` | 否 | Maximum number of results to return |
+| `threshold` | `number` | 否 | Minimum similarity threshold (cosine) |
+| `memory_type` | `string \| null` | 否 | Optional filter by memory type |
+
+### VectorSearchResponse
+
+- 类型: `object`
+- 描述: Schema for vector search response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `matches` | `array<MemoryMatch>` | 是 |  |
+| `total_count` | `integer` | 是 |  |
+| `search_summary` | `string \| null` | 否 |  |
+
+### VolumeCreate
+
+- 类型: `object`
+- 描述: Schema for creating a volume.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `volume_number` | `integer \| null` | 否 |  |
+| `title` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `project_id` | `string` | 是 |  |
+
+### VolumeResponse
+
+- 类型: `object`
+- 描述: Schema for volume response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `volume_number` | `integer \| null` | 否 |  |
+| `title` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### VolumeUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a volume.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `volume_number` | `integer \| null` | 否 |  |
+| `title` | `string \| null` | 否 |  |
+| `outline` | `string \| null` | 否 |  |
+| `notes` | `string \| null` | 否 |  |
+
+### WorldSettingCreate
+
+- 类型: `object`
+- 描述: Schema for creating a world setting.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `category` | `string(magic_system, geography, history, organization, technology, culture, religion, economy, rules, other)` | 是 |  |
+| `name` | `string` | 是 |  |
+| `content` | `string \| null` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `project_id` | `string` | 是 |  |
+
+### WorldSettingResponse
+
+- 类型: `object`
+- 描述: Schema for world setting response.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `category` | `string(magic_system, geography, history, organization, technology, culture, religion, economy, rules, other)` | 是 |  |
+| `name` | `string` | 是 |  |
+| `content` | `string \| null` | 否 |  |
+| `meta` | `object` | 否 |  |
+| `id` | `string` | 是 |  |
+| `project_id` | `string` | 是 |  |
+| `created_at` | `string` | 是 |  |
+| `updated_at` | `string` | 是 |  |
+
+### WorldSettingUpdate
+
+- 类型: `object`
+- 描述: Schema for updating a world setting.
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `category` | `string(magic_system, geography, history, organization, technology, culture, religion, economy, rules, other) \| null` | 否 |  |
+| `name` | `string \| null` | 否 |  |
+| `content` | `string \| null` | 否 |  |
+| `meta` | `object \| null` | 否 |  |

@@ -19,7 +19,7 @@
 - 主流程是项目级 `thread / run / operation`
 - 主交互入口是项目详情页内的 `AgentWorkspace`
 - 写入遵循 preview-first、confirm-then-execute
-- 高风险正文覆盖需要二次确认
+- 命中高风险策略的正文覆盖需要二次确认
 - 执行完成前必须经过 verification gate
 - 长线程上下文通过 checkpoint compact flow 管理
 - Profile / Skill、Risk、Execution、Verification、Compact 都以显式 contract 对外暴露
