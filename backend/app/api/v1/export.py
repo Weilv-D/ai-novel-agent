@@ -1,5 +1,7 @@
 """Export API routes."""
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/projects", tags=["export"])
 async def export_project(
     *,
     db: AsyncSession = Depends(get_db),
-    project_id: str,
+    project_id: UUID,
     format: str = Query("txt", pattern="^(txt|markdown)$"),
 ) -> PlainTextResponse:
     """Export project content as TXT or Markdown."""

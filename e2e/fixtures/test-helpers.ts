@@ -135,19 +135,16 @@ export async function getCharacter(
   projectId: string,
   characterId: string
 ) {
-  const response = await apiContext.get(
-    `/api/v1/projects/${projectId}/characters/${characterId}`
-  );
+  const response = await apiContext.get(`/api/v1/characters/${characterId}`);
   if (!response.ok()) {
     return null;
   }
-  return response.json();
+  const character = await response.json();
+  return character.project_id === projectId ? character : null;
 }
 
 export async function listCharacters(apiContext: APIRequestContext, projectId: string) {
-  const response = await apiContext.get(
-    `/api/v1/projects/${projectId}/characters`
-  );
+  const response = await apiContext.get(`/api/v1/characters/project/${projectId}`);
   if (!response.ok()) {
     throw new Error(`Failed to list characters: ${await response.text()}`);
   }
@@ -159,19 +156,16 @@ export async function getWorldSetting(
   projectId: string,
   settingId: string
 ) {
-  const response = await apiContext.get(
-    `/api/v1/projects/${projectId}/world-settings/${settingId}`
-  );
+  const response = await apiContext.get(`/api/v1/world-settings/${settingId}`);
   if (!response.ok()) {
     return null;
   }
-  return response.json();
+  const setting = await response.json();
+  return setting.project_id === projectId ? setting : null;
 }
 
 export async function listWorldSettings(apiContext: APIRequestContext, projectId: string) {
-  const response = await apiContext.get(
-    `/api/v1/projects/${projectId}/world-settings`
-  );
+  const response = await apiContext.get(`/api/v1/world-settings/project/${projectId}`);
   if (!response.ok()) {
     throw new Error(`Failed to list world settings: ${await response.text()}`);
   }
@@ -183,19 +177,16 @@ export async function getChapter(
   projectId: string,
   chapterId: string
 ) {
-  const response = await apiContext.get(
-    `/api/v1/projects/${projectId}/chapters/${chapterId}`
-  );
+  const response = await apiContext.get(`/api/v1/chapters/${chapterId}`);
   if (!response.ok()) {
     return null;
   }
-  return response.json();
+  const chapter = await response.json();
+  return chapter.project_id === projectId ? chapter : null;
 }
 
 export async function listChapters(apiContext: APIRequestContext, projectId: string) {
-  const response = await apiContext.get(
-    `/api/v1/projects/${projectId}/chapters`
-  );
+  const response = await apiContext.get(`/api/v1/chapters/project/${projectId}`);
   if (!response.ok()) {
     throw new Error(`Failed to list chapters: ${await response.text()}`);
   }

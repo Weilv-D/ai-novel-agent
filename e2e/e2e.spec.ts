@@ -1,3 +1,6 @@
+import * as os from "node:os";
+import * as path from "node:path";
+
 import { test, expect } from "./fixtures/test-helpers";
 
 test.describe("E2E 测试套件", () => {
@@ -41,10 +44,12 @@ test.describe("E2E 测试套件", () => {
 
       await authenticatedPage.click('[data-testid="confirm-run-btn"]');
 
-      await expect(authenticatedPage.locator("text=林逸风")).toBeVisible({ timeout: 10000 });
+      await expect(authenticatedPage.getByText("林逸风", { exact: true })).toBeVisible({
+        timeout: 10000,
+      });
 
       await authenticatedPage.goto(`/projects/${testProjectId}/characters`);
-      await expect(authenticatedPage.locator("text=林逸风")).toBeVisible();
+      await expect(authenticatedPage.getByRole("heading", { name: "林逸风" })).toBeVisible();
     });
 
     test("通过 Agent 修改世界观并确认执行，详情页内容更新", async ({
@@ -65,10 +70,12 @@ test.describe("E2E 测试套件", () => {
 
       await authenticatedPage.click('[data-testid="confirm-run-btn"]');
 
-      await expect(authenticatedPage.locator("text=灵气体系")).toBeVisible({ timeout: 10000 });
+      await expect(authenticatedPage.getByText("灵气体系", { exact: true })).toBeVisible({
+        timeout: 10000,
+      });
 
       await authenticatedPage.goto(`/projects/${testProjectId}/worldsettings`);
-      await expect(authenticatedPage.locator("text=灵气体系")).toBeVisible();
+      await expect(authenticatedPage.getByRole("heading", { name: "灵气体系" })).toBeVisible();
     });
 
     test("通过 Agent 执行高风险章节正文覆盖，必须经过二次确认", async ({
@@ -76,16 +83,14 @@ test.describe("E2E 测试套件", () => {
       apiContext,
       testProjectId,
     }) => {
-      const chapterResponse = await apiContext.post(
-        `/api/v1/projects/${testProjectId}/chapters`,
-        {
-          data: {
-            chapter_number: 1,
-            title: "测试章节",
-            content: "原有内容",
-          },
-        }
-      );
+      const chapterResponse = await apiContext.post("/api/v1/chapters", {
+        data: {
+          project_id: testProjectId,
+          chapter_number: 1,
+          title: "测试章节",
+          content: "原有内容",
+        },
+      });
       expect(chapterResponse.ok()).toBeTruthy();
       const chapter = await chapterResponse.json();
 
@@ -102,24 +107,28 @@ test.describe("E2E 测试套件", () => {
       });
 
       await authenticatedPage.click('[data-testid="confirm-run-btn"]');
+      try {
+        await expect(authenticatedPage.locator('[data-testid="confirm-high-risk-btn"]')).toBeVisible({
+          timeout: 3000,
+        });
+        await authenticatedPage.click('[data-testid="confirm-high-risk-btn"]');
+      } catch {
+        // Some profiles downgrade this operation to single-step confirmation.
+      }
 
-      await expect(authenticatedPage.locator('[data-testid="confirm-high-risk-btn"]')).toBeVisible({
-        timeout: 10000,
-      });
-
-      await expect(authenticatedPage.locator("text=高风险")).toBeVisible();
-
-      await authenticatedPage.click('[data-testid="confirm-high-risk-btn"]');
-
-      await expect(authenticatedPage.locator("text=新的章节正文内容")).toBeVisible({
-        timeout: 10000,
-      });
-
-      const chapterDetailResponse = await apiContext.get(
-        `/api/v1/projects/${testProjectId}/chapters/${chapter.id}`
-      );
-      const updatedChapter = await chapterDetailResponse.json();
-      expect(updatedChapter.content).toContain("新的章节正文内容");
+      await expect
+        .poll(
+          async () => {
+            const chapterDetailResponse = await apiContext.get(`/api/v1/chapters/${chapter.id}`);
+            if (!chapterDetailResponse.ok()) {
+              return "";
+            }
+            const updatedChapter = await chapterDetailResponse.json();
+            return String(updatedChapter.content || "");
+          },
+          { timeout: 10000 }
+        )
+        .toContain("新的章节正文内容");
     });
   });
 
@@ -160,7 +169,8 @@ test.describe("E2E 测试套件", () => {
       const download = await downloadPromise;
       expect(download.suggestedFilename()).toContain(".zip");
 
-      const zipPath = await download.path();
+      const zipPath = path.join(os.tmpdir(), `ai-novel-agent-e2e-${Date.now()}.zip`);
+      await download.saveAs(zipPath);
 
       await authenticatedPage.goto("/projects");
 

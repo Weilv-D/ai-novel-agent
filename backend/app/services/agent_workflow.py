@@ -9,12 +9,14 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack
 from datetime import UTC, datetime
 from textwrap import dedent
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import desc, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, NotFoundException
@@ -255,6 +257,20 @@ class CapabilityPolicySummary(BaseModel):
 class CRUDAgentThread:
     """Persistence helpers for project threads."""
 
+    async def _sync_default_thread_meta(
+        self,
+        db: AsyncSession,
+        *,
+        thread: AgentThread,
+        project: Project,
+    ) -> None:
+        next_meta = dict(thread.meta or {})
+        if next_meta.get("project_name") != project.name or next_meta.get("profile_id") != project.agent_profile_id:
+            next_meta["project_name"] = project.name
+            next_meta["profile_id"] = project.agent_profile_id
+            thread.meta = next_meta
+            await db.flush()
+
     async def get(self, db: AsyncSession, thread_id: uuid.UUID) -> AgentThread:
         result = await db.execute(select(AgentThread).where(AgentThread.id == thread_id))
         thread = result.scalar_one_or_none()
@@ -284,13 +300,9 @@ class CRUDAgentThread:
     ) -> AgentThread:
         existing = await self.get_default_by_project(db, project_id=project.id)
         if existing is not None:
-            next_meta = dict(existing.meta or {})
-            if next_meta.get("project_name") != project.name or next_meta.get("profile_id") != project.agent_profile_id:
-                next_meta["project_name"] = project.name
-                next_meta["profile_id"] = project.agent_profile_id
-                existing.meta = next_meta
-                await db.flush()
+            await self._sync_default_thread_meta(db, thread=existing, project=project)
             return existing
+
         thread = AgentThread(
             project_id=project.id,
             title=f"{project.name} Agent Workspace",
@@ -300,8 +312,22 @@ class CRUDAgentThread:
                 "profile_id": project.agent_profile_id,
             },
         )
-        db.add(thread)
-        await db.flush()
+        try:
+            transaction = db.begin_nested()
+            async with AsyncExitStack() as stack:
+                if hasattr(transaction, "__aenter__"):
+                    await stack.enter_async_context(cast(Any, transaction))
+                else:
+                    stack.enter_context(cast(Any, transaction))
+                db.add(thread)
+                await db.flush()
+        except IntegrityError:
+            existing = await self.get_default_by_project(db, project_id=project.id)
+            if existing is None:
+                raise
+            await self._sync_default_thread_meta(db, thread=existing, project=project)
+            return existing
+
         await db.refresh(thread)
         return thread
 

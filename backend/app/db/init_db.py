@@ -5,6 +5,7 @@ import logging
 from sqlalchemy import text
 
 from app.db import async_session_maker, engine
+from app.models import Base
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,12 @@ async def init_database() -> None:
 
     Skips pgvector extension creation for non-PostgreSQL databases.
     """
+    # E2E and local smoke runs use SQLite and do not run Alembic migrations.
+    # Create schema from model metadata to avoid missing-table startup failures.
+    if engine.dialect.name == "sqlite":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
     await create_pgvector_extension()
     async with async_session_maker() as session:
         try:

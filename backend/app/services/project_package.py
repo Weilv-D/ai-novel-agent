@@ -11,7 +11,6 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.models.chapter import Chapter, Scene, Volume
@@ -45,6 +44,16 @@ class ProjectPackageService:
         Returns the zip bytes and suggested filename.
         """
         project = await self._get_project_with_relations(db, project_id=project_id)
+        (
+            characters,
+            world_settings,
+            volumes,
+            chapters,
+            scenes,
+            dependencies,
+            snapshots,
+            memories,
+        ) = await self._list_project_records(db, project_id=project_id)
 
         settings = get_settings()
 
@@ -60,21 +69,15 @@ class ProjectPackageService:
 
         bundle = ProjectBundle(
             project=self._serialize_model(project),
-            characters=[self._serialize_model(c) for c in project.characters],  # type: ignore[attr-defined]
-            world_settings=[self._serialize_model(ws) for ws in project.world_settings],  # type: ignore[attr-defined]
-            volumes=[self._serialize_model(v) for v in project.volumes],  # type: ignore[attr-defined]
-            chapters=[],
-            scenes=[],
-            dependencies=[self._serialize_model(d) for d in project.dependencies],  # type: ignore[attr-defined]
-            snapshots=[self._serialize_model(s) for s in project.snapshots],  # type: ignore[attr-defined]
-            memories=[self._serialize_model(m) for m in project.memories],  # type: ignore[attr-defined]
+            characters=[self._serialize_model(c) for c in characters],
+            world_settings=[self._serialize_model(ws) for ws in world_settings],
+            volumes=[self._serialize_model(v) for v in volumes],
+            chapters=[self._serialize_model(chapter) for chapter in chapters],
+            scenes=[self._serialize_model(scene) for scene in scenes],
+            dependencies=[self._serialize_model(d) for d in dependencies],
+            snapshots=[self._serialize_model(s) for s in snapshots],
+            memories=[self._serialize_model(m) for m in memories],
         )
-
-        for volume in project.volumes:  # type: ignore[attr-defined]
-            for chapter in volume.chapters:
-                bundle.chapters.append(self._serialize_model(chapter))
-                for scene in chapter.scenes:
-                    bundle.scenes.append(self._serialize_model(scene))
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -251,38 +254,146 @@ class ProjectPackageService:
         *,
         project_id: uuid.UUID,
     ) -> Project:
-        """Load a project with all related objects."""
-        stmt = (
-            select(Project)
-            .where(Project.id == project_id)
-            .options(
-                selectinload(Project.characters),  # type: ignore[attr-defined]
-                selectinload(Project.world_settings),  # type: ignore[attr-defined]
-                selectinload(Project.volumes).selectinload(  # type: ignore[attr-defined]
-                    Volume.chapters  # type: ignore[attr-defined]
-                ).selectinload(Chapter.scenes),  # type: ignore[attr-defined]
-                selectinload(Project.dependencies),  # type: ignore[attr-defined]
-                selectinload(Project.snapshots),  # type: ignore[attr-defined]
-                selectinload(Project.memories),  # type: ignore[attr-defined]
-            )
-        )
-        result = await db.execute(stmt)
+        """Load a project root record."""
+        result = await db.execute(select(Project).where(Project.id == project_id))
         project = result.scalar_one_or_none()
         if project is None:
             raise ValueError(f"Project not found: {project_id}")
         return project
 
+    async def _list_project_records(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+    ) -> tuple[
+        list[Character],
+        list[WorldSetting],
+        list[Volume],
+        list[Chapter],
+        list[Scene],
+        list[Dependency],
+        list[Snapshot],
+        list[Memory],
+    ]:
+        """Load all project-scoped records explicitly.
+
+        Models in this codebase are designed without ORM relationships. Export must therefore
+        query each table by project id instead of relying on relationship eager loading.
+        """
+
+        characters = list(
+            (
+                await db.execute(
+                    select(Character)
+                    .where(Character.project_id == project_id)
+                    .order_by(Character.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        world_settings = list(
+            (
+                await db.execute(
+                    select(WorldSetting)
+                    .where(WorldSetting.project_id == project_id)
+                    .order_by(WorldSetting.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        volumes = list(
+            (
+                await db.execute(
+                    select(Volume)
+                    .where(Volume.project_id == project_id)
+                    .order_by(Volume.volume_number.asc(), Volume.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        chapters = list(
+            (
+                await db.execute(
+                    select(Chapter)
+                    .where(Chapter.project_id == project_id)
+                    .order_by(Chapter.chapter_number.asc(), Chapter.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        chapter_ids = [chapter.id for chapter in chapters]
+        scenes: list[Scene] = []
+        if chapter_ids:
+            scenes = list(
+                (
+                    await db.execute(
+                        select(Scene)
+                        .where(Scene.chapter_id.in_(chapter_ids))
+                        .order_by(Scene.chapter_id.asc(), Scene.scene_order.asc(), Scene.created_at.asc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        dependencies = list(
+            (
+                await db.execute(
+                    select(Dependency)
+                    .where(Dependency.project_id == project_id)
+                    .order_by(Dependency.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        snapshots = list(
+            (
+                await db.execute(
+                    select(Snapshot)
+                    .where(Snapshot.project_id == project_id)
+                    .order_by(Snapshot.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        memories = list(
+            (
+                await db.execute(
+                    select(Memory).where(Memory.project_id == project_id).order_by(Memory.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return (
+            characters,
+            world_settings,
+            volumes,
+            chapters,
+            scenes,
+            dependencies,
+            snapshots,
+            memories,
+        )
+
     def _serialize_model(self, model: Any) -> dict[str, Any]:
         """Serialize a SQLAlchemy model to a dictionary."""
-        result = {}
-        for column in model.__table__.columns:
-            value = getattr(model, column.name)
+        result: dict[str, Any] = {}
+        for attr in model.__mapper__.column_attrs:
+            key = attr.key
+            value = getattr(model, key)
             if isinstance(value, uuid.UUID):
-                result[column.name] = str(value)
+                result[key] = str(value)
             elif isinstance(value, datetime):
-                result[column.name] = value.isoformat()
+                result[key] = value.isoformat()
             else:
-                result[column.name] = value
+                result[key] = value
         return result
 
     async def _import_character(

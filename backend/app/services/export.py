@@ -1,5 +1,7 @@
 """Export service for generating novel output files."""
 
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.chapter import chapter_service
@@ -9,7 +11,7 @@ from app.services.project import project_service
 class ExportService:
     """Service for exporting project content to various formats."""
 
-    async def export_txt(self, db: AsyncSession, project_id: str) -> str:
+    async def export_txt(self, db: AsyncSession, project_id: UUID) -> str:
         """Export project as plain text."""
         project = await project_service.get(db, id=project_id)
         chapters = await chapter_service.get_by_project(db, project_id=project_id, limit=500)
@@ -29,7 +31,7 @@ class ExportService:
 
         return "\n".join(lines)
 
-    async def export_markdown(self, db: AsyncSession, project_id: str) -> str:
+    async def export_markdown(self, db: AsyncSession, project_id: UUID) -> str:
         """Export project as Markdown."""
         project = await project_service.get(db, id=project_id)
         chapters = await chapter_service.get_by_project(db, project_id=project_id, limit=500)
