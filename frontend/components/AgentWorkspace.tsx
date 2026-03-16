@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { agentWorkflowApi, ApiError } from "@/lib/api-client";
 import type {
@@ -389,6 +389,15 @@ export function AgentWorkspace({
   const [isStreaming, setIsStreaming] = useState(false);
   const hookTrace = getHookTrace(currentRun);
   const permissionMatrix = currentRun?.execution_contract?.phases || [];
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingEvents]);
 
   async function loadThreadState(existingThreadId?: string) {
     setError(null);
@@ -596,6 +605,7 @@ export function AgentWorkspace({
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
           <div className="border-t border-[rgba(var(--line),0.12)] pt-4">
             <Textarea
