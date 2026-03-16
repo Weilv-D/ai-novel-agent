@@ -359,7 +359,7 @@ class TestMemoryServiceSearchByEmbedding:
             "search_by_embedding",
             new_callable=AsyncMock,
             return_value=([], 0),
-        ) as mock_search:
+        ):
             result, count = await memory_service.search_by_embedding(
                 db_session,
                 project_id=project.id,
@@ -415,7 +415,7 @@ class TestMemoryServiceSearchByEmbedding:
             "search_by_embedding",
             new_callable=AsyncMock,
             return_value=(mock_matches, 1),
-        ) as mock_search:
+        ):
             result, count = await memory_service.search_by_embedding(
                 db_session,
                 project_id=project.id,

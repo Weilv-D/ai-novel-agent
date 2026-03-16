@@ -56,7 +56,7 @@ class CRUDCharacter(CRUDBase[Character, CharacterCreate, CharacterUpdate]):
         project_id: Any,
     ) -> Character:
         """Create a new character for a specific project.
-        
+
         Raises:
             ConflictException: If a character with the same name already exists.
         """
@@ -81,7 +81,7 @@ class CRUDCharacter(CRUDBase[Character, CharacterCreate, CharacterUpdate]):
         obj_in: CharacterUpdate | dict[str, Any],
     ) -> Character:
         """Update a character.
-        
+
         Raises:
             ConflictException: If updating name to one that already exists.
         """
@@ -89,7 +89,7 @@ class CRUDCharacter(CRUDBase[Character, CharacterCreate, CharacterUpdate]):
             update_data = obj_in
         else:
             update_data = obj_in.model_dump(exclude_unset=True)
-        
+
         if "name" in update_data and update_data["name"] != db_obj.name:
             existing = await self.get_by_name(
                 db, project_id=db_obj.project_id, name=update_data["name"]
@@ -99,7 +99,7 @@ class CRUDCharacter(CRUDBase[Character, CharacterCreate, CharacterUpdate]):
                     f"Character with name '{update_data['name']}' already exists in this project",
                     details={"field": "name", "value": update_data["name"]},
                 )
-        
+
         return await super().update(db, db_obj=db_obj, obj_in=update_data)
 
 
