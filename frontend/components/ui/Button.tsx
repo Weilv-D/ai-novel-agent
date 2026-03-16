@@ -30,11 +30,11 @@ interface ButtonAsLink extends BaseButtonProps, Omit<AnchorHTMLAttributes<HTMLAn
 type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 const variantStyles: Record<Variant, string> = {
-  primary: "border-transparent bg-ink-950/90 text-paper-soft shadow-lg hover:-translate-y-[2px] active:translate-y-0 active:scale-[0.98] hover:bg-ink-900 focus-visible:ring-seal/30",
-  secondary: "border-transparent bg-seal/90 text-white shadow-md hover:-translate-y-[2px] active:translate-y-0 active:scale-[0.98] hover:bg-seal focus-visible:ring-seal/30",
-  outline: "border-line/40 bg-white/40 text-ink-900 hover:-translate-y-[2px] active:translate-y-0 active:scale-[0.98] hover:bg-white/70 focus-visible:ring-seal/20 backdrop-blur-sm",
+  primary: "border-transparent bg-ink-950/90 text-paper-soft shadow-lg hover:-translate-y-[2px] hover:bg-ink-900 hover:shadow-xl active:translate-y-0 active:scale-[0.98] focus-visible:ring-seal/30",
+  secondary: "border-transparent bg-seal/90 text-white shadow-md hover:-translate-y-[2px] hover:bg-seal hover:shadow-lg active:translate-y-0 active:scale-[0.98] focus-visible:ring-seal/30",
+  outline: "border-line/40 bg-white/40 text-ink-900 hover:-translate-y-[2px] hover:bg-white/70 hover:border-line/60 active:translate-y-0 active:scale-[0.98] focus-visible:ring-seal/20 backdrop-blur-sm",
   ghost: "border-transparent bg-transparent text-ink-800 hover:bg-ink-950/5 active:scale-[0.98] focus-visible:ring-seal/20",
-  danger: "border-transparent bg-red-800/90 text-white shadow-md hover:-translate-y-[2px] active:translate-y-0 active:scale-[0.98] hover:bg-red-800 focus-visible:ring-red-800/30",
+  danger: "border-transparent bg-red-800/90 text-white shadow-md hover:-translate-y-[2px] hover:bg-red-700 hover:shadow-lg active:translate-y-0 active:scale-[0.98] focus-visible:ring-red-800/30",
 };
 
 const sizeStyles: Record<Size, string> = {
