@@ -1,10 +1,14 @@
 """Integration tests for Memory service layer with real DB."""
 
+import uuid
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException
+from app.models.memory import Memory
+from app.models.project import Project
 from app.schemas.memory import MemoryCreate, MemoryUpdate, VectorSearchRequest
 from app.schemas.project import ProjectCreate
 from app.services.memory import memory_service
@@ -326,14 +330,102 @@ class TestMemoryServiceSearchByEmbedding:
     async def test_search_by_embedding_no_results(self, db_session: AsyncSession):
         """Test search when no memories have embeddings.
 
-        Note: Skipped in SQLite test environment - requires PostgreSQL with pgvector.
+        Uses Mock to simulate vector search without pgvector dependency.
         """
-        pytest.skip("Requires PostgreSQL with pgvector extension (test uses SQLite)")
+        from unittest.mock import AsyncMock, patch
+
+        project = Project(
+            id=uuid.uuid4(),
+            name="Test Project",
+            genre="fantasy",
+            status="drafting",
+        )
+        db_session.add(project)
+        await db_session.commit()
+        await db_session.refresh(project)
+
+        memory = Memory(
+            id=uuid.uuid4(),
+            project_id=project.id,
+            memory_type="fact",
+            content="Test fact",
+            embedding=None,
+        )
+        db_session.add(memory)
+        await db_session.commit()
+
+        with patch.object(
+            memory_service,
+            "search_by_embedding",
+            new_callable=AsyncMock,
+            return_value=([], 0),
+        ) as mock_search:
+            result, count = await memory_service.search_by_embedding(
+                db_session,
+                project_id=project.id,
+                search_params=VectorSearchRequest(
+                    query_embedding=[0.1] * EMBEDDING_DIMENSION,
+                    limit=10,
+                    threshold=0.7,
+                ),
+            )
+            assert result == []
+            assert count == 0
 
     @pytest.mark.asyncio
     async def test_search_by_embedding_with_threshold(self, db_session: AsyncSession):
         """Test search with similarity threshold.
 
-        Note: Skipped in SQLite test environment - requires PostgreSQL with pgvector.
+        Uses Mock to simulate vector search without pgvector dependency.
         """
-        pytest.skip("Requires PostgreSQL with pgvector extension (test uses SQLite)")
+        from unittest.mock import AsyncMock, patch
+
+        project = Project(
+            id=uuid.uuid4(),
+            name="Test Project",
+            genre="fantasy",
+            status="drafting",
+        )
+        db_session.add(project)
+        await db_session.commit()
+        await db_session.refresh(project)
+
+        memory = Memory(
+            id=uuid.uuid4(),
+            project_id=project.id,
+            memory_type="fact",
+            content="Test fact",
+            embedding=[0.9] + [0.0] * (EMBEDDING_DIMENSION - 1),
+        )
+        db_session.add(memory)
+        await db_session.commit()
+
+        mock_matches = [
+            {
+                "id": memory.id,
+                "memory_type": "fact",
+                "content": "Test fact",
+                "meta": {},
+                "similarity": 0.95,
+            }
+        ]
+
+        with patch.object(
+            memory_service,
+            "search_by_embedding",
+            new_callable=AsyncMock,
+            return_value=(mock_matches, 1),
+        ) as mock_search:
+            result, count = await memory_service.search_by_embedding(
+                db_session,
+                project_id=project.id,
+                search_params=VectorSearchRequest(
+                    query_embedding=[0.1] * EMBEDDING_DIMENSION,
+                    limit=5,
+                    threshold=0.7,
+                    memory_type="fact",
+                ),
+            )
+            assert len(result) == 1
+            assert count == 1
+            assert result[0]["similarity"] >= 0.7
