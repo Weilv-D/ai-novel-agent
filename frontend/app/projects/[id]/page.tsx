@@ -121,12 +121,12 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <Card className="h-fit">
+        <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start">
+          <Card className="h-fit xl:sticky xl:top-6 xl:max-h-[calc(100vh-7rem)] xl:overflow-hidden">
             <CardHeader>
               <CardTitle className="text-lg">基本信息</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="space-y-3 text-sm xl:max-h-[calc(100vh-10rem)] xl:overflow-y-auto xl:pr-1">
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
                 <span className="text-[rgb(var(--ink-800))]">题材</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">{project.genre || "未分类"}</span>

@@ -537,7 +537,7 @@ export function AgentWorkspace({
 
   return (
     <div className={`grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] ${className}`}>
-      <Card className="overflow-hidden">
+      <Card className="flex h-[clamp(680px,72vh,920px)] flex-col overflow-hidden">
         <CardHeader className="border-b border-[rgba(var(--line),0.12)] pb-4">
           <p className="ink-kicker">Agent Workspace</p>
           <CardTitle className="mt-3 text-3xl">以自然语言驱动 {projectName}</CardTitle>
@@ -545,7 +545,7 @@ export function AgentWorkspace({
             直接说出你的目标，例如“创建一个冷静克制的女主角”“把第三章改成雨夜追逐”“新增一个宗教设定并补进世界观”。
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex min-h-[780px] flex-col gap-4 pt-6">
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-4 pt-6">
           <div className="flex-1 space-y-4 overflow-y-auto pr-1">
             {messages.length === 0 ? (
               <div className="rounded-[1.4rem] border border-dashed border-[rgba(var(--line),0.18)] bg-[var(--surface-subtle)] px-6 py-12 text-center text-sm leading-7 text-[rgb(var(--ink-800))]">
@@ -631,8 +631,8 @@ export function AgentWorkspace({
         </CardContent>
       </Card>
 
-      <div className="flex min-h-[780px] flex-col gap-6">
-        <Card className="flex-1 overflow-hidden">
+      <div className="flex flex-col gap-6">
+        <Card className="flex h-[clamp(680px,72vh,920px)] flex-col overflow-hidden">
           <CardHeader className="border-b border-[rgba(var(--line),0.12)] pb-4">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -650,7 +650,7 @@ export function AgentWorkspace({
               {currentRun?.summary || "当前没有待确认计划。发送一条明确指令，Agent 会生成可执行步骤。"}
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-1 flex-col space-y-4">
+          <CardContent className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto pr-1">
             {currentRun ? (
               <>
                 {currentRun.warning_message && (
