@@ -2143,7 +2143,9 @@ class AgentWorkflowService:
 
         elif tool_name == "create_chapter":
             chapter_in = ChapterCreate(project_id=project_id, **payload)
-            chapter = await chapter_service.create_with_project(db, obj_in=chapter_in, project_id=project_id)
+            chapter = await chapter_service.create_with_project(
+                db, obj_in=chapter_in, project_id=project_id, skip_duplicate_check=True
+            )
             operation.target_id = chapter.id
             operation.target_display = f"第{chapter.chapter_number}章 {chapter.title or ''}".strip()
             operation.execution_result = {"created_id": str(chapter.id)}
@@ -2194,7 +2196,7 @@ class AgentWorkflowService:
             updated_chapter = await chapter_service.update(
                 db,
                 db_obj=chapter,
-                obj_in=ChapterUpdate(content=next_content),  # type: ignore[call-arg]
+                obj_in=ChapterUpdate(content=next_content),
             )
             operation.target_id = updated_chapter.id
             operation.target_display = f"第{updated_chapter.chapter_number}章 {updated_chapter.title or ''}".strip()
@@ -2206,7 +2208,9 @@ class AgentWorkflowService:
             chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
             scene_payload = {key: value for key, value in payload.items() if key != "chapter_id"}
             scene_in = SceneCreate(**scene_payload, chapter_id=chapter.id)
-            scene = await scene_service.create_with_chapter(db, obj_in=scene_in, chapter_id=chapter.id)
+            scene = await scene_service.create_with_chapter(
+                db, obj_in=scene_in, chapter_id=chapter.id, skip_duplicate_check=True
+            )
             operation.target_id = scene.id
             operation.target_display = f"场景 {scene.scene_order}"
             operation.execution_result = {"created_id": str(scene.id)}
@@ -2257,7 +2261,7 @@ class AgentWorkflowService:
             updated_scene = await scene_service.update(
                 db,
                 db_obj=scene,
-                obj_in=SceneUpdate(content=next_content),  # type: ignore[call-arg]
+                obj_in=SceneUpdate(content=next_content),
             )
             operation.target_id = updated_scene.id
             operation.target_display = f"场景 {updated_scene.scene_order}"

@@ -16,7 +16,7 @@ TargetTypeLiteral = Literal["character", "world_setting", "chapter", "scene"]
 class VolumeBase(BaseModel):
     """Base volume schema."""
 
-    volume_number: int | None = None
+    volume_number: int | None = Field(None, ge=1)
     title: str | None = Field(None, max_length=255)
     outline: str | None = None
     notes: str | None = None
@@ -31,7 +31,7 @@ class VolumeCreate(VolumeBase):
 class VolumeUpdate(BaseModel):
     """Schema for updating a volume."""
 
-    volume_number: int | None = None
+    volume_number: int | None = Field(None, ge=1)
     title: str | None = Field(None, max_length=255)
     outline: str | None = None
     notes: str | None = None

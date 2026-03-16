@@ -129,7 +129,7 @@ async def rollback_to_snapshot(
 
     return RollbackResponse(
         snapshot_id=snapshot.id,
-        target_type=snapshot.target_type,  # type: ignore[arg-type]
+        target_type=snapshot.target_type,
         target_id=snapshot.target_id,
         rolled_back_at=datetime.now(UTC),
         message=f"Rollback data prepared for {snapshot.target_type}:{snapshot.target_id}. "

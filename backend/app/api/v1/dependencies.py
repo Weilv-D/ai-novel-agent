@@ -137,7 +137,7 @@ async def analyze_reverse_impact(
     )
 
     return ImpactAnalysisResponse(
-        source_type=target_type,  # type: ignore[arg-type]
+        source_type=target_type,
         source_id=target_id,
         impacted_objects=impacts,
         total_count=len(impacts),
