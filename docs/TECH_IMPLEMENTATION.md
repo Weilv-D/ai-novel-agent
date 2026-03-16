@@ -12,11 +12,11 @@
 
 如果你要查看：
 
-- 使用方式：见 [README.md](/home/weilv/workspace/prjforfun/ai-novel-agent/README.md)
-- 开发环境：见 [DEVELOPMENT.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/DEVELOPMENT.md)
-- 目标架构：见 [TECH_ARCH.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/TECH_ARCH.md)
-- 演进计划：见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)
-- 项目状态：见 [STATUS.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/STATUS.md)
+- 使用方式：见 [README.md](../README.md)
+- 开发环境：见 [DEVELOPMENT.md](DEVELOPMENT.md)
+- 目标架构：见 [TECH_ARCH.md](TECH_ARCH.md)
+- 演进计划：见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+- 项目状态：见 [STATUS.md](STATUS.md)
 
 ## 系统定位
 

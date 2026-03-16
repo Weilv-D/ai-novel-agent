@@ -154,9 +154,9 @@ make clean
 
 ## 文档分工
 
-- [README.md](/home/weilv/workspace/prjforfun/ai-novel-agent/README.md)：使用者手册
-- [backend/README.md](/home/weilv/workspace/prjforfun/ai-novel-agent/backend/README.md)：后端运行与结构说明
-- [TECH_IMPLEMENTATION.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/TECH_IMPLEMENTATION.md)：当前实现
-- [TECH_ARCH.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/TECH_ARCH.md)：目标架构
-- [STATUS.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/STATUS.md)：交付状态与边界
-- [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)：演进计划
+- [README.md](../README.md)：使用者手册
+- [backend/README.md](../backend/README.md)：后端运行与结构说明
+- [TECH_IMPLEMENTATION.md](TECH_IMPLEMENTATION.md)：当前实现
+- [TECH_ARCH.md](TECH_ARCH.md)：目标架构
+- [STATUS.md](STATUS.md)：交付状态与边界
+- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)：演进计划

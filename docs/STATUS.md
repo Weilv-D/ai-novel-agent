@@ -111,4 +111,4 @@ AI Novel Agent 当前定位为独立实例的 Agent 化小说创作工作台。�
 - 细化 compact policy、retained window 和 active bundle 策略
 - 在不改变当前主流程的前提下，继续增强 profile 与 skill 体系
 
-详细规划见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)。
+详细规划见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。

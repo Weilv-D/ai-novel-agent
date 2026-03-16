@@ -1,6 +1,6 @@
 # AI Novel Agent 目标架构
 
-最后更新：2026-03-15
+最后更新：2026-03-16
 
 ## 文档定位
 
@@ -8,9 +8,9 @@
 
 如果你要查看：
 
-- 当前真实实现：见 [TECH_IMPLEMENTATION.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/TECH_IMPLEMENTATION.md)
-- 当前交付状态：见 [STATUS.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/STATUS.md)
-- 后续演进顺序：见 [IMPLEMENTATION_PLAN.md](/home/weilv/workspace/prjforfun/ai-novel-agent/docs/IMPLEMENTATION_PLAN.md)
+- 当前真实实现：见 [TECH_IMPLEMENTATION.md](TECH_IMPLEMENTATION.md)
+- 当前交付状态：见 [STATUS.md](STATUS.md)
+- 后续演进顺序：见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 ## 架构目标
 

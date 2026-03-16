@@ -262,6 +262,7 @@ ai-novel-agent/
 - [目标架构](docs/TECH_ARCH.md)
 - [项目状态](docs/STATUS.md)
 - [演进计划](docs/IMPLEMENTATION_PLAN.md)
+- [业务逻辑审查报告](docs/REVIEW_REPORT.md)
 
 ## License
 
