@@ -385,7 +385,7 @@ async def test_world_setting_duplicate_name_fails(client: AsyncClient, monkeypat
 
 @pytest.mark.asyncio
 async def test_world_setting_empty_content_fails(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Creating a world setting with empty content should fail domain verification."""
+    """Creating a world setting with empty content should fail at service layer."""
     project_id = await create_project(client)
     thread_id = await create_thread(client, project_id)
 
@@ -425,9 +425,8 @@ async def test_world_setting_empty_content_fails(client: AsyncClient, monkeypatc
     assert confirm_response.status_code == 200
     confirm_data = confirm_response.json()
     assert confirm_data["run"]["status"] == "failed"
-    domain_verification = confirm_data["run"]["operations"][0]["execution_result"]["domain_verification"]
-    assert domain_verification["status"] == "failed"
-    assert "world_setting_content_empty" in domain_verification["failed_checks"]
+    assert confirm_data["run"]["operations"][0]["status"] == "failed"
+    assert "empty" in confirm_data["run"]["operations"][0]["error_message"].lower() or "content" in confirm_data["run"]["operations"][0]["error_message"].lower()
 
 
 @pytest.mark.asyncio
