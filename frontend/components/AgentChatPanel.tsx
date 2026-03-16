@@ -49,7 +49,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
     <div className={`ink-panel fixed bottom-6 right-6 z-50 flex h-[540px] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[1.75rem] ${className}`}>
       <div className="flex items-center justify-between border-b border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.94)] px-4 py-4 text-[rgb(var(--paper-soft))]">
         <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">Creative Agent</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.78)]">Creative Agent</div>
           <span className="ink-display text-xl font-semibold">AI 写作助手</span>
         </div>
         <div className="flex gap-2">
@@ -64,7 +64,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
-          <div className="mt-8 text-center text-sm text-[rgb(var(--ink-700))]">
+          <div className="mt-8 text-center text-sm text-[rgb(var(--ink-800))]">
             <p>你好！我是 AI 写作助手。</p>
             <p className="mt-1">你可以问我关于世界观、人物、大纲、写作等问题。</p>
           </div>
@@ -78,7 +78,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
               className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                 msg.role === "user"
                   ? "rounded-br-sm bg-[rgba(var(--ink-950),0.94)] text-[rgb(var(--paper-soft))]"
-                  : "rounded-bl-sm border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.6)] text-[rgb(var(--ink-800))]"
+                  : "rounded-bl-sm border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] text-[rgb(var(--ink-800))]"
               }`}
             >
               {msg.content}
@@ -102,7 +102,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
             onKeyDown={handleKeyDown}
             placeholder="输入消息..."
             rows={1}
-            className="min-h-[46px] flex-1 resize-none rounded-[1rem] border border-[rgba(var(--line),0.18)] bg-[rgba(255,255,255,0.64)] px-4 py-3 text-sm text-[rgb(var(--ink-950))] placeholder:text-[rgb(var(--ink-700))] focus:outline-none focus:ring-4 focus:ring-[rgba(var(--accent),0.08)]"
+            className="min-h-[46px] flex-1 resize-none rounded-[1rem] border border-[rgba(var(--line),0.18)] bg-[var(--field-surface)] px-4 py-3 text-sm text-[rgb(var(--ink-950))] placeholder:text-[rgb(var(--ink-800))] focus:outline-none focus:ring-4 focus:ring-[rgba(var(--accent),0.08)]"
             disabled={loading || streaming}
           />
           <Button

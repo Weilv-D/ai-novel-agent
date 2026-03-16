@@ -10,7 +10,7 @@ export function DiffPreview({ before, after, title }: DiffPreviewProps) {
   return (
     <div className="overflow-hidden rounded-[1.5rem] border border-[rgba(var(--line),0.12)]">
       {title && (
-        <div className="border-b border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.04)] px-4 py-3 text-sm font-medium text-[rgb(var(--ink-700))]">
+        <div className="border-b border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.04)] px-4 py-3 text-sm font-medium text-[rgb(var(--ink-800))]">
           {title}
         </div>
       )}

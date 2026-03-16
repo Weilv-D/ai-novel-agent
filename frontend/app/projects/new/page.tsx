@@ -83,7 +83,7 @@ export default function NewProjectPage() {
           </Link>
           <p className="ink-kicker">New Project</p>
           <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">新建项目</h1>
-          <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-700))]">
+          <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-800))]">
             先定义作品的基本边界，再逐步扩展章节、角色和世界观。
           </p>
         </div>
@@ -143,7 +143,7 @@ export default function NewProjectPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-700))]">
+                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-800))]">
                   {(profiles.find((profile) => profile.id === (formData.agent_profile_id || "default")) || profiles[0])?.description}
                 </p>
               </div>

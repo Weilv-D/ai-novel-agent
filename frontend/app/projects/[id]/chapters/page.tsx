@@ -50,7 +50,7 @@ export default function ChaptersPage() {
             </Link>
             <p className="ink-kicker">Chapter Workflow</p>
             <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">章节管理</h1>
-            <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-700))]">
+            <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-800))]">
               以章节为主线安排故事推进，再把场景拆解到更细的创作颗粒度。
             </p>
           </div>
@@ -81,7 +81,7 @@ export default function ChaptersPage() {
                 <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">
                   还没有章节
                 </h3>
-                <p className="mb-6 text-[rgb(var(--ink-700))]">
+                <p className="mb-6 text-[rgb(var(--ink-800))]">
                   创建第一章，开始构建您的故事
                 </p>
                 <Button href={`/projects/${projectId}/chapters/new`}>创建第一章</Button>
@@ -101,7 +101,7 @@ export default function ChaptersPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="mb-2 flex items-center gap-3">
-                          <span className="text-sm font-medium text-[rgb(var(--ink-700))]">
+                          <span className="text-sm font-medium text-[rgb(var(--ink-800))]">
                             第 {chapter.chapter_number} 章
                           </span>
                           <h3 className="ink-display text-2xl font-semibold text-[rgb(var(--ink-950))]">
@@ -110,11 +110,11 @@ export default function ChaptersPage() {
                           <span className={statusMeta.className}>{statusMeta.label}</span>
                         </div>
                         {chapter.outline && (
-                          <p className="mb-2 line-clamp-2 text-sm leading-7 text-[rgb(var(--ink-700))]">
+                          <p className="mb-2 line-clamp-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
                             {chapter.outline}
                           </p>
                         )}
-                        <div className="flex items-center gap-4 text-sm text-[rgb(var(--ink-700))]">
+                        <div className="flex items-center gap-4 text-sm text-[rgb(var(--ink-800))]">
                           <span>更新于 {new Date(chapter.updated_at).toLocaleDateString("zh-CN")}</span>
                         </div>
                       </div>

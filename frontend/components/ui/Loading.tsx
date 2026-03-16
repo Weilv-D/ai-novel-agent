@@ -46,7 +46,7 @@ export function LoadingSpinner({ size = "md", text, className = "" }: LoadingSpi
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>
       <Loading size={size} />
-      {text && <p className="text-sm tracking-widest text-ink-700 animate-pulse font-serif">{text}</p>}
+      {text && <p className="text-sm tracking-widest text-ink-800 animate-pulse font-serif">{text}</p>}
     </div>
   );
 }

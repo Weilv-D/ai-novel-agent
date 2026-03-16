@@ -47,9 +47,9 @@ export function SuggestionCard({ suggestion, onAction }: SuggestionCardProps) {
   const statusMeta = getSuggestionStatusMeta(suggestion.status);
 
   return (
-    <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.54)] p-4">
+    <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--ink-700))]">
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--ink-800))]">
           {TYPE_LABELS[suggestion.type] || suggestion.type}
         </span>
         <span className={statusMeta.className}>{statusMeta.label}</span>

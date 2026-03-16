@@ -93,7 +93,7 @@ function MessageBubble({ message }: { message: AgentThreadMessage }) {
         className={`max-w-[85%] rounded-[1.25rem] px-4 py-3 text-sm leading-7 shadow-sm ${
           isUser
             ? "bg-[rgba(var(--ink-950),0.95)] text-[rgb(var(--paper-soft))]"
-            : "border border-[rgba(var(--line),0.16)] bg-[rgba(255,255,255,0.62)] text-[rgb(var(--ink-900))]"
+            : "border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] text-[rgb(var(--ink-900))]"
         }`}
       >
         <div className="mb-1 text-[11px] uppercase tracking-[0.18em] opacity-60">
@@ -115,19 +115,19 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
   const childTrace = subtask.child_trace;
   const dependencyList = childTrace?.depends_on || [];
   return (
-    <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.46)] px-4 py-3">
+    <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">{subtask.role}</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">{subtask.role}</div>
           <div className="mt-1 text-sm font-medium text-[rgb(var(--ink-900))]">{subtask.title}</div>
         </div>
         <span className={verificationMeta.className}>{verificationMeta.label}</span>
       </div>
       {subtask.summary && (
-        <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{subtask.summary}</p>
+        <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{subtask.summary}</p>
       )}
       {(source || validationStatus || attemptCount !== null || retryStrategy) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
           {source && (
             <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
               source:{source}
@@ -151,7 +151,7 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
         </div>
       )}
       {dependencyList.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
           {dependencyList.map((dependency) => (
             <span key={dependency} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
               depends:{dependency}
@@ -172,10 +172,10 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
   const riskMeta = RISK_META[operation.risk_level] || RISK_META.medium;
   const verificationMeta = VERIFICATION_META[operation.verification_status] || VERIFICATION_META.pending;
   return (
-    <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.14)] bg-[rgba(255,255,255,0.58)] p-4">
+    <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">
+          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
             Step {operation.position}
           </div>
           <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">{toolLabel}</div>
@@ -184,7 +184,7 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
           <span className={riskMeta.className}>{riskMeta.label}</span>
           <span className={verificationMeta.className}>{verificationMeta.label}</span>
           {operation.target_display && (
-            <span className="rounded-full border border-[rgba(var(--line),0.18)] px-3 py-1 text-xs text-[rgb(var(--ink-700))]">
+            <span className="rounded-full border border-[rgba(var(--line),0.18)] px-3 py-1 text-xs text-[rgb(var(--ink-800))]">
               {operation.target_display}
             </span>
           )}
@@ -192,7 +192,7 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
       </div>
       <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{operation.description}</p>
       {operation.reason && (
-        <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">原因：{operation.reason}</p>
+        <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">原因：{operation.reason}</p>
       )}
       {operation.requires_secondary_confirmation && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--danger))]">此步骤会触发二次确认，适用于高风险正文覆盖。</p>
@@ -202,7 +202,7 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
           {preview.changed_fields.map((field) => (
             <span
               key={field}
-              className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]"
+              className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]"
             >
               {field}
             </span>
@@ -224,7 +224,7 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
         </pre>
       )}
       {operation.verification_summary && (
-        <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-700))]">校验：{operation.verification_summary}</p>
+        <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">校验：{operation.verification_summary}</p>
       )}
       {operation.error_message && (
         <p className="mt-3 text-sm text-[rgb(var(--danger))]">{operation.error_message}</p>
@@ -236,24 +236,24 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
 function RiskSummaryCard({ riskSummary }: { riskSummary: AgentRunRiskSummary }) {
   const riskMeta = RISK_META[riskSummary.overall_risk_level] || RISK_META.medium;
   return (
-    <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.48)] px-4 py-4">
+    <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">Run Risk</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">Run Risk</div>
           <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">执行风险摘要</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className={riskMeta.className}>{riskMeta.label}</span>
-          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
             gate:{riskSummary.confirmation_gate}
           </span>
-          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
             policy:{riskSummary.policy_version}
           </span>
         </div>
       </div>
       <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">{riskSummary.summary}</p>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+      <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
         <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
           total:{riskSummary.total_operations}
         </span>
@@ -276,13 +276,13 @@ function RiskSummaryCard({ riskSummary }: { riskSummary: AgentRunRiskSummary }) 
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{policy.name}</div>
-                <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+                <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
                   {policy.scope} / {policy.risk_level} / gate:{policy.confirmation_gate}
                 </div>
               </div>
-              <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{policy.description}</p>
+              <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{policy.description}</p>
               {policy.matched_operation_positions.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                   <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
                     steps:{policy.matched_operation_positions.join(", ")}
                   </span>
@@ -299,7 +299,7 @@ function RiskSummaryCard({ riskSummary }: { riskSummary: AgentRunRiskSummary }) 
       )}
       {(riskSummary.high_risk_operation_positions.length > 0 ||
         riskSummary.secondary_confirmation_operation_positions.length > 0) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
           {riskSummary.high_risk_operation_positions.length > 0 && (
             <span className="rounded-full bg-[rgba(var(--danger),0.08)] px-3 py-1 text-[rgb(var(--danger))]">
               高风险步骤:{riskSummary.high_risk_operation_positions.join(", ")}
@@ -321,12 +321,12 @@ function ChildUnitCard({ childUnit }: { childUnit: AgentExecutionChildUnit }) {
     <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.03)] px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{childUnit.title}</div>
-        <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+        <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
           {childUnit.role} / {childUnit.stage}
         </div>
       </div>
-      <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{childUnit.description}</p>
-      <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+      <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{childUnit.description}</p>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
         <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
           gate:{childUnit.confirmation_gate}
         </span>
@@ -338,7 +338,7 @@ function ChildUnitCard({ childUnit }: { childUnit: AgentExecutionChildUnit }) {
         )}
       </div>
       {(childUnit.depends_on.length > 0 || childUnit.operation_positions.length > 0) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
           {childUnit.depends_on.map((dependency) => (
             <span key={dependency} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
               depends:{dependency}
@@ -352,7 +352,7 @@ function ChildUnitCard({ childUnit }: { childUnit: AgentExecutionChildUnit }) {
         </div>
       )}
       {(childUnit.capability_ids.length > 0 || childUnit.tool_scope.length > 0) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
           {childUnit.capability_ids.map((capabilityId) => (
             <span key={capabilityId} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
               capability:{capabilityId}
@@ -548,17 +548,19 @@ export function AgentWorkspace({
         <CardContent className="flex min-h-[780px] flex-col gap-4 pt-6">
           <div className="flex-1 space-y-4 overflow-y-auto pr-1">
             {messages.length === 0 ? (
-              <div className="rounded-[1.4rem] border border-dashed border-[rgba(var(--line),0.18)] bg-[rgba(255,255,255,0.38)] px-6 py-12 text-center text-sm leading-7 text-[rgb(var(--ink-700))]">
+              <div className="rounded-[1.4rem] border border-dashed border-[rgba(var(--line),0.18)] bg-[var(--surface-subtle)] px-6 py-12 text-center text-sm leading-7 text-[rgb(var(--ink-800))]">
                 还没有对话。先告诉 Agent 你要修改什么，或者直接给出写作任务。
               </div>
             ) : (
               messages.map((message) => <MessageBubble key={message.id} message={message} />)
             )}
             {isStreaming && streamingEvents.length > 0 && (
-              <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.14)] bg-[rgba(255,255,255,0.62)] px-5 py-4">
+              <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.2)] bg-[var(--surface-strong)] px-5 py-4 shadow-sm">
                 <div className="mb-3 flex items-center gap-2">
                   <div className="h-2 w-2 animate-pulse rounded-full bg-[rgb(var(--jade))]" />
-                  <span className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">Agent 思考过程</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
+                    Agent 思考过程
+                  </span>
                 </div>
                 <div className="space-y-2">
                   {streamingEvents.map((event, index) => (
@@ -568,7 +570,7 @@ export function AgentWorkspace({
                           event.type === "thinking"
                             ? "bg-[rgb(var(--jade))]"
                             : event.type === "status"
-                              ? "bg-[rgb(var(--ink-700))]"
+                              ? "bg-[rgb(var(--ink-800))]"
                               : event.type === "operation_progress"
                                 ? "bg-[rgb(var(--amber))]"
                                 : event.type === "error"
@@ -582,20 +584,20 @@ export function AgentWorkspace({
                             {event.stage || event.type}
                           </span>
                           {event.message && (
-                            <span className="text-[rgb(var(--ink-700))]">{event.message}</span>
+                            <span className="text-[rgb(var(--ink-800))]">{event.message}</span>
                           )}
                         </div>
                         {event.type === "thinking" && typeof event.detail.operations === "object" && (
                           <div className="mt-2 space-y-1">
                             {Array.isArray(event.detail.operations) && (event.detail.operations as Array<{tool_name: string; description: string}>).map((op, opIndex) => (
-                              <div key={opIndex} className="text-xs text-[rgb(var(--ink-700))]">
+                              <div key={opIndex} className="text-xs text-[rgb(var(--ink-800))]">
                                 • {TOOL_LABELS[op.tool_name as string] || op.tool_name}: {op.description}
                               </div>
                             ))}
                           </div>
                         )}
                         {event.type === "operation_progress" && typeof event.detail.target_display === "string" && (
-                          <div className="mt-1 text-xs text-[rgb(var(--ink-700))]">
+                          <div className="mt-1 text-xs text-[rgb(var(--ink-800))]">
                             目标: {event.detail.target_display as string}
                           </div>
                         )}
@@ -617,7 +619,7 @@ export function AgentWorkspace({
               testId="agent-input"
             />
             <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-sm text-[rgb(var(--ink-700))]">
+              <p className="text-sm text-[rgb(var(--ink-800))]">
                 {isStreaming ? "Agent 正在思考，请稍候..." : "Agent 会先生成完整计划和预览，确认后才真正写入数据。"}
               </p>
               <Button onClick={handleSend} disabled={!input.trim() || isPending || isStreaming} testId="agent-send-btn">
@@ -637,7 +639,7 @@ export function AgentWorkspace({
                 <p className="ink-kicker">Current Run</p>
                 <CardTitle className="mt-3 text-2xl">当前待执行计划</CardTitle>
                 {agentProfileId && (
-                  <p className="mt-3 text-sm leading-6 text-[rgb(var(--ink-700))]">
+                  <p className="mt-3 text-sm leading-6 text-[rgb(var(--ink-800))]">
                     当前项目 profile：<span className="font-medium text-[rgb(var(--ink-900))]">{agentProfileId}</span>
                   </p>
                 )}
@@ -668,21 +670,21 @@ export function AgentWorkspace({
                 )}
                 {currentRun.risk_summary && <RiskSummaryCard riskSummary={currentRun.risk_summary} />}
                 {(currentRun.planner_window || currentRun.compact_policy || currentRun.retained_window || currentRun.active_bundle_contract) && (
-                  <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.48)] px-4 py-4">
+                  <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">
+                        <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
                           Planner Window
                         </div>
                         <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">当前规划输入窗口</div>
                       </div>
                       {currentRun.planner_window && (
-                        <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                        <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                           mode:{currentRun.planner_window.history_mode}
                         </span>
                       )}
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                       {currentRun.planner_window && (
                         <>
                           <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
@@ -736,7 +738,7 @@ export function AgentWorkspace({
                       )}
                     </div>
                     {currentRun.active_bundle_contract?.focused_object_types.length ? (
-                      <div className="mt-3 text-sm leading-7 text-[rgb(var(--ink-700))]">
+                      <div className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
                         当前聚焦对象：{currentRun.active_bundle_contract.focused_object_types.join(" / ")}
                       </div>
                     ) : null}
@@ -744,7 +746,7 @@ export function AgentWorkspace({
                 )}
                 {currentRun.subtasks.length > 0 && (
                   <div className="space-y-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">
+                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
                       Internal Subtasks
                     </div>
                     {currentRun.subtasks.map((subtask) => (
@@ -754,7 +756,7 @@ export function AgentWorkspace({
                 )}
                 {permissionMatrix.length > 0 && (
                   <div className="space-y-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">
+                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
                       Permission Matrix
                     </div>
                     {permissionMatrix.map((phase: AgentExecutionContractPhase) => {
@@ -765,18 +767,18 @@ export function AgentWorkspace({
                       return (
                         <div
                           key={phaseName}
-                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-3"
+                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] px-4 py-3"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
                               {phaseName.toUpperCase()} / {mode}
                             </div>
-                            <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+                            <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
                               {`${phase.operation_count} ops / gate:${phase.confirmation_gate} / registry:${currentRun.execution_contract?.registry_version ?? "n/a"}`}
                             </div>
                           </div>
                           {levels.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                               {levels.map((level) => (
                                 <span key={level} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
                                   level:{level}
@@ -802,16 +804,16 @@ export function AgentWorkspace({
                                     <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
                                       {capability.name}
                                     </div>
-                                    <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+                                    <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
                                       {capability.execution_record
                                         ? `${capability.execution_record.status} / ${capability.execution_record.source_role}`
                                         : capability.kind}
                                     </div>
                                   </div>
-                                  <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">
+                                  <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
                                     {capability.description}
                                   </p>
-                                  <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                                  <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                                     <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
                                       policy:{capability.policy.execution_phase}/{capability.policy.source_role}
                                     </span>
@@ -820,11 +822,11 @@ export function AgentWorkspace({
                                     </span>
                                   </div>
                                   {capability.execution_record?.output_summary && (
-                                    <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">
+                                    <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
                                       {capability.execution_record.output_summary}
                                     </p>
                                   )}
-                                  <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                                  <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                                     <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
                                       capability:{capability.capability_id}
                                     </span>
@@ -839,7 +841,7 @@ export function AgentWorkspace({
                             </div>
                           )}
                           {tools.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                               {Array.from(new Set(tools.slice(0, 5))).map((tool) => (
                                 <span key={tool} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
                                   {tool}
@@ -854,7 +856,7 @@ export function AgentWorkspace({
                 )}
                 {hookTrace.length > 0 && (
                   <div className="space-y-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-700))]">
+                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
                       Hook Trace
                     </div>
                     {hookTrace.map((entry) => {
@@ -870,14 +872,14 @@ export function AgentWorkspace({
                       return (
                         <div
                           key={entry.hook_name}
-                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-3"
+                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] px-4 py-3"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{entry.hook_name}</div>
                             <span className={meta.className}>{meta.label}</span>
                           </div>
                           {entry.summary && (
-                            <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-700))]">{entry.summary}</p>
+                            <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{entry.summary}</p>
                           )}
                         </div>
                       );
@@ -916,7 +918,7 @@ export function AgentWorkspace({
                 )}
               </>
             ) : (
-              <div className="rounded-[1.3rem] border border-dashed border-[rgba(var(--line),0.18)] px-5 py-8 text-sm leading-7 text-[rgb(var(--ink-700))]">
+              <div className="rounded-[1.3rem] border border-dashed border-[rgba(var(--line),0.18)] px-5 py-8 text-sm leading-7 text-[rgb(var(--ink-800))]">
                 暂无计划。先给 Agent 一个明确目标，再回来确认执行。
               </div>
             )}
@@ -935,20 +937,20 @@ export function AgentWorkspace({
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-700))]">Profile</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-800))]">Profile</div>
                   <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.profile_id}</div>
                 </div>
                 <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-700))]">Messages</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-800))]">Messages</div>
                   <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.source_message_count}</div>
                 </div>
                 <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-700))]">Runs</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-800))]">Runs</div>
                   <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.source_run_count}</div>
                 </div>
               </div>
               {(latestCheckpoint.compact_policy || latestCheckpoint.compaction_boundary || latestCheckpoint.active_bundle_contract) && (
-                <div className="flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                <div className="flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
                   {latestCheckpoint.compact_policy && (
                     <>
                       <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
@@ -981,15 +983,15 @@ export function AgentWorkspace({
                 </div>
               )}
               {latestCheckpoint.active_bundle_contract?.focused_object_types.length ? (
-                <div className="text-sm leading-7 text-[rgb(var(--ink-700))]">
+                <div className="text-sm leading-7 text-[rgb(var(--ink-800))]">
                   压缩时的聚焦对象：{latestCheckpoint.active_bundle_contract.focused_object_types.join(" / ")}
                 </div>
               ) : null}
-              <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-4">
-                <div className="mb-2 text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-700))]">Summary</div>
+              <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-4">
+                <div className="mb-2 text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">Summary</div>
                 <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{latestCheckpoint.thread_summary}</p>
               </div>
-              <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+              <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
                 生成时间：{formatTimestamp(latestCheckpoint.created_at)}
               </div>
             </CardContent>
@@ -1003,7 +1005,7 @@ export function AgentWorkspace({
           </CardHeader>
           <CardContent className="space-y-3">
             {recentRuns.length === 0 ? (
-              <div className="rounded-[1.2rem] border border-dashed border-[rgba(var(--line),0.18)] px-4 py-6 text-sm text-[rgb(var(--ink-700))]">
+              <div className="rounded-[1.2rem] border border-dashed border-[rgba(var(--line),0.18)] px-4 py-6 text-sm text-[rgb(var(--ink-800))]">
                 还没有任何执行记录。
               </div>
             ) : (
@@ -1012,7 +1014,7 @@ export function AgentWorkspace({
                 return (
                   <div
                     key={run.id}
-                    className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.44)] px-4 py-4"
+                    className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-4"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
@@ -1020,7 +1022,7 @@ export function AgentWorkspace({
                       </div>
                       <span className={meta.className}>{meta.label}</span>
                     </div>
-                    <div className="mt-2 text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+                    <div className="mt-2 text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
                       {formatTimestamp(run.updated_at)}
                     </div>
                   </div>

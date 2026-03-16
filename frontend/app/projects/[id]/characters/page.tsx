@@ -58,7 +58,7 @@ export default function CharactersPage() {
             </Link>
             <p className="ink-kicker">Character Atlas</p>
             <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">人物管理</h1>
-            <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-700))]">
+            <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-800))]">
               把人物角色、外貌、性格与背景整理在统一卡面里，便于创作时快速回看。
             </p>
           </div>
@@ -89,7 +89,7 @@ export default function CharactersPage() {
                 <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">
                   还没有人物
                 </h3>
-                <p className="mb-6 text-[rgb(var(--ink-700))]">
+                <p className="mb-6 text-[rgb(var(--ink-800))]">
                   创建第一个人物，开始构建您的故事世界
                 </p>
                 <Button href={`/projects/${projectId}/characters/new`}>创建人物</Button>
@@ -123,7 +123,7 @@ export default function CharactersPage() {
                     </div>
                   )}
 
-                  <div className="space-y-2 text-sm text-[rgb(var(--ink-700))]">
+                  <div className="space-y-2 text-sm text-[rgb(var(--ink-800))]">
                     {hasProfileKey(character, "age") && (
                       <div className="flex items-center gap-2">
                         <span>年龄:</span>
@@ -148,7 +148,7 @@ export default function CharactersPage() {
                     </p>
                   )}
 
-                  <p className="mt-4 text-xs text-[rgb(var(--ink-700))]">
+                  <p className="mt-4 text-xs text-[rgb(var(--ink-800))]">
                     更新于 {new Date(character.updated_at).toLocaleDateString("zh-CN")}
                   </p>
                 </CardContent>

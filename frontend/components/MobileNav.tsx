@@ -86,7 +86,7 @@ export function MobileNav() {
                 className={`flex items-center gap-3 rounded-[0.75rem] px-4 py-3 text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-[rgba(var(--ink-950),0.08)] text-[rgb(var(--ink-950))]"
-                    : "text-[rgb(var(--ink-700))] hover:bg-[rgba(var(--ink-950),0.04)]"
+                    : "text-[rgb(var(--ink-800))] hover:bg-[rgba(var(--ink-950),0.04)]"
                 }`}
               >
                 {item.icon}

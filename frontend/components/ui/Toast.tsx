@@ -157,7 +157,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-[rgb(var(--ink-900))]">{toast.title}</p>
           {toast.message && (
-            <p className="mt-1 text-sm text-[rgb(var(--ink-700))]">{toast.message}</p>
+            <p className="mt-1 text-sm text-[rgb(var(--ink-800))]">{toast.message}</p>
           )}
           {toast.action && (
             <button
@@ -170,7 +170,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         </div>
         <button
           onClick={onClose}
-          className="flex-shrink-0 text-[rgb(var(--ink-700))] hover:text-[rgb(var(--ink-700))] transition-colors"
+          className="flex-shrink-0 text-[rgb(var(--ink-800))] hover:text-[rgb(var(--ink-800))] transition-colors"
           aria-label="Close notification"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

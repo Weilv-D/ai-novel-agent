@@ -142,7 +142,7 @@ export default function EditProjectPage() {
                 <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">
                   项目未找到
                 </h3>
-                <p className="mb-6 text-[rgb(var(--ink-700))]">
+                <p className="mb-6 text-[rgb(var(--ink-800))]">
                   {error || "无法加载项目信息"}
                 </p>
                 <div className="flex justify-center gap-4">
@@ -166,7 +166,7 @@ export default function EditProjectPage() {
           </Link>
           <p className="ink-kicker">Refine Project</p>
           <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">编辑项目</h1>
-          <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-700))]">
+          <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-800))]">
             修改项目信息和创作设置，让后续章节、角色与世界观保持同一方向。
           </p>
         </div>
@@ -255,7 +255,7 @@ export default function EditProjectPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-700))]">
+                <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-800))]">
                   {(profiles.find((profile) => profile.id === (formData.agent_profile_id || "default")) || profiles[0])?.description}
                 </p>
               </div>

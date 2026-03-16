@@ -78,7 +78,7 @@ export default function ProjectDetailPage() {
                 <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">
                   项目未找到
                 </h3>
-                <p className="mb-6 text-[rgb(var(--ink-700))]">
+                <p className="mb-6 text-[rgb(var(--ink-800))]">
                   {error || "无法加载项目信息"}
                 </p>
                 <Button href="/projects">返回项目列表</Button>
@@ -105,7 +105,7 @@ export default function ProjectDetailPage() {
               <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">
                 {project.name}
               </h1>
-              <p className="mt-4 text-base leading-7 text-[rgb(var(--ink-700))]">
+              <p className="mt-4 text-base leading-7 text-[rgb(var(--ink-800))]">
                 {project.summary || "暂无描述"}
               </p>
             </div>
@@ -128,33 +128,33 @@ export default function ProjectDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">题材</span>
+                <span className="text-[rgb(var(--ink-800))]">题材</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">{project.genre || "未分类"}</span>
               </div>
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">目标受众</span>
+                <span className="text-[rgb(var(--ink-800))]">目标受众</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">
                   {project.target_audience || "未设定"}
                 </span>
               </div>
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">目标字数</span>
+                <span className="text-[rgb(var(--ink-800))]">目标字数</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">
                   {project.target_word_count ? project.target_word_count.toLocaleString() : "-"}
                 </span>
               </div>
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">创建时间</span>
+                <span className="text-[rgb(var(--ink-800))]">创建时间</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">
                   {new Date(project.created_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">Agent Profile</span>
+                <span className="text-[rgb(var(--ink-800))]">Agent Profile</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">{project.agent_profile_id}</span>
               </div>
               <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">
-                <div className="mb-2 text-[rgb(var(--ink-700))]">辅助入口</div>
+                <div className="mb-2 text-[rgb(var(--ink-800))]">辅助入口</div>
                 <div className="flex flex-wrap gap-2">
                   <Button href={`/projects/${project.id}/chapters`} size="sm">
                     章节
@@ -168,7 +168,7 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
               <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">
-                <div className="mb-2 text-[rgb(var(--ink-700))]">导出</div>
+                <div className="mb-2 text-[rgb(var(--ink-800))]">导出</div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" onClick={() => exportApi.download(project.id, "txt")} size="sm" testId="export-txt-btn">
                     TXT

@@ -57,7 +57,7 @@ export default function WorldSettingsPage() {
             </Link>
             <p className="ink-kicker">World Ledger</p>
             <h1 className="ink-display mt-3 text-4xl font-semibold text-[rgb(var(--ink-950))]">世界观设定</h1>
-            <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-700))]">
+            <p className="mt-3 text-base leading-7 text-[rgb(var(--ink-800))]">
               管理世界观、背景信息和设定条目，让不同章节引用同一套基础规则。
             </p>
           </div>
@@ -88,7 +88,7 @@ export default function WorldSettingsPage() {
                 <h3 className="ink-display mb-2 text-2xl font-semibold text-[rgb(var(--ink-950))]">
                   还没有世界观设定
                 </h3>
-                <p className="mb-6 text-[rgb(var(--ink-700))]">
+                <p className="mb-6 text-[rgb(var(--ink-800))]">
                   创建第一个设定，开始构建您的世界
                 </p>
                 <Button href={`/projects/${projectId}/worldsettings/new`}>创建设定</Button>
@@ -125,7 +125,7 @@ export default function WorldSettingsPage() {
                         <p className="line-clamp-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
                           {setting.content}
                         </p>
-                        <p className="mt-3 text-xs text-[rgb(var(--ink-700))]">
+                        <p className="mt-3 text-xs text-[rgb(var(--ink-800))]">
                           更新于 {new Date(setting.updated_at).toLocaleDateString("zh-CN")}
                         </p>
                       </CardContent>

@@ -217,6 +217,24 @@ a {
   border-color: rgb(var(--jade) / 0.3);
 }
 
+.ink-badge-amber {
+  background: rgb(var(--amber) / 0.16);
+  color: rgb(var(--amber));
+  border-color: rgb(var(--amber) / 0.34);
+}
+
+.ink-badge-ash {
+  background: rgb(var(--ink-950) / 0.08);
+  color: rgb(var(--ink-800));
+  border-color: rgb(var(--line) / 0.45);
+}
+
+.ink-badge-smoke {
+  background: rgb(var(--ink-950) / 0.05);
+  color: rgb(var(--ink-800));
+  border-color: rgb(var(--line) / 0.36);
+}
+
 /* CSS Hardware accelerated animations */
 .animate-wash-rise {
   animation: wash-rise 800ms cubic-bezier(0.16, 1, 0.3, 1) both;

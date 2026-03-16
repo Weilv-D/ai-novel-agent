@@ -118,7 +118,7 @@ export default function ChapterDetailPage() {
             <div className="flex-1">
               <p className="ink-kicker">Chapter Detail</p>
               <div className="mb-2 mt-3 flex flex-wrap items-center gap-3">
-                <span className="text-sm font-medium text-[rgb(var(--ink-700))]">
+                <span className="text-sm font-medium text-[rgb(var(--ink-800))]">
                   第 {chapter.chapter_number} 章
                 </span>
                 <h1 className="ink-display text-4xl font-semibold text-[rgb(var(--ink-950))]">
@@ -127,7 +127,7 @@ export default function ChapterDetailPage() {
                 <span className={statusMeta.className}>{statusMeta.label}</span>
               </div>
               {chapter.outline && (
-                <p className="text-[rgb(var(--ink-700))]">{chapter.outline}</p>
+                <p className="text-[rgb(var(--ink-800))]">{chapter.outline}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -148,17 +148,17 @@ export default function ChapterDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">场景数</span>
+                <span className="text-[rgb(var(--ink-800))]">场景数</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">{scenes.length}</span>
               </div>
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">创建时间</span>
+                <span className="text-[rgb(var(--ink-800))]">创建时间</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">
                   {new Date(chapter.created_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
               <div className="flex justify-between rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                <span className="text-[rgb(var(--ink-700))]">更新时间</span>
+                <span className="text-[rgb(var(--ink-800))]">更新时间</span>
                 <span className="font-medium text-[rgb(var(--ink-950))]">
                   {new Date(chapter.updated_at).toLocaleDateString("zh-CN")}
                 </span>
@@ -191,7 +191,7 @@ export default function ChapterDetailPage() {
           </CardHeader>
           <CardContent>
             {scenes.length === 0 ? (
-              <div className="py-8 text-center text-[rgb(var(--ink-700))]">
+              <div className="py-8 text-center text-[rgb(var(--ink-800))]">
                 <p>暂无场景</p>
                 <Button
                   variant="outline"
@@ -207,13 +207,13 @@ export default function ChapterDetailPage() {
                 {scenes.map((scene) => (
                   <div
                     key={scene.id}
-                    className="flex items-center justify-between rounded-[1.15rem] border border-[rgba(var(--line),0.12)] bg-[rgba(255,255,255,0.42)] p-4 transition-colors hover:bg-[rgba(255,255,255,0.6)]"
+                    className="flex items-center justify-between rounded-[1.15rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-subtle)] p-4 transition-colors hover:bg-[var(--surface-elevated)]"
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-[rgb(var(--ink-700))]">场景 {scene.scene_order}</span>
+                        <span className="text-sm text-[rgb(var(--ink-800))]">场景 {scene.scene_order}</span>
                         {scene.location && (
-                          <span className="text-sm text-[rgb(var(--ink-700))]">📍 {scene.location}</span>
+                          <span className="text-sm text-[rgb(var(--ink-800))]">📍 {scene.location}</span>
                         )}
                       </div>
                       {scene.content && (

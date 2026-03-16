@@ -76,7 +76,7 @@ export default function ProjectsPage() {
             <h1 className="ink-display mt-3 text-4xl font-semibold text-ink-950">
               我的项目
             </h1>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-ink-700">
+            <p className="mt-3 max-w-2xl text-base leading-7 text-ink-800">
               管理小说创作项目，保持题材、受众、字数目标和当前状态在一个视图内。
             </p>
           </div>
@@ -125,7 +125,7 @@ export default function ProjectsPage() {
                 <h3 className="ink-display mb-2 text-2xl font-semibold text-ink-950">
                   还没有项目
                 </h3>
-                <p className="mb-6 text-ink-700">
+                <p className="mb-6 text-ink-800">
                   创建您的第一个小说项目，开始 AI 辅助创作之旅
                 </p>
                 <Button href="/projects/new">创建项目</Button>
@@ -149,18 +149,18 @@ export default function ProjectsPage() {
                         </h3>
                         <span className={statusMeta.className}>{statusMeta.label}</span>
                       </div>
-                      <p className="text-sm text-ink-700">
+                      <p className="text-sm text-ink-800">
                         {project.genre || "未分类"} · {project.target_audience || "未设定受众"}
                       </p>
                       {project.target_word_count && (
-                        <div className="mt-4 flex justify-between rounded-[1rem] bg-ink-950/8 px-4 py-3 text-sm text-ink-700">
+                        <div className="mt-4 flex justify-between rounded-[1rem] bg-ink-950/8 px-4 py-3 text-sm text-ink-800">
                           <span>目标字数</span>
                           <span className="font-medium text-ink-950">
                             {project.target_word_count.toLocaleString()}
                           </span>
                         </div>
                       )}
-                      <div className="mt-4 pt-2 text-xs text-ink-700">
+                      <div className="mt-4 pt-2 text-xs text-ink-800">
                         更新于 {new Date(project.updated_at).toLocaleDateString("zh-CN")}
                       </div>
                     </CardContent>
