@@ -93,8 +93,8 @@ class WritingOrchestrator:
                     "summary": project.summary,
                     "story_outline": project.story_outline,
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load project context for %s: %s", pid, e)
 
         try:
             characters = await character_service.get_by_project(db, project_id=pid, limit=20)
@@ -102,7 +102,8 @@ class WritingOrchestrator:
                 {"id": str(c.id), "name": c.name, "role": c.role, "profile": c.profile}
                 for c in characters
             ]
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to load characters context for %s: %s", pid, e)
             context_data["characters"] = []
 
         try:
@@ -116,7 +117,8 @@ class WritingOrchestrator:
                 }
                 for ws in settings
             ]
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to load world_settings context for %s: %s", pid, e)
             context_data["world_settings"] = []
 
         try:
@@ -130,7 +132,8 @@ class WritingOrchestrator:
                 }
                 for volume in volumes
             ]
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to load volumes context for %s: %s", pid, e)
             context_data["volumes"] = []
 
         try:
@@ -146,7 +149,8 @@ class WritingOrchestrator:
                 }
                 for ch in chapters
             ]
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to load chapters context for %s: %s", pid, e)
             context_data["chapters"] = []
 
         try:
@@ -155,7 +159,8 @@ class WritingOrchestrator:
                 {"content": m.content, "memory_type": m.memory_type}
                 for m in memories
             ]
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to load memories context for %s: %s", pid, e)
             context_data["memories"] = []
 
         if extra:

@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：2026-03-16  
+测试日期：2026-03-17（第二轮测试）  
 测试执行人：AI Agent  
 测试环境：
 
@@ -25,13 +25,13 @@
 
 | 维度 | 结果 |
 |---|---|
-| 后端单元/集成 | `441 passed` |
-| 后端覆盖率（statement） | `75%` |
+| 后端单元/集成 | `448 passed` |
+| 后端覆盖率（statement） | `74%` |
 | 前端 lint | 通过 |
 | 前端 build | 通过 |
 | E2E | `7 passed` |
 
-说明：当前 statement 覆盖率未达到 95% 目标，需后续补测（重点在 `agent_workflow.py`、`project_package.py` 等复杂路径）。
+说明：当前 statement 覆盖率未达到 95% 目标，需后续补测（重点在 `agent_workflow.py`、`project_package.py`、`orchestrator.py` 等复杂路径）。
 
 ## 2. 关键测试用例清单
 
@@ -63,11 +63,32 @@
 
 本轮覆盖率：
 
-- 语句覆盖率：75%
+- 语句覆盖率：74%
 
 与目标差距：
 
-- 目标 95%，当前差距 20 个百分点
+- 目标 95%，当前差距 21 个百分点
+
+覆盖率详情：
+
+| 模块 | 覆盖率 | 状态 |
+|---|---|---|
+| app/schemas/* | 100% | 优秀 |
+| app/api/v1/* | 95%+ | 良好 |
+| app/services/snapshot.py | 100% | 优秀 |
+| app/services/suggestion.py | 100% | 优秀 |
+| app/services/character.py | 94% | 良好 |
+| app/services/world_setting.py | 94% | 良好 |
+| app/services/dependency.py | 91% | 良好 |
+| app/services/project.py | 91% | 良好 |
+| app/services/export.py | 95% | 良好 |
+| app/services/llm.py | 83% | 良好 |
+| app/services/agent_skill.py | 81% | 良好 |
+| app/services/agent_contract.py | 90% | 良好 |
+| app/services/agent_risk.py | 93% | 良好 |
+| app/services/agent_workflow.py | 65% | 需提升 |
+| app/services/project_package.py | 19% | 需提升 |
+| app/agents/orchestrator.py | 18% | 需提升 |
 
 建议补测优先级：
 
@@ -77,4 +98,28 @@
 
 ## 5. 回归测试结论
 
+### 5.1 历史修复验证（上一轮）
+
 针对本轮修复点（线程并发、项目包导出、导出 UUID、E2E 夹具路径与接口）已完成回归；关键链路通过，未发现新增阻塞问题。
+
+### 5.2 本轮修复验证
+
+| 修复项 | 验证方法 | 结果 |
+|---|---|---|
+| SCH-001: Schema UUID类型统一 | 运行全量单元测试 | 通过 |
+| EXC-001: 静默异常添加日志 | 代码审查 + 单元测试 | 通过 |
+| EXC-002: 流式响应异常信息脱敏 | 代码审查 | 通过 |
+
+### 5.3 测试执行命令
+
+```bash
+# 后端测试
+cd backend && .venv/bin/python -m pytest tests --cov=app --cov-report=term-missing
+
+# 前端质量门
+npm run lint --prefix frontend
+npm run build --prefix frontend
+
+# E2E测试
+npm run e2e
+```

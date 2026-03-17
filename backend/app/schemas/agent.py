@@ -513,7 +513,7 @@ class AgentProfileResponse(BaseModel):
 class AgentChatRequest(BaseModel):
     """Legacy request schema for the previous chat endpoint."""
 
-    project_id: str = Field(..., description="Project UUID")
+    project_id: UUID = Field(..., description="Project UUID")
     message: str = Field(..., min_length=1, description="User message")
     history: list[dict[str, str]] = Field(default_factory=list, description="Chat history")
     context: dict[str, Any] = Field(default_factory=dict, description="Extra context data")
@@ -530,8 +530,8 @@ class AgentChatResponse(BaseModel):
 class AutoSummarizeRequest(BaseModel):
     """Request schema for legacy auto-summarize."""
 
-    project_id: str
-    chapter_id: str
+    project_id: UUID
+    chapter_id: UUID
     content: str = Field(..., min_length=1)
 
 
@@ -545,5 +545,5 @@ class AutoSummarizeResponse(BaseModel):
 class ContinuityCheckRequest(BaseModel):
     """Request schema for legacy continuity check."""
 
-    project_id: str
+    project_id: UUID
     content: str = Field(..., min_length=1)

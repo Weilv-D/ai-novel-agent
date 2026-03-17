@@ -1,6 +1,7 @@
 """Agent workflow API routes."""
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -28,6 +29,8 @@ from app.schemas.agent import (
     AutoSummarizeResponse,
     ContinuityCheckRequest,
 )
+
+logger = logging.getLogger(__name__)
 from app.services.agent_workflow import agent_workflow_service
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -123,9 +126,10 @@ async def create_thread_message(
                 yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
+            logger.error("Stream error in thread %s: %s", thread_id, e)
             error_payload = {
                 "type": "error",
-                "message": str(e),
+                "message": "An error occurred during processing",
                 "detail": {},
             }
             yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n"
