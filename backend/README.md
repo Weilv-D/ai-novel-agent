@@ -2,7 +2,7 @@
 
 后端基于 FastAPI，负责对象数据、Agent 工作流、风险控制、执行校验、记忆检索、导出和健康检查。它服务于独立实例运行模式，不维护 `User` 实体，也不为项目绑定归属用户。
 
-如果你要理解整个系统的实际落地方式，先读 [docs/TECH_IMPLEMENTATION.md](../docs/TECH_IMPLEMENTATION.md)。本文聚焦后端职责、目录结构、运行方式和质量门。
+如果你要理解整个系统的实际落地方式，先读 [docs/architecture/TECH_IMPLEMENTATION.md](../docs/architecture/TECH_IMPLEMENTATION.md)。本文聚焦后端职责、目录结构、运行方式和质量门。
 
 ## 后端职责
 

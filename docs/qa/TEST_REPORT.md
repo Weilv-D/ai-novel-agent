@@ -1,139 +1,102 @@
 # 测试报告
 
-测试日期：2026-03-17（第三轮测试）
-测试执行人：AI Agent
-测试环境：
+最后更新：2026-03-17
 
-- OS: Linux
-- Python: 3.12.3（`backend/.venv`）
-- Node.js: 使用仓库当前本地版本
-- 数据库：SQLite（测试/E2E），代码目标支持 PostgreSQL + pgvector
-- 浏览器：Playwright Chromium
+## 1. 测试环境
 
-## 1. 测试计划与覆盖范围
+| 维度 | 信息 |
+| --- | --- |
+| 操作系统 | Linux |
+| Python | 3.12.3 |
+| Node.js | 仓库本地 Node 运行环境 |
+| 后端数据库 | SQLite（测试/E2E）、PostgreSQL 设计目标 |
+| 浏览器 | Playwright Chromium |
+| 代码基线 | `master` 当前工作树 |
 
-覆盖模块：
-
-- API 路由层（`backend/tests/test_api`）
-- 服务层（`backend/tests/test_services`）
-- Schema 层（`backend/tests/test_schemas`）
-- 集成层（`backend/tests/test_integration`）
-- 前端静态质量门（lint/build）
-- 浏览器 E2E 场景（Agent、导出、导入）
-
-执行结果摘要：
-
-| 维度 | 结果 |
-|---|---|
-| 后端单元/集成 | `448 passed` |
-| 后端覆盖率（statement） | `74%` |
-| 前端 lint | 通过 |
-| 前端 build | 通过 |
-| E2E | `7 passed` |
-
-说明：当前 statement 覆盖率未达到 95% 目标，需后续补测（重点在 `agent_workflow.py`、`project_package.py`、`orchestrator.py` 等复杂路径）。
-
-## 2. 关键测试用例清单
-
-| 用例ID | 测试目的 | 前置条件 | 输入数据 | 操作步骤 | 预期结果 | 实际结果 | 状态 |
-|---|---|---|---|---|---|---|---|
-| TC-AGENT-001 | 创建默认线程并返回线程状态 | 已创建项目 | `project_id` | 调用 `POST /agent/threads` | 返回默认线程对象 | 与预期一致 | 通过 |
-| TC-AGENT-002 | 发送消息并生成待确认 run | 已有线程 | `content=创建一个测试人物` | 调用 `POST /agent/threads/{id}/messages` | 返回 run 与 operations | 与预期一致 | 通过 |
-| TC-AGENT-003 | 确认执行后写入人物 | 有待确认 run | `run_id` | 调用 `/agent/runs/{id}/confirm` | 人物数据落库，run 完成 | 与预期一致 | 通过 |
-| TC-PKG-001 | 项目包导出可下载 | 已有项目 | `project_id` | 调用 `GET /projects/{id}/package` | 返回 zip 流 | 与预期一致 | 通过 |
-| TC-PKG-002 | 项目包导入创建副本 | 已有 zip 包 | `file,new_name` | 调用 `POST /projects/import` | 新建副本并返回计数 | 与预期一致 | 通过 |
-| TC-EXP-001 | 文本导出正常返回 | 已有项目 | `format=txt` | 调用 `GET /projects/{id}/export` | 返回文本下载 | 与预期一致 | 通过 |
-| TC-E2E-001 | 项目创建流程 | 前后端服务可用 | 表单数据 | 浏览器创建项目 | 跳转到详情页 | 与预期一致 | 通过 |
-| TC-E2E-002 | Agent 创建人物流程 | fixture 模式开启 | 固定指令 | 浏览器发送指令并确认 | 人物在列表页可见 | 与预期一致 | 通过 |
-| TC-E2E-003 | Agent 修改设定流程 | fixture 模式开启 | 固定指令 | 浏览器发送指令并确认 | 设定在列表页可见 | 与预期一致 | 通过 |
-| TC-E2E-004 | 高风险正文覆盖流程 | 已存在章节 | 固定指令 | 浏览器确认执行并轮询 API | 章节正文被替换 | 与预期一致 | 通过 |
-
-## 3. 边界与异常覆盖说明
-
-已覆盖的异常/边界方向：
-
-- 缺失或错误鉴权头（401/403）
-- 参数校验失败（422）
-- 资源不存在（404）
-- 业务校验失败（400/409）
-- embedding 维度不一致导入 warning
-- Agent fixture 缺失配置/路径时失败路径
-
-## 4. 覆盖率结果与差距
-
-本轮覆盖率：
-
-- 语句覆盖率：74%
-
-与目标差距：
-
-- 目标 95%，当前差距 21 个百分点
-
-覆盖率详情：
-
-| 模块 | 覆盖率 | 状态 |
-|---|---|---|
-| app/schemas/* | 100% | 优秀 |
-| app/api/v1/* | 95%+ | 良好 |
-| app/services/snapshot.py | 100% | 优秀 |
-| app/services/suggestion.py | 100% | 优秀 |
-| app/services/character.py | 94% | 良好 |
-| app/services/world_setting.py | 94% | 良好 |
-| app/services/dependency.py | 91% | 良好 |
-| app/services/project.py | 91% | 良好 |
-| app/services/export.py | 95% | 良好 |
-| app/services/llm.py | 83% | 良好 |
-| app/services/agent_skill.py | 81% | 良好 |
-| app/services/agent_contract.py | 90% | 良好 |
-| app/services/agent_risk.py | 93% | 良好 |
-| app/services/agent_workflow.py | 65% | 需提升 |
-| app/services/project_package.py | 19% | 需提升 |
-| app/agents/orchestrator.py | 18% | 需提升 |
-
-建议补测优先级：
-
-1. `agent_workflow.py` 复杂分支（多阶段风险、compact、verification 失败路径）
-2. `project_package.py` 导入导出异常分支（损坏包、映射缺失、回滚场景）
-3. `orchestrator` 与 legacy agent 路由路径
-
-## 5. 回归测试结论
-
-### 5.1 历史修复验证（上一轮）
-
-针对本轮修复点（线程并发、项目包导出、导出 UUID、E2E 夹具路径与接口）已完成回归；关键链路通过，未发现新增阻塞问题。
-
-### 5.2 前端修复验证（第三轮）
-
-| 修复项 | 验证方法 | 结果 |
-|---|---|---|
-| FE-001: `useFormDraft` `setData`/`saveDraft` 修复 | 前端 lint + build | 通过 |
-| FE-002: `chatStore` history 双重发送修复 | 前端 lint + build | 通过 |
-| FE-003: `projectStore` null guard 修复 | 前端 lint + build | 通过 |
-| FE-004: `NewProjectPage` 导航方式修复 | 前端 lint + build | 通过 |
-| FE-005: `AgentChatPanel` 状态泄漏修复 | 前端 lint + build | 通过 |
-| FE-006: `Modal` ARIA 属性修复 | 前端 lint + build | 通过 |
-| FE-007: `alert()` 替换为 Toast 通知 | 前端 lint + build | 通过 |
-| FE-008: 全局 error/not-found 边界页 | 前端 lint + build | 通过 |
-| FE-009: `AgentChatPanel` aria-label 补充 | 前端 lint + build | 通过 |
-
-### 5.3 历史修复验证
-
-| 修复项 | 验证方法 | 结果 |
-|---|---|---|
-| SCH-001: Schema UUID类型统一 | 运行全量单元测试 | 通过 |
-| EXC-001: 静默异常添加日志 | 代码审查 + 单元测试 | 通过 |
-| EXC-002: 流式响应异常信息脱敏 | 代码审查 | 通过 |
-
-### 5.3 测试执行命令
+## 2. 执行命令
 
 ```bash
-# 后端测试
-cd backend && .venv/bin/python -m pytest tests --cov=app --cov-report=term-missing
+# 后端全量回归 + 覆盖率
+cd backend && ./.venv/bin/python -m pytest --cov=app --cov-report=term-missing
 
 # 前端质量门
-npm run lint --prefix frontend
-npm run build --prefix frontend
+cd frontend && npm run lint
+cd frontend && npm run type-check
+cd frontend && npm run build
 
-# E2E测试
+# E2E
 npm run e2e
 ```
+
+## 3. 结果摘要
+
+| 维度 | 结果 | 状态 |
+| --- | --- | --- |
+| 后端 pytest | `541 passed` | 通过 |
+| 后端 statement 覆盖率 | `90%` | 未达目标 |
+| 前端 lint | 通过 | 通过 |
+| 前端 type-check | 通过 | 通过 |
+| 前端 build | 通过 | 通过 |
+| Playwright E2E | `7 passed` | 通过 |
+
+说明：
+
+- 分支覆盖率当前未配置独立统计，无法给出可信的 branch coverage 数字
+- `95%+` 目标当前仅部分达成：功能回归通过，但覆盖率仍为 `90%`
+
+## 4. 核心测试用例矩阵
+
+| 用例ID | 目的 | 前置条件 | 输入 | 步骤摘要 | 预期结果 | 实际结果 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `TC-PROJ-001` | 创建项目 | 服务可用 | 基础项目数据 | 创建项目并跳转详情页 | 返回项目详情 | 与预期一致 | 通过 |
+| `TC-PROJ-002` | 更新项目大纲 | 已有项目 | `story_outline` | PATCH 项目 | 大纲更新成功 | 与预期一致 | 通过 |
+| `TC-VOL-001` | 创建卷 | 已有项目 | 卷数据 | POST volume | 返回卷对象 | 与预期一致 | 通过 |
+| `TC-CH-001` | 创建章节 | 已有项目/卷 | 章节数据 | POST chapter | 返回章节对象 | 与预期一致 | 通过 |
+| `TC-CH-002` | 章节重排 | 同卷多章 | 章节 ID 顺序 | POST reorder | 顺序持久化 | 与预期一致 | 通过 |
+| `TC-SC-001` | 场景重排 | 同章多场景 | 场景 ID 顺序 | POST reorder | 顺序持久化 | 与预期一致 | 通过 |
+| `TC-CHAR-001` | 创建人物 | 已有项目 | 人物数据 | POST character | 返回人物对象 | 与预期一致 | 通过 |
+| `TC-WS-001` | 创建设定 | 已有项目 | 设定数据 | POST world-setting | 返回设定对象 | 与预期一致 | 通过 |
+| `TC-MEM-001` | 记忆向量检索 | 已有记忆 | embedding | POST memory search | 返回相似结果 | 与预期一致 | 通过 |
+| `TC-EXP-001` | TXT 导出 | 已有项目内容 | `format=txt` | GET export | 返回文本下载 | 与预期一致 | 通过 |
+| `TC-EXP-002` | DOCX 导出 | 已有项目内容 | `format=docx` | GET export | 返回 DOCX 下载 | 与预期一致 | 通过 |
+| `TC-AGT-001` | Agent 生成 run | 已有线程 | 用户消息 | 发消息生成 run | 返回待确认 run | 与预期一致 | 通过 |
+| `TC-AGT-002` | Agent 确认执行 | 已有待确认 run | run_id | confirm / confirm-high-risk | 完成写入 | 与预期一致 | 通过 |
+| `TC-EDT-001` | TipTap 内联改写 | 章节/场景编辑页 | 文本片段 | 触发 inline-edit SSE | 返回流式改写 | 路由测试通过 | 通过 |
+| `TC-DND-001` | 前端拖拽排序 | 页面可访问 | 拖拽操作 | 章节/场景页面拖拽 | 顺序更新 | API + 页面链路通过 | 通过 |
+| `TC-GPH-001` | 图谱页渲染 | 项目有关系数据 | 项目 ID | 打开 relationships 页面 | 页面构建通过 | 与预期一致 | 通过 |
+| `TC-TML-001` | 时间线聚合 | 项目有 episode 记忆 | 项目 ID | GET timeline | 返回章节+事件 | 与预期一致 | 通过 |
+| `TC-E2E-001` | 项目创建流程 | E2E server 正常 | 表单数据 | 浏览器创建项目 | 进入详情页 | 与预期一致 | 通过 |
+| `TC-E2E-002` | Agent 创建人物 | fixture 模式 | 固定指令 | 浏览器走 Agent 流程 | 人物页可见 | 与预期一致 | 通过 |
+| `TC-E2E-003` | 项目包导入导出 | fixture 模式 | 项目包文件 | 导出后导入 | 生成副本项目 | 与预期一致 | 通过 |
+
+## 5. 失败与修复记录
+
+### 首次 E2E 回归
+
+- 结果：`7 failed`
+- 现象：SQLite 表缺少 `story_outline` 列
+- 根因：复用旧 `backend/e2e_test.db`
+- 修复：启动前删除旧库
+- 复测：`7 passed`
+
+### 首次前端 type-check
+
+- 结果：失败
+- 现象：`.next/types` 缺失导致 `TS6053`
+- 根因：脚本未先生成 route types
+- 修复：改为 `next typegen && tsc --noEmit`
+- 复测：通过
+
+## 6. 覆盖率差距
+
+覆盖率未达标的主要集中区：
+
+- `app/services/agent_workflow.py`
+- `app/agents/orchestrator.py`
+- `app/api/v1/timeline.py`
+- 若干 model / runtime 辅助分支
+
+当前结论：
+
+- 功能回归：通过
+- 95% 覆盖率目标：未达成

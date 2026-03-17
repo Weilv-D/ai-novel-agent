@@ -9,8 +9,8 @@
 如果你要查看：
 
 - 当前真实实现：见 [TECH_IMPLEMENTATION.md](TECH_IMPLEMENTATION.md)
-- 当前交付状态：见 [STATUS.md](STATUS.md)
-- 后续演进顺序：见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+- 当前交付状态：见 [../qa/STATUS.md](../qa/STATUS.md)
+- 后续演进顺序：见 [../roadmap/IMPLEMENTATION_PLAN.md](../roadmap/IMPLEMENTATION_PLAN.md)
 
 ## 架构目标
 

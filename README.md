@@ -285,16 +285,18 @@ ai-novel-agent/
 
 ## 文档索引
 
-- [API Reference](docs/API_REFERENCE.md)
+- [文档总览](docs/README.md)
 - [后端手册](backend/README.md)
-- [技术实现说明](docs/TECH_IMPLEMENTATION.md)
-- [开发手册](docs/DEVELOPMENT.md)
-- [当前技术实现](docs/TECH_IMPLEMENTATION.md)
-- [目标架构](docs/TECH_ARCH.md)
-- [项目状态](docs/STATUS.md)
-- [演进计划](docs/IMPLEMENTATION_PLAN.md)
-- [业务逻辑审查报告](docs/REVIEW_REPORT.md)
-- [测试报告](docs/TEST_REPORT.md)
+- [技术实现说明](docs/architecture/TECH_IMPLEMENTATION.md)
+- [开发手册](docs/development/DEVELOPMENT.md)
+- [用户手册](docs/user/USER_GUIDE.md)
+- [API Reference](docs/api/API_REFERENCE.md)
+- [目标架构](docs/architecture/TECH_ARCH.md)
+- [项目状态](docs/qa/STATUS.md)
+- [逻辑审查报告](docs/qa/REVIEW_REPORT.md)
+- [测试报告](docs/qa/TEST_REPORT.md)
+- [问题清单](docs/qa/ISSUE_TRACKER.md)
+- [演进计划](docs/roadmap/IMPLEMENTATION_PLAN.md)
 
 ## License
 
