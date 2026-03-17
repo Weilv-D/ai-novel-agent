@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.schemas.types import CONTENT_MAX_LENGTH, NOTES_MAX_LENGTH, OUTLINE_MAX_LENGTH, TargetTypeLiteral
+from app.schemas.types import CONTENT_MAX_LENGTH, NOTES_MAX_LENGTH, OUTLINE_MAX_LENGTH
 
 # ============ Enums ============
 

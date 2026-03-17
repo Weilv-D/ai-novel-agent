@@ -151,6 +151,7 @@ class TestAgentRoutesExtended:
                 )
                 chunks = await _collect_streaming_response(stream)
 
+        assert mock_chat.await_args.kwargs["project_id"] == str(project_id)
         assert response.message == "回复"
         assert response.suggestions == [{"type": "outline_gen"}]
         assert '"content": "片段A"' in chunks[0]
@@ -177,6 +178,9 @@ class TestAgentRoutesExtended:
                     req=ContinuityCheckRequest(project_id=project_id, content="章节内容"),
                 )
 
+        assert mock_auto.await_args.kwargs["project_id"] == str(project_id)
+        assert mock_auto.await_args.kwargs["chapter_id"] == str(chapter_id)
+        assert mock_continuity.await_args.kwargs["project_id"] == str(project_id)
         assert auto_response.count == 1
         assert auto_response.memories == memories
         assert continuity_response.message == "通过"

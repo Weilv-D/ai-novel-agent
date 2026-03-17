@@ -1,6 +1,6 @@
 """Chapter, Scene, and Volume service layer."""
 
-from typing import Any
+from typing import Any, TypeVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,15 +18,17 @@ from app.schemas.chapter import (
 from app.services.base import CRUDBase
 from app.services.character import character_service
 
+TRecord = TypeVar("TRecord", Chapter, Scene)
+
 
 async def _resequence_records(
     db: AsyncSession,
     *,
-    records: list[Chapter] | list[Scene],
+    records: list[TRecord],
     ordered_ids: list[Any],
     order_field: str,
     entity_label: str,
-) -> list[Chapter] | list[Scene]:
+) -> list[TRecord]:
     """Reassign order fields using a temporary offset to avoid unique conflicts."""
     if len(set(ordered_ids)) != len(ordered_ids):
         raise BadRequestException(f"{entity_label.capitalize()} reorder payload contains duplicate ids")

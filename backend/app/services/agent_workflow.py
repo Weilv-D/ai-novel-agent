@@ -73,7 +73,14 @@ from app.schemas.agent import (
     AgentThreadStateResponse,
     OperationPreview,
 )
-from app.schemas.chapter import ChapterCreate, ChapterUpdate, SceneCreate, SceneUpdate, VolumeCreate, VolumeUpdate
+from app.schemas.chapter import (
+    ChapterCreate,
+    ChapterUpdate,
+    SceneCreate,
+    SceneUpdate,
+    VolumeCreate,
+    VolumeUpdate,
+)
 from app.schemas.character import CharacterCreate, CharacterUpdate
 from app.schemas.project import ProjectUpdate
 from app.schemas.world_setting import WorldSettingCreate, WorldSettingUpdate
@@ -2131,14 +2138,16 @@ class AgentWorkflowService:
 
         elif tool_name == "write_chapter_content":
             chapter = await self._resolve_chapter(db, project_id=project_id, payload=payload, request_context=request_context)
+            content = str(payload.get("content", "")).strip()
+            mode = str(payload.get("mode", "replace"))
             normalized_payload = {
                 "chapter_id": str(chapter.id),
-                "mode": payload.get("mode", "replace"),
-                "content": str(payload.get("content", "")).strip(),
+                "mode": mode,
+                "content": content,
             }
             if not normalized_payload["content"]:
                 raise BadRequestException("write_chapter_content requires content")
-            next_content = self._apply_text_mode(chapter.content, normalized_payload["content"], normalized_payload["mode"])
+            next_content = self._apply_text_mode(chapter.content, content, mode)
             preview_content_hash = _hash_text(next_content)
             preview = OperationPreview(
                 changed_fields=["content"],
@@ -2191,14 +2200,16 @@ class AgentWorkflowService:
 
         elif tool_name == "write_scene_content":
             scene = await self._resolve_scene(db, project_id=project_id, payload=payload, request_context=request_context)
+            content = str(payload.get("content", "")).strip()
+            mode = str(payload.get("mode", "replace"))
             normalized_payload = {
                 "scene_id": str(scene.id),
-                "mode": payload.get("mode", "replace"),
-                "content": str(payload.get("content", "")).strip(),
+                "mode": mode,
+                "content": content,
             }
             if not normalized_payload["content"]:
                 raise BadRequestException("write_scene_content requires content")
-            next_content = self._apply_text_mode(scene.content, normalized_payload["content"], normalized_payload["mode"])
+            next_content = self._apply_text_mode(scene.content, content, mode)
             preview_content_hash = _hash_text(next_content)
             preview = OperationPreview(
                 changed_fields=["content"],
@@ -2587,20 +2598,20 @@ class AgentWorkflowService:
     ) -> Volume:
         volume_id = payload.get("volume_id") or request_context.get("volume_id")
         if volume_id:
-            volume = await volume_service.get(db, id=uuid.UUID(str(volume_id)))
-            if volume.project_id != project_id:
+            resolved_volume = await volume_service.get(db, id=uuid.UUID(str(volume_id)))
+            if resolved_volume.project_id != project_id:
                 raise NotFoundException("Volume target does not belong to the active workspace")
-            return volume
+            return resolved_volume
 
         volume_number = payload.get("volume_number") or request_context.get("volume_number")
         if volume_number is not None:
-            volume = await volume_service.get_by_volume_number(
+            matched_volume = await volume_service.get_by_volume_number(
                 db,
                 project_id=project_id,
                 volume_number=int(volume_number),
             )
-            if volume is not None:
-                return volume
+            if matched_volume is not None:
+                return matched_volume
 
         volume_title = payload.get("volume_title") or payload.get("title") or request_context.get("volume_title")
         if volume_title:
@@ -2609,9 +2620,9 @@ class AgentWorkflowService:
                 .where(Volume.project_id == project_id, Volume.title == str(volume_title))
                 .limit(1)
             )
-            volume = result.scalar_one_or_none()
-            if volume is not None:
-                return volume
+            titled_volume = result.scalar_one_or_none()
+            if titled_volume is not None:
+                return titled_volume
         raise NotFoundException("Volume target could not be resolved")
 
     async def _resolve_chapter(
@@ -4507,7 +4518,7 @@ class AgentWorkflowService:
         *,
         operation: AgentOperation,
         snapshot: Snapshot,
-        target: Character | WorldSetting | Chapter | Scene,
+        target: Project | Character | WorldSetting | Volume | Chapter | Scene,
     ) -> tuple[bool, str | None]:
         """Verify content transition semantics for explicit write operations."""
         if operation.tool_name not in {"write_chapter_content", "write_scene_content"}:

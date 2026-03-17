@@ -40,7 +40,7 @@ class TestCRUDBase:
             db_session,
             obj_in=ProjectCreate(name="Alpha", genre="Fantasy"),
         )
-        second = await project_crud.create(
+        await project_crud.create(
             db_session,
             obj_in=ProjectCreate(name="Beta", genre="Sci-Fi"),
         )

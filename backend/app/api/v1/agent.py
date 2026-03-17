@@ -225,7 +225,7 @@ async def agent_chat(
     """Legacy chat endpoint kept for auxiliary pages."""
     result = await orchestrator.chat(
         db,
-        project_id=req.project_id,
+        project_id=str(req.project_id),
         user_message=req.message,
         history=req.history,
         extra_context=req.context,
@@ -248,7 +248,7 @@ async def agent_chat_stream(
     async def event_generator() -> AsyncIterator[str]:
         async for chunk in orchestrator.chat_stream(
             db,
-            project_id=req.project_id,
+            project_id=str(req.project_id),
             user_message=req.message,
             history=req.history,
             extra_context=req.context,
@@ -277,8 +277,8 @@ async def auto_summarize(
     """Legacy auto-summarize endpoint."""
     memories = await orchestrator.auto_summarize(
         db,
-        project_id=req.project_id,
-        chapter_id=req.chapter_id,
+        project_id=str(req.project_id),
+        chapter_id=str(req.chapter_id),
         content=req.content,
     )
     return AutoSummarizeResponse(memories=memories, count=len(memories))
@@ -293,7 +293,7 @@ async def continuity_check(
     """Legacy continuity check endpoint."""
     result = await orchestrator.continuity_check(
         db,
-        project_id=req.project_id,
+        project_id=str(req.project_id),
         content=req.content,
     )
     return AgentChatResponse(

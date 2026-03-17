@@ -277,28 +277,28 @@ async def get_project_timeline(
             chapters_by_number=chapters_by_number,
             volume_number_by_id=volume_number_by_id,
         )
-        chapter = chapter_by_id.get(chapter_id) if chapter_id else None
-        scene = scene_by_id.get(scene_id) if scene_id else None
-        if scene is None and chapter_id is not None and scene_order is not None:
-            scene = scene_by_chapter_and_order.get((chapter_id, scene_order))
+        resolved_chapter = chapter_by_id.get(chapter_id) if chapter_id else None
+        resolved_scene = scene_by_id.get(scene_id) if scene_id else None
+        if resolved_scene is None and chapter_id is not None and scene_order is not None:
+            resolved_scene = scene_by_chapter_and_order.get((chapter_id, scene_order))
 
         event_payload = _build_event_payload(
             memory=memory,
-            chapter=chapter,
-            scene=scene,
+            chapter=resolved_chapter,
+            scene=resolved_scene,
             scene_order=scene_order,
         )
 
-        if chapter is None:
+        if resolved_chapter is None:
             unassigned_events.append(event_payload)
             continue
 
         order_key = (
-            scene.scene_order if scene else (scene_order or 9999),
+            resolved_scene.scene_order if resolved_scene else (scene_order or 9999),
             int(memory.created_at.timestamp()),
             str(memory.id),
         )
-        events_by_chapter[str(chapter.id)].append((order_key, event_payload))
+        events_by_chapter[str(resolved_chapter.id)].append((order_key, event_payload))
 
     timeline_chapters = [
         TimelineChapterResponse(

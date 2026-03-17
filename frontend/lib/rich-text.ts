@@ -1,3 +1,5 @@
+import sanitizeHtml from "sanitize-html";
+
 const HTML_TAG_PATTERN = /<\/?[a-z][\s\S]*>/i;
 const ENTITY_MAP: Record<string, string> = {
   "&nbsp;": " ",
@@ -6,6 +8,30 @@ const ENTITY_MAP: Record<string, string> = {
   "&gt;": ">",
   "&quot;": '"',
   "&#39;": "'",
+};
+const RICH_TEXT_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "p",
+    "br",
+    "strong",
+    "em",
+    "s",
+    "code",
+    "pre",
+    "blockquote",
+    "ul",
+    "ol",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "mark",
+  ],
+  allowedAttributes: {},
+  disallowedTagsMode: "discard",
 };
 
 function decodeEntities(text: string): string {
@@ -31,7 +57,7 @@ export function normalizeRichTextContent(content?: string | null): string {
   }
 
   if (isHtmlContent(content)) {
-    return content;
+    return sanitizeHtml(content, RICH_TEXT_SANITIZE_OPTIONS);
   }
 
   const normalized = content.replace(/\r\n?/g, "\n").trim();

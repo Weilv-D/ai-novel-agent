@@ -156,6 +156,50 @@ test.describe("E2E 测试套件", () => {
     });
   });
 
+  test.describe("富文本安全渲染", () => {
+    test("场景详情页会剥离危险 HTML 标签", async ({
+      authenticatedPage,
+      apiContext,
+      testProjectId,
+    }) => {
+      const chapterResponse = await apiContext.post("/api/v1/chapters", {
+        data: {
+          project_id: testProjectId,
+          chapter_number: 1,
+          title: "安全测试章节",
+        },
+      });
+      expect(chapterResponse.ok()).toBeTruthy();
+      const chapter = await chapterResponse.json();
+
+      const sceneResponse = await apiContext.post("/api/v1/scenes", {
+        data: {
+          chapter_id: chapter.id,
+          scene_order: 1,
+          content:
+            '<p>安全内容</p><script>window.__xss_marker = "executed"</script><img src=x onerror="window.__img_marker = 1" />',
+        },
+      });
+      expect(sceneResponse.ok()).toBeTruthy();
+      const scene = await sceneResponse.json();
+
+      await authenticatedPage.goto(
+        `/projects/${testProjectId}/chapters/${chapter.id}/scenes/${scene.id}`
+      );
+
+      const richTextContent = authenticatedPage.locator(".ink-richtext");
+      await expect(authenticatedPage.getByText("安全内容", { exact: true })).toBeVisible();
+      await expect(richTextContent.locator("script")).toHaveCount(0);
+      await expect(richTextContent.locator("img")).toHaveCount(0);
+      await expect(
+        authenticatedPage.evaluate(() => (window as Window & { __xss_marker?: string }).__xss_marker ?? null)
+      ).resolves.toBeNull();
+      await expect(
+        authenticatedPage.evaluate(() => (window as Window & { __img_marker?: number }).__img_marker ?? null)
+      ).resolves.toBeNull();
+    });
+  });
+
   test.describe("项目包导入功能", () => {
     test("导出后重新导入得到新项目副本", async ({
       authenticatedPage,
