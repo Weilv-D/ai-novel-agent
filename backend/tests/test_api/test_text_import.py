@@ -65,6 +65,19 @@ async def test_import_text_rejects_small_file(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_import_text_rejects_oversized_file(client: AsyncClient) -> None:
+    oversized_payload = "正文内容" * ((text_import_service.MAX_FILE_SIZE // len("正文内容".encode())) + 1)
+    response = await client.post(
+        "/api/v1/projects/import-text",
+        data={"project_name": "超大文本"},
+        files={"file": ("novel.txt", oversized_payload, "text/plain")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "上传文件过大，请控制在 15MB 以内"
+
+
+@pytest.mark.asyncio
 async def test_confirm_text_import_creates_project_records(client: AsyncClient) -> None:
     preview = {
         "project_name": "接口导入项目",

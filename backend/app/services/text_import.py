@@ -59,7 +59,7 @@ class _VolumeMarker:
 class TextImportService:
     """Analyze uploaded text and commit a structured project preview."""
 
-    MAX_FILE_SIZE = 5 * 1024 * 1024
+    MAX_FILE_SIZE = 15 * 1024 * 1024
     MIN_CHAR_COUNT = 500
     CHAPTER_OUTLINE_MAX_CHARS = 12000
     CHAPTER_OUTLINE_BATCH_SIZE = 4

@@ -34,7 +34,7 @@ async def import_text_preview(
 
     file_bytes = await file.read()
     if len(file_bytes) > text_import_service.MAX_FILE_SIZE:
-        raise BadRequestException("上传文件过大，请控制在 5MB 以内")
+        raise BadRequestException("上传文件过大，请控制在 15MB 以内")
 
     text, encoding = text_import_service.decode_bytes(file_bytes)
     if len(text_import_service._normalize_text(text)) < text_import_service.MIN_CHAR_COUNT:
