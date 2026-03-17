@@ -116,6 +116,8 @@ docker-compose.override.yml
 /build/
 /coverage/
 .vercel
+playwright-report/
+test-results/
 
 # ========================
 # Project Specific

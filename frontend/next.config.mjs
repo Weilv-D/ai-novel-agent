@@ -5,6 +5,7 @@ const nextConfig = {
   // Set output tracing root to avoid workspace root detection warnings
   // when multiple lockfiles exist in parent directories
   outputFileTracingRoot: process.cwd(),
+  transpilePackages: ["@xyflow/react"],
 };
 
 export default nextConfig;
