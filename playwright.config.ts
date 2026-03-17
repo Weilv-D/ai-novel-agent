@@ -23,7 +23,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "cd backend && ./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001",
+      command: "cd backend && bash ./scripts/start_e2e_server.sh",
       port: 8001,
       timeout: 120 * 1000,
       reuseExistingServer: reuseServer,
