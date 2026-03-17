@@ -82,17 +82,17 @@ export default function NewCharacterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="ink-page">
       <div className="max-w-2xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link
             href={`/projects/${projectId}/characters`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
+            className="ink-backlink mb-4"
           >
             ← 返回人物列表
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">新建人物</h1>
+          <h1 className="text-3xl font-bold text-[rgb(var(--ink-950))]">新建人物</h1>
         </div>
 
         {/* Form */}
@@ -214,11 +214,7 @@ export default function NewCharacterPage() {
                 rows={3}
               />
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
+              {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 
               <div className="flex gap-4 pt-4">
                 <Button

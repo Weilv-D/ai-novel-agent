@@ -158,6 +158,12 @@ export interface ChapterUpdate {
   volume_id?: string;
 }
 
+export interface ChapterReorderRequest {
+  project_id: string;
+  volume_id: string;
+  chapter_ids: string[];
+}
+
 // Scene types
 export interface Scene {
   id: string;
@@ -186,6 +192,19 @@ export interface SceneUpdate {
   location?: string;
   content?: string;
   meta?: Record<string, unknown>;
+}
+
+export interface SceneReorderRequest {
+  chapter_id: string;
+  scene_ids: string[];
+}
+
+export type InlineEditOperation = "rewrite" | "expand" | "condense" | "change_pov";
+
+export interface InlineEditRequest {
+  text: string;
+  operation: InlineEditOperation;
+  context?: Record<string, unknown>;
 }
 
 // Volume types
@@ -244,6 +263,49 @@ export interface MemoryUpdate {
   meta?: Record<string, unknown>;
   embedding?: number[] | null;
   auto_embed?: boolean;
+}
+
+export interface ProjectTimelineVolume {
+  id: string;
+  volume_number?: number | null;
+  title?: string | null;
+}
+
+export interface ProjectTimelineEvent {
+  id: string;
+  memory_type: MemoryType | string;
+  title: string;
+  summary: string;
+  content: string;
+  meta: Record<string, unknown>;
+  chapter_id?: string | null;
+  chapter_number?: number | null;
+  chapter_title?: string | null;
+  scene_id?: string | null;
+  scene_order?: number | null;
+  location?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectTimelineChapter {
+  id: string;
+  volume?: ProjectTimelineVolume | null;
+  chapter_number: number;
+  title?: string | null;
+  status: ChapterStatus;
+  outline?: string | null;
+  event_count: number;
+  events: ProjectTimelineEvent[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectTimelineResponse {
+  project_id: string;
+  chapters: ProjectTimelineChapter[];
+  unassigned_events: ProjectTimelineEvent[];
+  total_events: number;
 }
 
 export interface MemoryMatch {

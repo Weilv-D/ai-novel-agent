@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { TipTapEditor } from "@/components/editor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Textarea } from "@/components/ui/Input";
+import { Input } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { sceneApi } from "@/lib/api-client";
+import { hasRichTextContent, normalizeRichTextContent } from "@/lib/rich-text";
 import type { Scene, SceneUpdate } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
@@ -58,7 +60,11 @@ export default function EditScenePage() {
     try {
       setSaving(true);
       setError(null);
-      await sceneApi.update(sceneId, formData);
+      const payload: SceneUpdate = {
+        ...formData,
+        content: hasRichTextContent(formData.content) ? normalizeRichTextContent(formData.content) : "",
+      };
+      await sceneApi.update(sceneId, payload);
       router.push(`/projects/${projectId}/chapters/${chapterId}/scenes/${sceneId}`);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -74,7 +80,7 @@ export default function EditScenePage() {
   // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-3xl mx-auto px-4 py-8">
           <LoadingSpinner size="lg" text="加载场景中..." />
         </div>
@@ -85,13 +91,13 @@ export default function EditScenePage() {
   // Error state
   if (error && !scene) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-3xl mx-auto px-4 py-8">
           <Card padding="lg">
             <CardContent>
               <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">加载失败</h3>
-                <p className="text-gray-600 mb-6">{error}</p>
+                <h3 className="text-lg font-medium text-[rgb(var(--ink-950))] mb-2">加载失败</h3>
+                <p className="text-[rgb(var(--ink-800))] mb-6">{error}</p>
                 <Button href={`/projects/${projectId}/chapters/${chapterId}/scenes/${sceneId}`}>返回场景</Button>
               </div>
             </CardContent>
@@ -102,17 +108,17 @@ export default function EditScenePage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="ink-page">
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link
             href={`/projects/${projectId}/chapters/${chapterId}/scenes/${sceneId}`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
+            className="ink-backlink mb-4"
           >
             ← 返回场景
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">编辑场景</h1>
+          <h1 className="text-3xl font-bold text-[rgb(var(--ink-950))]">编辑场景</h1>
         </div>
 
         {/* Form */}
@@ -138,19 +144,22 @@ export default function EditScenePage() {
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
               />
 
-              <Textarea
+              <TipTapEditor
                 label="场景内容"
                 placeholder="描述场景中发生的事件..."
                 value={formData.content ?? ""}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                rows={12}
+                onChange={(content) => setFormData({ ...formData, content })}
+                projectId={projectId}
+                aiContext={{
+                  chapter_id: chapterId,
+                  scene_id: sceneId,
+                  scene_order: formData.scene_order,
+                  location: formData.location,
+                }}
+                onAiError={(message) => setError(message)}
               />
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
+              {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 
               <div className="flex gap-4 pt-4">
                 <Button

@@ -308,6 +308,12 @@ export const chapterApi = {
       body: JSON.stringify(data),
     }),
 
+  reorder: (data: unknown) =>
+    fetchApi<unknown[]>("/api/v1/chapters/reorder", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   delete: (id: string) =>
     fetchApi<void>(`/api/v1/chapters/${id}`, {
       method: "DELETE",
@@ -370,6 +376,12 @@ export const sceneApi = {
       body: JSON.stringify(data),
     }),
 
+  reorder: (data: unknown) =>
+    fetchApi<unknown[]>("/api/v1/scenes/reorder", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   delete: (id: string) =>
     fetchApi<void>(`/api/v1/scenes/${id}`, {
       method: "DELETE",
@@ -404,6 +416,15 @@ export const memoryApi = {
     fetchApi<void>(`/api/v1/memories/${id}`, {
       method: "DELETE",
     }),
+};
+
+// ============================================================================
+// Timeline API
+// ============================================================================
+
+export const timelineApi = {
+  get: (projectId: string) =>
+    fetchApi<import("@/lib/types").ProjectTimelineResponse>(`/api/v1/projects/${projectId}/timeline`),
 };
 
 // ============================================================================
@@ -468,6 +489,7 @@ import type {
   AgentThreadMessageRequest,
   AgentThreadMessageResponse,
   AgentThreadState,
+  InlineEditRequest,
   Suggestion,
 } from "@/lib/types";
 
@@ -549,6 +571,63 @@ export const agentApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  inlineEditStream: async function* (data: InlineEditRequest): AsyncGenerator<string, void, unknown> {
+    const url = `${API_BASE_URL}/api/v1/agent/inline-edit`;
+    const headers = await buildAuthenticatedHeaders({
+      "Content-Type": "application/json",
+    });
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, "Inline edit request failed");
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) return;
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) {
+          continue;
+        }
+
+        const chunk = line.slice(6);
+        if (chunk === "[DONE]") {
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(chunk) as { content?: string; type?: string; message?: string };
+          if (parsed.type === "error") {
+            throw new ApiError(500, parsed.message || "Inline edit stream failed");
+          }
+          if (parsed.content) {
+            yield parsed.content;
+          }
+        } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+        }
+      }
+    }
+  },
 };
 
 export const agentWorkflowApi = {
@@ -676,7 +755,7 @@ export const suggestionApi = {
 // ============================================================================
 
 export const exportApi = {
-  download: async (projectId: string, format: "txt" | "markdown" = "txt") => {
+  download: async (projectId: string, format: "txt" | "markdown" | "docx" = "txt") => {
     const url = `${API_BASE_URL}/api/v1/projects/${projectId}/export?format=${format}`;
     const headers = await buildAuthenticatedHeaders();
 
@@ -686,7 +765,7 @@ export const exportApi = {
     }
 
     const blob = await response.blob();
-    const filename = format === "txt" ? "novel.txt" : "novel.md";
+    const filename = format === "txt" ? "novel.txt" : format === "markdown" ? "novel.md" : "novel.docx";
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = filename;

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
+from app.core.cache import cache_service
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException
 from app.models.memory import Memory
@@ -18,6 +19,8 @@ EMBEDDING_DIMENSION = get_settings().embedding_dimension
 class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
     """CRUD operations for Memory model with vector search."""
 
+    SEARCH_CACHE_TTL_SECONDS = 300
+
     @staticmethod
     def _validate_embedding(embedding: list[float] | None) -> None:
         """Validate an embedding before persisting or querying."""
@@ -27,6 +30,21 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
             raise BadRequestException(
                 f"Embedding dimension mismatch: expected {EMBEDDING_DIMENSION}, got {len(embedding)}"
             )
+
+    @staticmethod
+    def _build_search_cache_key(project_id: Any, search_params: VectorSearchRequest) -> str:
+        """Build a stable cache key for vector search results."""
+        payload = {
+            "query_embedding": search_params.query_embedding,
+            "limit": search_params.limit,
+            "threshold": search_params.threshold,
+            "memory_type": search_params.memory_type,
+        }
+        return f"vsearch:{project_id}:{cache_service.build_hash(payload)}"
+
+    async def _invalidate_project_search_cache(self, project_id: Any) -> None:
+        """Invalidate cached vector search results for a project."""
+        await cache_service.invalidate_pattern(f"vsearch:{project_id}:*")
 
     async def get_by_project(
         self,
@@ -60,6 +78,13 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
         """
         # Validate embedding dimension
         self._validate_embedding(search_params.query_embedding)
+        cache_key = self._build_search_cache_key(project_id, search_params)
+        cached_result = await cache_service.get(cache_key)
+        if isinstance(cached_result, dict):
+            cached_matches = cached_result.get("matches")
+            cached_total_count = cached_result.get("total_count")
+            if isinstance(cached_matches, list) and isinstance(cached_total_count, int):
+                return cached_matches, cached_total_count
 
         # Import Vector for distance calculation
         from pgvector.sqlalchemy import Vector
@@ -132,6 +157,12 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
         count_result = await db.execute(count_stmt)
         total_count = count_result.scalar() or 0
 
+        await cache_service.set(
+            cache_key,
+            {"matches": matches, "total_count": total_count},
+            ttl=self.SEARCH_CACHE_TTL_SECONDS,
+        )
+
         return matches, total_count
 
     async def create_with_project(
@@ -148,6 +179,7 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
         db.add(db_obj)
         await db.flush()
         await db.refresh(db_obj)
+        await self._invalidate_project_search_cache(project_id)
         return db_obj
 
     async def update(
@@ -162,7 +194,18 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
             self._validate_embedding(obj_in.get("embedding"))
         else:
             self._validate_embedding(obj_in.embedding)
-        return await super().update(db, db_obj=db_obj, obj_in=obj_in)
+        updated = await super().update(db, db_obj=db_obj, obj_in=obj_in)
+        await self._invalidate_project_search_cache(updated.project_id)
+        return updated
+
+    async def delete(self, db: AsyncSession, *, id: Any) -> Memory:
+        """Delete a memory and invalidate project vector-search cache."""
+        memory = await self.get(db, id)
+        project_id = memory.project_id
+        await db.delete(memory)
+        await db.flush()
+        await self._invalidate_project_search_cache(project_id)
+        return memory
 
     async def get_by_type(
         self,

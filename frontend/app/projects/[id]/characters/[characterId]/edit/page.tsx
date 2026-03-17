@@ -75,7 +75,7 @@ export default function EditCharacterPage() {
   // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-2xl mx-auto px-4 py-8">
           <LoadingSpinner size="lg" text="加载人物中..." />
         </div>
@@ -86,13 +86,13 @@ export default function EditCharacterPage() {
   // Error state
   if (error && !character) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-2xl mx-auto px-4 py-8">
           <Card padding="lg">
             <CardContent>
               <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">加载失败</h3>
-                <p className="text-gray-600 mb-6">{error}</p>
+                <h3 className="text-lg font-medium text-[rgb(var(--ink-950))] mb-2">加载失败</h3>
+                <p className="text-[rgb(var(--ink-800))] mb-6">{error}</p>
                 <Button href={`/projects/${projectId}/characters/${characterId}`}>返回人物</Button>
               </div>
             </CardContent>
@@ -103,17 +103,17 @@ export default function EditCharacterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="ink-page">
       <div className="max-w-2xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link
             href={`/projects/${projectId}/characters/${characterId}`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
+            className="ink-backlink mb-4"
           >
             ← 返回人物
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">编辑人物</h1>
+          <h1 className="text-3xl font-bold text-[rgb(var(--ink-950))]">编辑人物</h1>
         </div>
 
         {/* Form */}
@@ -242,11 +242,7 @@ export default function EditCharacterPage() {
                 rows={4}
               />
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
+              {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 
               <div className="flex gap-4 pt-4">
                 <Button

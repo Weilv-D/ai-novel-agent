@@ -4,21 +4,25 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { SortableList } from "@/components/dnd/SortableList";
 import { ApiError, chapterApi, volumeApi } from "@/lib/api-client";
 import { getChapterStatusMeta } from "@/lib/presentation";
 import type { Chapter, Volume } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
+import { useToast } from "@/components/ui/Toast";
 
 export default function ChaptersPage() {
   const params = useParams();
   const projectId = params.id as string;
+  const toast = useToast();
 
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [volumes, setVolumes] = useState<Volume[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reorderingVolumeId, setReorderingVolumeId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -58,6 +62,38 @@ export default function ChaptersPage() {
       chapters: (chapterMap.get(volume.id) || []).sort((a, b) => a.chapter_number - b.chapter_number),
     }));
   }, [chapters, volumes]);
+
+  async function handleChapterReorder(volumeId: string, nextVolumeChapters: Chapter[]) {
+    const previousChapters = chapters;
+    const optimisticChapters = nextVolumeChapters.map((chapter, index) => ({
+      ...chapter,
+      chapter_number: index + 1,
+    }));
+
+    setReorderingVolumeId(volumeId);
+    setChapters((currentChapters) => [
+      ...currentChapters.filter((chapter) => chapter.volume_id !== volumeId),
+      ...optimisticChapters,
+    ]);
+
+    try {
+      const persistedChapters = await chapterApi.reorder({
+        project_id: projectId,
+        volume_id: volumeId,
+        chapter_ids: optimisticChapters.map((chapter) => chapter.id),
+      }) as Chapter[];
+
+      setChapters((currentChapters) => [
+        ...currentChapters.filter((chapter) => chapter.volume_id !== volumeId),
+        ...persistedChapters,
+      ]);
+    } catch (err) {
+      setChapters(previousChapters);
+      toast.error(err instanceof ApiError ? err.detail : "章节排序保存失败");
+    } finally {
+      setReorderingVolumeId(null);
+    }
+  }
 
   return (
     <main className="ink-page">
@@ -144,12 +180,21 @@ export default function ChaptersPage() {
                       当前卷还没有章纲。
                     </div>
                   ) : (
-                    <div className="mt-5 space-y-4">
-                      {volumeChapters.map((chapter) => {
+                    <div className="mt-5">
+                      <div className="mb-3 flex items-center justify-between text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                        <span>拖拽左侧手柄调整章序</span>
+                        {reorderingVolumeId === volume.id ? <span>正在保存顺序...</span> : null}
+                      </div>
+                      <SortableList
+                        items={volumeChapters}
+                        className="space-y-4"
+                        disabled={reorderingVolumeId !== null}
+                        onReorder={(items) => handleChapterReorder(volume.id, items)}
+                        getItemLabel={(chapter) => `拖拽排序 ${chapter.title || `第 ${chapter.chapter_number} 章`}`}
+                        renderItem={(chapter) => {
                         const statusMeta = getChapterStatusMeta(chapter.status);
                         return (
                           <div
-                            key={chapter.id}
                             className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] p-5 transition-transform duration-200 hover:-translate-y-1"
                           >
                             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -181,7 +226,8 @@ export default function ChaptersPage() {
                             </div>
                           </div>
                         );
-                      })}
+                        }}
+                      />
                     </div>
                   )}
                 </CardContent>

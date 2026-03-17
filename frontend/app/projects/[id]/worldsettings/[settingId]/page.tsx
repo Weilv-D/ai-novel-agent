@@ -64,7 +64,7 @@ export default function WorldSettingDetailPage() {
   // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <LoadingSpinner size="lg" text="加载设定中..." />
         </div>
@@ -75,12 +75,12 @@ export default function WorldSettingDetailPage() {
   // Error state
   if (error || !setting) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <Card padding="lg">
             <CardContent>
               <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-[rgb(var(--ink-950))] mb-2">
                   {error || "设定未找到"}
                 </h3>
                 <Button href={`/projects/${projectId}/worldsettings`}>返回列表</Button>
@@ -93,13 +93,13 @@ export default function WorldSettingDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="ink-page">
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link
             href={`/projects/${projectId}/worldsettings`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
+            className="ink-backlink mb-4"
           >
             ← 返回世界观设定
           </Link>
@@ -109,7 +109,7 @@ export default function WorldSettingDetailPage() {
                 <span className="px-3 py-1 text-sm font-medium rounded-full bg-blue-100 text-blue-800">
                   {setting.category}
                 </span>
-                <h1 className="text-3xl font-bold text-gray-900">{setting.name}</h1>
+                <h1 className="text-3xl font-bold text-[rgb(var(--ink-950))]">{setting.name}</h1>
               </div>
             </div>
             <div className="flex items-center gap-2">

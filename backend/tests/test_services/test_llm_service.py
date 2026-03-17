@@ -228,6 +228,53 @@ class TestLLMServiceGenerate:
             call_args = mock_client.chat.completions.create.call_args
             assert call_args.kwargs["max_tokens"] == 0
 
+    @pytest.mark.asyncio
+    async def test_generate_returns_cached_response_without_calling_api(self) -> None:
+        """Test generate() short-circuits on a cache hit."""
+        service = LLMService(api_key="test-key")
+        cached_payload = {
+            "content": "Cached text",
+            "model": "gpt-4o-mini",
+            "usage": {"tokens_in": 1, "tokens_out": 2, "total": 3},
+        }
+
+        with patch("app.services.llm.cache_service.get", new_callable=AsyncMock) as mock_get:
+            with patch("app.services.llm.AsyncOpenAI") as mock_openai:
+                mock_get.return_value = cached_payload
+
+                result = await service.generate([{"role": "user", "content": "test"}])
+
+                assert result == cached_payload
+                mock_openai.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_generate_caches_successful_response(self) -> None:
+        """Test generate() stores successful non-stream responses in cache."""
+        service = LLMService(api_key="test-key")
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Generated text"
+        mock_response.model = "gpt-4o-mini"
+        mock_response.usage.prompt_tokens = 10
+        mock_response.usage.completion_tokens = 20
+        mock_response.usage.total_tokens = 30
+
+        mock_client = MockAsyncOpenAI(api_key="test-key", base_url="https://api.openai.com/v1")
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with patch("app.services.llm.AsyncOpenAI", return_value=mock_client):
+            with patch("app.services.llm.cache_service.get", new_callable=AsyncMock) as mock_get:
+                with patch("app.services.llm.cache_service.set", new_callable=AsyncMock) as mock_set:
+                    mock_get.return_value = None
+
+                    result = await service.generate([{"role": "user", "content": "test"}])
+
+                    assert result["content"] == "Generated text"
+                    mock_set.assert_awaited_once()
+                    assert mock_set.await_args.kwargs["ttl"] == service.CACHE_TTL_SECONDS
+                    assert mock_set.await_args.args[0].startswith("llm:")
+
 
 class TestLLMServiceEmbed:
     """Tests for LLM embedding generation."""

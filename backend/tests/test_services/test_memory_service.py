@@ -1,6 +1,7 @@
 """Integration tests for Memory service layer with real DB."""
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -429,3 +430,207 @@ class TestMemoryServiceSearchByEmbedding:
             assert len(result) == 1
             assert count == 1
             assert result[0]["similarity"] >= 0.7
+
+
+class TestMemoryServiceCache:
+    """Tests for memory vector-search cache behavior."""
+
+    @pytest.mark.asyncio
+    async def test_search_by_embedding_returns_cached_result(self) -> None:
+        """Vector search should return cache hits without querying the database."""
+        from unittest.mock import AsyncMock, patch
+
+        db_session = AsyncMock()
+        project_id = uuid.uuid4()
+        cached_matches = [
+            {
+                "id": str(uuid.uuid4()),
+                "memory_type": "fact",
+                "content": "Cached fact",
+                "meta": {},
+                "similarity": 0.91,
+            }
+        ]
+
+        with patch("app.services.memory.cache_service.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = {"matches": cached_matches, "total_count": 1}
+
+            result, count = await memory_service.search_by_embedding(
+                db_session,
+                project_id=project_id,
+                search_params=VectorSearchRequest(
+                    query_embedding=[0.1] * EMBEDDING_DIMENSION,
+                    limit=10,
+                    threshold=0.7,
+                ),
+            )
+
+        assert result == cached_matches
+        assert count == 1
+        db_session.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_search_by_embedding_executes_query_and_caches_results(self) -> None:
+        """A cache miss should execute the vector query, convert rows, and cache the result."""
+        from unittest.mock import AsyncMock, patch
+
+        class FakeQueryResult:
+            def __init__(self, *, rows=None, scalar_value=None):
+                self._rows = rows or []
+                self._scalar_value = scalar_value
+
+            def all(self):
+                return self._rows
+
+            def scalar(self):
+                return self._scalar_value
+
+        db_session = AsyncMock()
+        project_id = uuid.uuid4()
+        row = SimpleNamespace(
+            id=uuid.uuid4(),
+            memory_type="fact",
+            content="命中的事实",
+            meta={"chapter": 1},
+            similarity=0.93,
+        )
+        db_session.execute.side_effect = [
+            FakeQueryResult(rows=[row]),
+            FakeQueryResult(scalar_value=3),
+        ]
+
+        with patch("app.services.memory.cache_service.get", new_callable=AsyncMock) as mock_get:
+            with patch("app.services.memory.cache_service.set", new_callable=AsyncMock) as mock_set:
+                mock_get.return_value = None
+
+                result, count = await memory_service.search_by_embedding(
+                    db_session,
+                    project_id=project_id,
+                    search_params=VectorSearchRequest(
+                        query_embedding=[0.1] * EMBEDDING_DIMENSION,
+                        limit=5,
+                        threshold=0.7,
+                        memory_type="fact",
+                    ),
+                )
+
+        assert count == 3
+        assert result == [
+            {
+                "id": row.id,
+                "memory_type": "fact",
+                "content": "命中的事实",
+                "meta": {"chapter": 1},
+                "similarity": 0.93,
+            }
+        ]
+        assert db_session.execute.await_count == 2
+        mock_set.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_create_with_project_invalidates_search_cache(self, db_session: AsyncSession):
+        """Creating a memory should invalidate cached vector search results for the project."""
+        from unittest.mock import AsyncMock, patch
+
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
+        )
+
+        with patch("app.services.memory.cache_service.invalidate_pattern", new_callable=AsyncMock) as mock_invalidate:
+            await memory_service.create_with_project(
+                db_session,
+                obj_in=MemoryCreate(
+                    project_id=project.id,
+                    memory_type="fact",
+                    content="New fact",
+                ),
+                project_id=project.id,
+            )
+
+        mock_invalidate.assert_awaited_once_with(f"vsearch:{project.id}:*")
+
+    @pytest.mark.asyncio
+    async def test_update_invalidates_search_cache(self, db_session: AsyncSession):
+        """Updating a memory should invalidate cached vector search results for the project."""
+        from unittest.mock import AsyncMock, patch
+
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
+        )
+        memory = await memory_service.create_with_project(
+            db_session,
+            obj_in=MemoryCreate(
+                project_id=project.id,
+                memory_type="fact",
+                content="Original fact",
+            ),
+            project_id=project.id,
+        )
+
+        with patch("app.services.memory.cache_service.invalidate_pattern", new_callable=AsyncMock) as mock_invalidate:
+            await memory_service.update(
+                db_session,
+                db_obj=memory,
+                obj_in=MemoryUpdate(content="Updated fact"),
+            )
+
+        mock_invalidate.assert_awaited_once_with(f"vsearch:{project.id}:*")
+
+    @pytest.mark.asyncio
+    async def test_update_with_dict_embedding_validates_dimension_and_invalidates_cache(self, db_session: AsyncSession):
+        """Dict-based updates should validate embeddings before delegating to CRUDBase.update()."""
+        from unittest.mock import AsyncMock, patch
+
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
+        )
+        memory = await memory_service.create_with_project(
+            db_session,
+            obj_in=MemoryCreate(
+                project_id=project.id,
+                memory_type="fact",
+                content="Original fact",
+            ),
+            project_id=project.id,
+        )
+
+        with patch("app.services.memory.cache_service.invalidate_pattern", new_callable=AsyncMock) as mock_invalidate:
+            updated = await memory_service.update(
+                db_session,
+                db_obj=memory,
+                obj_in={
+                    "content": "Updated via dict",
+                    "embedding": [0.4] * EMBEDDING_DIMENSION,
+                },
+            )
+
+        assert updated.content == "Updated via dict"
+        assert updated.embedding is not None
+        mock_invalidate.assert_awaited_once_with(f"vsearch:{project.id}:*")
+
+    @pytest.mark.asyncio
+    async def test_delete_invalidates_search_cache(self, db_session: AsyncSession):
+        """Deleting a memory should invalidate cached vector search results for the project."""
+        from unittest.mock import AsyncMock, patch
+
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
+        )
+        memory = await memory_service.create_with_project(
+            db_session,
+            obj_in=MemoryCreate(
+                project_id=project.id,
+                memory_type="fact",
+                content="Disposable fact",
+            ),
+            project_id=project.id,
+        )
+
+        with patch("app.services.memory.cache_service.invalidate_pattern", new_callable=AsyncMock) as mock_invalidate:
+            await memory_service.delete(db_session, id=memory.id)
+
+        mock_invalidate.assert_awaited_once_with(f"vsearch:{project.id}:*")

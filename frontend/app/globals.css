@@ -1,3 +1,5 @@
+@import "@xyflow/react/dist/style.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -191,6 +193,52 @@ a {
   -webkit-backdrop-filter: blur(12px); /* Safari support */
   border-radius: 0.5rem;
   transform: translateZ(0); /* Prevent blur bleed */
+}
+
+.ink-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: rgb(var(--ink-800));
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.ink-select {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--line) / 0.6);
+  background: var(--field-surface);
+  padding: 0.75rem 1rem;
+  color: rgb(var(--ink-950));
+  box-shadow: inset 0 1px 2px rgb(var(--shadow) / 0.06);
+  backdrop-filter: blur(8px);
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    background-color 200ms ease;
+}
+
+.ink-select:focus-visible {
+  border-color: rgb(var(--seal) / 0.45);
+  background: var(--field-surface-focus);
+  box-shadow:
+    inset 0 1px 2px rgb(var(--shadow) / 0.08),
+    0 0 0 3px rgb(var(--seal) / 0.12);
+}
+
+.ink-alert {
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  padding: 0.875rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.ink-alert-danger {
+  border-color: rgb(var(--danger) / 0.28);
+  background: rgb(var(--danger) / 0.08);
+  color: rgb(var(--danger));
 }
 
 .ink-badge {
@@ -608,4 +656,241 @@ select:focus-visible {
 ::-moz-selection {
   background: rgb(var(--seal) / 0.2);
   color: rgb(var(--ink-950));
+}
+
+.ink-richtext {
+  color: rgb(var(--ink-900));
+  font-size: 1rem;
+  line-height: 1.9;
+}
+
+.ink-richtext > * + * {
+  margin-top: 1rem;
+}
+
+.ink-richtext h1,
+.ink-richtext h2,
+.ink-richtext h3 {
+  font-family: var(--font-display), var(--font-serif), serif;
+  color: rgb(var(--ink-950));
+  letter-spacing: 0.04em;
+}
+
+.ink-richtext h1 {
+  font-size: 1.6rem;
+}
+
+.ink-richtext h2 {
+  font-size: 1.35rem;
+}
+
+.ink-richtext h3 {
+  font-size: 1.1rem;
+}
+
+.ink-richtext p {
+  white-space: normal;
+}
+
+.ink-richtext strong {
+  color: rgb(var(--ink-950));
+  font-weight: 600;
+}
+
+.ink-richtext em {
+  color: rgb(var(--ink-800));
+}
+
+.ink-richtext ul,
+.ink-richtext ol {
+  padding-left: 1.5rem;
+}
+
+.ink-richtext li + li {
+  margin-top: 0.35rem;
+}
+
+.ink-richtext mark {
+  background: rgb(var(--amber) / 0.2);
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.2rem;
+}
+
+.ink-editor {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--line) / 0.35);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(145deg, rgb(255 255 255 / 0.78), rgb(var(--paper-soft) / 0.9)),
+    rgb(var(--paper-deep) / 0.52);
+  box-shadow:
+    0 20px 44px -28px rgb(var(--shadow) / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.38);
+  backdrop-filter: blur(12px);
+}
+
+.ink-editor--error {
+  border-color: rgb(var(--danger) / 0.34);
+}
+
+.ink-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgb(var(--line) / 0.18);
+  padding: 0.9rem 1rem;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.52), rgb(var(--paper-soft) / 0.24));
+}
+
+.ink-editor__surface {
+  position: relative;
+}
+
+.ink-editor__content {
+  padding: 1.2rem 1.2rem 1.4rem;
+  color: rgb(var(--ink-950));
+  line-height: 1.9;
+  outline: none;
+}
+
+.ink-editor__content > * + * {
+  margin-top: 0.9rem;
+}
+
+.ink-editor__content h2,
+.ink-editor__content h3 {
+  font-family: var(--font-display), var(--font-serif), serif;
+  color: rgb(var(--ink-950));
+}
+
+.ink-editor__content h2 {
+  font-size: 1.45rem;
+}
+
+.ink-editor__content h3 {
+  font-size: 1.15rem;
+}
+
+.ink-editor__content ul,
+.ink-editor__content ol {
+  padding-left: 1.5rem;
+}
+
+.ink-editor__content mark {
+  background: rgb(var(--amber) / 0.22);
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.18rem;
+}
+
+.ink-editor__content .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: rgb(var(--ink-700));
+}
+
+.ink-editor__bubble {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgb(var(--line) / 0.2);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.92);
+  box-shadow: 0 18px 36px -24px rgb(var(--shadow) / 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.ink-graph {
+  position: relative;
+  min-height: 540px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--line) / 0.22);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at 12% 10%, rgb(var(--seal) / 0.05), transparent 32%),
+    radial-gradient(circle at 84% 18%, rgb(var(--jade) / 0.05), transparent 28%),
+    linear-gradient(145deg, rgb(255 255 255 / 0.9), rgb(var(--paper-soft) / 0.88));
+  box-shadow: 0 24px 50px -34px rgb(var(--shadow) / 0.24);
+}
+
+.ink-graph .react-flow__pane {
+  background:
+    linear-gradient(rgb(var(--line) / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--line) / 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.ink-graph .react-flow__node {
+  backdrop-filter: blur(10px);
+}
+
+.ink-graph .react-flow__edge-text {
+  font-family: var(--font-serif);
+}
+
+.ink-graph .react-flow__attribution {
+  background: rgb(var(--paper-soft) / 0.88);
+  color: rgb(var(--ink-700));
+  border-top-left-radius: 0.75rem;
+}
+
+.ink-graph__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem;
+  border: 1px solid rgb(var(--line) / 0.2);
+  border-radius: 1rem;
+  background: rgb(255 255 255 / 0.88);
+  box-shadow: 0 18px 36px -28px rgb(var(--shadow) / 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.ink-graph__button {
+  border: 1px solid rgb(var(--line) / 0.24);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.8);
+  padding: 0.45rem 0.8rem;
+  color: rgb(var(--ink-800));
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+
+.ink-graph__button:hover {
+  background: rgb(var(--ink-950) / 0.06);
+}
+
+.ink-graph__button--active {
+  border-color: rgb(var(--seal) / 0.4);
+  background: rgb(var(--seal) / 0.12);
+  color: rgb(var(--seal-dark));
+}
+
+.ink-graph__tab {
+  border: 1px solid rgb(var(--line) / 0.22);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.74);
+  padding: 0.7rem 1.15rem;
+  color: rgb(var(--ink-800));
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease, transform 200ms ease;
+}
+
+.ink-graph__tab:hover {
+  background: rgb(var(--ink-950) / 0.05);
+  transform: translateY(-1px);
+}
+
+.ink-graph__tab--active {
+  border-color: rgb(var(--seal) / 0.36);
+  background: rgb(var(--seal) / 0.11);
+  color: rgb(var(--seal-dark));
 }

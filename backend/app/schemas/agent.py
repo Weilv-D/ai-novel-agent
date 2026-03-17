@@ -43,6 +43,7 @@ RiskPolicyScopeLiteral = Literal["operation", "run"]
 ChildUnitRoleLiteral = Literal["planner", "researcher", "writer", "editor", "continuity", "executor"]
 ChildUnitStageLiteral = Literal["preview", "pre_execution", "execution"]
 PlannerHistoryModeLiteral = Literal["recent_window", "checkpoint_delta"]
+InlineEditOperationLiteral = Literal["rewrite", "expand", "condense", "change_pov"]
 
 AgentStreamEventTypeLiteral = Literal[
     "status",
@@ -547,3 +548,11 @@ class ContinuityCheckRequest(BaseModel):
 
     project_id: UUID
     content: str = Field(..., min_length=1)
+
+
+class InlineEditRequest(BaseModel):
+    """Request schema for inline selection editing."""
+
+    text: str = Field(..., min_length=1, max_length=3000)
+    operation: InlineEditOperationLiteral
+    context: dict[str, Any] = Field(default_factory=dict)

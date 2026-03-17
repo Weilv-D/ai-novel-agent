@@ -182,6 +182,97 @@ class TestChapterServiceGetByVolume:
         assert result[1].chapter_number == 2
 
 
+class TestChapterServiceReorder:
+    """Tests for chapter reordering with real database state."""
+
+    @pytest.mark.asyncio
+    async def test_reorder_within_volume_rewrites_chapter_numbers(self, db_session: AsyncSession):
+        """Reordering chapters should persist sequential chapter numbers."""
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
+        )
+        volume = await volume_service.create_with_project(
+            db_session,
+            obj_in=VolumeCreate(title="Volume 1", volume_number=1, project_id=project.id),
+            project_id=project.id,
+        )
+
+        chapter_one = await chapter_service.create_with_project(
+            db_session,
+            obj_in=ChapterCreate(title="Chapter 1", chapter_number=1, project_id=project.id, volume_id=volume.id),
+            project_id=project.id,
+        )
+        chapter_two = await chapter_service.create_with_project(
+            db_session,
+            obj_in=ChapterCreate(title="Chapter 2", chapter_number=2, project_id=project.id, volume_id=volume.id),
+            project_id=project.id,
+        )
+        chapter_three = await chapter_service.create_with_project(
+            db_session,
+            obj_in=ChapterCreate(title="Chapter 3", chapter_number=3, project_id=project.id, volume_id=volume.id),
+            project_id=project.id,
+        )
+
+        reordered = await chapter_service.reorder_within_volume(
+            db_session,
+            project_id=project.id,
+            volume_id=volume.id,
+            chapter_ids=[chapter_three.id, chapter_one.id, chapter_two.id],
+        )
+
+        assert [chapter.id for chapter in reordered] == [chapter_three.id, chapter_one.id, chapter_two.id]
+        assert [chapter.chapter_number for chapter in reordered] == [1, 2, 3]
+
+        persisted = await chapter_service.get_by_volume(db_session, volume_id=volume.id)
+        assert [chapter.id for chapter in persisted] == [chapter_three.id, chapter_one.id, chapter_two.id]
+
+
+class TestSceneServiceReorder:
+    """Tests for scene reordering with real database state."""
+
+    @pytest.mark.asyncio
+    async def test_reorder_within_chapter_rewrites_scene_order(self, db_session: AsyncSession):
+        """Reordering scenes should persist sequential scene numbers."""
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Test Project", genre="Fantasy"),
+        )
+        chapter = await chapter_service.create_with_project(
+            db_session,
+            obj_in=ChapterCreate(title="Chapter 1", chapter_number=1, project_id=project.id),
+            project_id=project.id,
+        )
+
+        scene_one = await scene_service.create_with_chapter(
+            db_session,
+            obj_in=SceneCreate(scene_order=1, content="Scene 1", chapter_id=chapter.id),
+            chapter_id=chapter.id,
+        )
+        scene_two = await scene_service.create_with_chapter(
+            db_session,
+            obj_in=SceneCreate(scene_order=2, content="Scene 2", chapter_id=chapter.id),
+            chapter_id=chapter.id,
+        )
+        scene_three = await scene_service.create_with_chapter(
+            db_session,
+            obj_in=SceneCreate(scene_order=3, content="Scene 3", chapter_id=chapter.id),
+            chapter_id=chapter.id,
+        )
+
+        reordered = await scene_service.reorder_within_chapter(
+            db_session,
+            chapter_id=chapter.id,
+            scene_ids=[scene_three.id, scene_one.id, scene_two.id],
+        )
+
+        assert [scene.id for scene in reordered] == [scene_three.id, scene_one.id, scene_two.id]
+        assert [scene.scene_order for scene in reordered] == [1, 2, 3]
+
+        persisted = await scene_service.get_by_chapter(db_session, chapter_id=chapter.id)
+        assert [scene.id for scene in persisted] == [scene_three.id, scene_one.id, scene_two.id]
+
+
 class TestSceneServiceGetByChapter:
     """Tests for scene_service.get_by_chapter with real database."""
 

@@ -102,6 +102,14 @@ class ChapterResponse(ChapterBase):
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
+class ChapterReorderRequest(BaseModel):
+    """Schema for chapter reordering inside a volume."""
+
+    project_id: UUID
+    volume_id: UUID
+    chapter_ids: list[UUID] = Field(..., min_length=1)
+
+
 # ============ Scene Schemas ============
 
 class SceneBase(BaseModel):
@@ -139,3 +147,10 @@ class SceneResponse(SceneBase):
     updated_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class SceneReorderRequest(BaseModel):
+    """Schema for scene reordering inside a chapter."""
+
+    chapter_id: UUID
+    scene_ids: list[UUID] = Field(..., min_length=1)

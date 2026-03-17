@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
+import { TipTapEditor } from "@/components/editor";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { ApiError, agentApi, chapterApi, volumeApi } from "@/lib/api-client";
+import { hasRichTextContent, normalizeRichTextContent, richTextToPlainText } from "@/lib/rich-text";
 import type { Chapter, ChapterStatus, ChapterUpdate, Volume } from "@/lib/types";
 
 export default function EditChapterPage() {
@@ -56,11 +58,13 @@ export default function EditChapterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const plainContent = richTextToPlainText(formData.content);
+
     if (!formData.volume_id) {
       setError("请选择所属卷");
       return;
     }
-    if (!formData.title?.trim() && !formData.outline?.trim() && !formData.content?.trim()) {
+    if (!formData.title?.trim() && !formData.outline?.trim() && !plainContent) {
       setError("章节标题、章纲或正文至少填写一项");
       return;
     }
@@ -68,12 +72,17 @@ export default function EditChapterPage() {
     try {
       setSaving(true);
       setError(null);
-      await chapterApi.update(chapterId, formData);
-      if (formData.content && formData.content.length > 100) {
+      const payload: ChapterUpdate = {
+        ...formData,
+        content: hasRichTextContent(formData.content) ? normalizeRichTextContent(formData.content) : "",
+      };
+
+      await chapterApi.update(chapterId, payload);
+      if (plainContent.length > 100) {
         agentApi.autoSummarize({
           project_id: projectId,
           chapter_id: chapterId,
-          content: formData.content,
+          content: plainContent,
         }).catch(() => {});
       }
       router.push(`/projects/${projectId}/chapters/${chapterId}`);
@@ -171,12 +180,20 @@ export default function EditChapterPage() {
                 rows={5}
               />
 
-              <Textarea
+              <TipTapEditor
                 label="正文草稿"
                 placeholder="维护章节正文。"
                 value={formData.content || ""}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                rows={10}
+                onChange={(content) => setFormData({ ...formData, content })}
+                projectId={projectId}
+                aiContext={{
+                  chapter_id: chapterId,
+                  chapter_number: formData.chapter_number,
+                  chapter_title: formData.title,
+                  chapter_outline: formData.outline,
+                  volume_id: formData.volume_id,
+                }}
+                onAiError={(message) => setError(message)}
               />
 
               <Textarea

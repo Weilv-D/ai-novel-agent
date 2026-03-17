@@ -19,6 +19,34 @@ from app.services.base import CRUDBase
 from app.services.character import character_service
 
 
+async def _resequence_records(
+    db: AsyncSession,
+    *,
+    records: list[Chapter] | list[Scene],
+    ordered_ids: list[Any],
+    order_field: str,
+    entity_label: str,
+) -> list[Chapter] | list[Scene]:
+    """Reassign order fields using a temporary offset to avoid unique conflicts."""
+    if len(set(ordered_ids)) != len(ordered_ids):
+        raise BadRequestException(f"{entity_label.capitalize()} reorder payload contains duplicate ids")
+
+    record_by_id = {record.id: record for record in records}
+    if set(record_by_id) != set(ordered_ids):
+        raise BadRequestException(f"{entity_label.capitalize()} reorder payload must include every scoped item exactly once")
+
+    temporary_offset = len(ordered_ids) + 1000
+    for index, record_id in enumerate(ordered_ids, start=1):
+        setattr(record_by_id[record_id], order_field, temporary_offset + index)
+    await db.flush()
+
+    for index, record_id in enumerate(ordered_ids, start=1):
+        setattr(record_by_id[record_id], order_field, index)
+    await db.flush()
+
+    return [record_by_id[record_id] for record_id in ordered_ids]
+
+
 class CRUDVolume(CRUDBase[Volume, VolumeCreate, VolumeUpdate]):
     """CRUD operations for Volume model."""
 
@@ -279,6 +307,31 @@ class CRUDChapter(CRUDBase[Chapter, ChapterCreate, ChapterUpdate]):
         result = await db.execute(query)
         return result.scalars().first()
 
+    async def reorder_within_volume(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: Any,
+        volume_id: Any,
+        chapter_ids: list[Any],
+    ) -> list[Chapter]:
+        """Reorder all chapters inside a volume and rewrite chapter numbers sequentially."""
+        volume = await volume_service.get(db, id=volume_id)
+        if volume.project_id != project_id:
+            raise BadRequestException(
+                f"Volume {volume_id} does not belong to project {project_id}"
+            )
+
+        chapters = await self.get_by_volume(db, volume_id=volume_id, limit=500)
+        reordered = await _resequence_records(
+            db,
+            records=chapters,
+            ordered_ids=chapter_ids,
+            order_field="chapter_number",
+            entity_label="chapter",
+        )
+        return list(reordered)
+
 
 class CRUDScene(CRUDBase[Scene, SceneCreate, SceneUpdate]):
     """CRUD operations for Scene model."""
@@ -349,6 +402,25 @@ class CRUDScene(CRUDBase[Scene, SceneCreate, SceneUpdate]):
             )
         )
         return result.scalars().first()
+
+    async def reorder_within_chapter(
+        self,
+        db: AsyncSession,
+        *,
+        chapter_id: Any,
+        scene_ids: list[Any],
+    ) -> list[Scene]:
+        """Reorder all scenes inside a chapter and rewrite scene order sequentially."""
+        await chapter_service.get(db, id=chapter_id)
+        scenes = await self.get_by_chapter(db, chapter_id=chapter_id, limit=500)
+        reordered = await _resequence_records(
+            db,
+            records=scenes,
+            ordered_ids=scene_ids,
+            order_field="scene_order",
+            entity_label="scene",
+        )
+        return list(reordered)
 
 
 # Singleton instances

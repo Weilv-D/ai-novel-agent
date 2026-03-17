@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
 import { AgentChatPanel } from "@/components/AgentChatPanel";
+import { SortableList } from "@/components/dnd/SortableList";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, chapterApi, sceneApi, volumeApi } from "@/lib/api-client";
+import { getRichTextPreview } from "@/lib/rich-text";
 import { getChapterStatusMeta } from "@/lib/presentation";
 import type { Chapter, Scene, Volume } from "@/lib/types";
 
@@ -28,6 +30,7 @@ export default function ChapterDetailPage() {
   const toast = useToast();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reorderingScenes, setReorderingScenes] = useState(false);
 
   const loadChapter = useCallback(async () => {
     try {
@@ -78,6 +81,30 @@ export default function ChapterDetailPage() {
       toast.error(err instanceof ApiError ? err.detail : "删除章节失败");
       setDeleting(false);
       setDeleteModalOpen(false);
+    }
+  }
+
+  async function handleSceneReorder(nextScenes: Scene[]) {
+    const previousScenes = scenes;
+    const optimisticScenes = nextScenes.map((scene, index) => ({
+      ...scene,
+      scene_order: index + 1,
+    }));
+
+    setReorderingScenes(true);
+    setScenes(optimisticScenes);
+
+    try {
+      const persistedScenes = await sceneApi.reorder({
+        chapter_id: chapterId,
+        scene_ids: optimisticScenes.map((scene) => scene.id),
+      }) as Scene[];
+      setScenes(persistedScenes);
+    } catch (err) {
+      setScenes(previousScenes);
+      toast.error(err instanceof ApiError ? err.detail : "场景排序保存失败");
+    } finally {
+      setReorderingScenes(false);
     }
   }
 
@@ -215,7 +242,15 @@ export default function ChapterDetailPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>场景列表</CardTitle>
+              <div>
+                <CardTitle>场景列表</CardTitle>
+                {scenes.length > 1 ? (
+                  <p className="mt-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-700))]">
+                    拖拽左侧手柄调整场景顺序
+                    {reorderingScenes ? " · 正在保存..." : ""}
+                  </p>
+                ) : null}
+              </div>
               <Button size="sm" href={`/projects/${projectId}/chapters/${chapterId}/scenes/new`}>
                 新建场景
               </Button>
@@ -235,12 +270,14 @@ export default function ChapterDetailPage() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {scenes.map((scene) => (
-                  <div
-                    key={scene.id}
-                    className="flex items-center justify-between rounded-[1.15rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-subtle)] p-4 transition-colors hover:bg-[var(--surface-elevated)]"
-                  >
+              <SortableList
+                items={scenes}
+                className="space-y-3"
+                disabled={reorderingScenes}
+                onReorder={handleSceneReorder}
+                getItemLabel={(scene) => `拖拽排序 场景 ${scene.scene_order}`}
+                renderItem={(scene) => (
+                  <div className="flex items-center justify-between rounded-[1.15rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-subtle)] p-4 transition-colors hover:bg-[var(--surface-elevated)]">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-[rgb(var(--ink-800))]">场景 {scene.scene_order}</span>
@@ -250,7 +287,7 @@ export default function ChapterDetailPage() {
                       </div>
                       {scene.content && (
                         <p className="mt-1 line-clamp-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
-                          {scene.content}
+                          {getRichTextPreview(scene.content)}
                         </p>
                       )}
                     </div>
@@ -258,8 +295,8 @@ export default function ChapterDetailPage() {
                       查看
                     </Button>
                   </div>
-                ))}
-              </div>
+                )}
+              />
             )}
           </CardContent>
         </Card>

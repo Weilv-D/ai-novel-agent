@@ -185,6 +185,12 @@ export default function ProjectDetailPage() {
                   <Button variant="outline" href={`/projects/${project.id}/worldsettings`} size="sm">
                     设定
                   </Button>
+                  <Button variant="outline" href={`/projects/${project.id}/relationships`} size="sm">
+                    图谱
+                  </Button>
+                  <Button variant="outline" href={`/projects/${project.id}/timeline`} size="sm">
+                    时间线
+                  </Button>
                 </div>
               </div>
               <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-4">

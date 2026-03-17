@@ -65,7 +65,7 @@ export default function CharacterDetailPage() {
   // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <LoadingSpinner size="lg" text="加载人物中..." />
         </div>
@@ -76,12 +76,12 @@ export default function CharacterDetailPage() {
   // Error state
   if (error || !character) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <Card padding="lg">
             <CardContent>
               <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-[rgb(var(--ink-950))] mb-2">
                   {error || "人物未找到"}
                 </h3>
                 <Button href={`/projects/${projectId}/characters`}>返回人物列表</Button>
@@ -104,20 +104,20 @@ export default function CharacterDetailPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="ink-page">
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link
             href={`/projects/${projectId}/characters`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
+            className="ink-backlink mb-4"
           >
             ← 返回人物列表
           </Link>
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-3xl font-bold text-gray-900">{character.name}</h1>
+                <h1 className="text-3xl font-bold text-[rgb(var(--ink-950))]">{character.name}</h1>
                 {character.role && (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                     {character.role}
@@ -145,24 +145,24 @@ export default function CharacterDetailPage() {
             <CardContent className="space-y-3 text-sm">
               {hasProfileKey("age") && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">年龄</span>
+                  <span className="text-[rgb(var(--ink-800))]">年龄</span>
                   <span className="font-medium">{getProfileValue<number>("age", 0)}</span>
                 </div>
               )}
               {hasProfileKey("gender") && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">性别</span>
+                  <span className="text-[rgb(var(--ink-800))]">性别</span>
                   <span className="font-medium">{getProfileValue<string>("gender", "")}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-gray-600">创建时间</span>
+                <span className="text-[rgb(var(--ink-800))]">创建时间</span>
                 <span className="font-medium">
                   {new Date(character.created_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">更新时间</span>
+                <span className="text-[rgb(var(--ink-800))]">更新时间</span>
                 <span className="font-medium">
                   {new Date(character.updated_at).toLocaleDateString("zh-CN")}
                 </span>

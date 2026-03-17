@@ -20,6 +20,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.core.cache import cache_service
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException, ServiceUnavailableException
 
@@ -52,6 +53,8 @@ class LLMStreamResponse(TypedDict):
 
 class LLMService:
     """Service for interacting with OpenAI-compatible LLM APIs."""
+
+    CACHE_TTL_SECONDS = 3600
 
     def __init__(
         self,
@@ -122,6 +125,23 @@ class LLMService:
                 )
         return self._embedding_client
 
+    @staticmethod
+    def _build_generate_cache_key(
+        *,
+        model: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """Build a stable cache key for non-streaming generation requests."""
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        return f"llm:{cache_service.build_hash(payload)}"
+
     @overload
     async def generate(
         self,
@@ -173,6 +193,22 @@ class LLMService:
         if not self.api_key:
             raise BadRequestException("LLM API key not configured")
 
+        resolved_model = model if model is not None else self.model
+        resolved_max_tokens = max_tokens if max_tokens is not None else self.max_tokens
+        resolved_temperature = temperature if temperature is not None else self.temperature
+        cache_key = ""
+
+        if not stream:
+            cache_key = self._build_generate_cache_key(
+                model=resolved_model,
+                messages=messages,
+                temperature=resolved_temperature,
+                max_tokens=resolved_max_tokens,
+            )
+            cached_response = await cache_service.get(cache_key)
+            if isinstance(cached_response, dict):
+                return cast(LLMGenerateResponse, cached_response)
+
         # Retry wrapper - this is what gets retried
         @retry(
             retry=retry_if_exception_type((RateLimitError, APIError)),
@@ -185,10 +221,10 @@ class LLMService:
             """Inner function that performs the actual API call."""
             typed_messages = cast(list[ChatCompletionMessageParam], messages)
             return await self.client.chat.completions.create(
-                model=model if model is not None else self.model,
+                model=resolved_model,
                 messages=typed_messages,
-                max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
-                temperature=temperature if temperature is not None else self.temperature,
+                max_tokens=resolved_max_tokens,
+                temperature=resolved_temperature,
                 stream=stream,
             )
 
@@ -199,12 +235,12 @@ class LLMService:
                 # Return streaming response for async handling
                 return {
                     "stream": cast(AsyncStream[ChatCompletionChunk], response),
-                    "model": model if model is not None else self.model,
+                    "model": resolved_model,
                 }
 
             completion = cast(ChatCompletion, response)
             usage = completion.usage
-            return {
+            payload: LLMGenerateResponse = {
                 "content": completion.choices[0].message.content or "",
                 "model": completion.model,
                 "usage": {
@@ -213,6 +249,9 @@ class LLMService:
                     "total": usage.total_tokens if usage is not None else 0,
                 },
             }
+            if cache_key:
+                await cache_service.set(cache_key, payload, ttl=self.CACHE_TTL_SECONDS)
+            return payload
 
         except RateLimitError as e:
             # Re-raise after retries exhausted

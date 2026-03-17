@@ -28,16 +28,46 @@ from app.schemas.agent import (
     AutoSummarizeRequest,
     AutoSummarizeResponse,
     ContinuityCheckRequest,
+    InlineEditRequest,
 )
+from app.services.agent_workflow import agent_workflow_service
+from app.services.llm import llm_service
 
 logger = logging.getLogger(__name__)
-from app.services.agent_workflow import agent_workflow_service
-
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 def _chunk_text(text: str, *, size: int = 120) -> list[str]:
     return [text[index : index + size] for index in range(0, len(text), size)] or [""]
+
+
+INLINE_EDIT_OPERATIONS = {
+    "rewrite": "在不改变事实、人物关系和核心情节的前提下改写这段文字，优化节奏、措辞和画面感。",
+    "expand": "在保持事实和风格一致的前提下扩写这段文字，补足动作、感官和情绪细节。",
+    "condense": "压缩这段文字，保留关键动作、信息和情绪，删去冗余表达。",
+    "change_pov": "把这段文字改写成另一种更明确的叙述视角；若上下文提供 target_pov，请优先按该视角处理。",
+}
+
+
+def _build_inline_edit_messages(req: InlineEditRequest) -> list[dict[str, str]]:
+    context_block = json.dumps(req.context, ensure_ascii=False, indent=2) if req.context else "无"
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是中文长篇小说编辑。请只返回修改后的正文，不要解释，不要列点，不要加标题，不要加引号。"
+                "保持原文语言和人名地名不变，除非操作本身要求调整视角。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"操作要求：{INLINE_EDIT_OPERATIONS[req.operation]}\n\n"
+                f"上下文：\n{context_block}\n\n"
+                f"待处理文本：\n{req.text}"
+            ),
+        },
+    ]
 
 
 @router.post("/threads", response_model=AgentThreadResponse)
@@ -270,4 +300,37 @@ async def continuity_check(
         message=result.message,
         suggestions=result.suggestions,
         metadata=result.metadata,
+    )
+
+
+@router.post("/inline-edit")
+async def inline_edit(
+    *,
+    req: InlineEditRequest,
+) -> StreamingResponse:
+    """Stream an inline rewrite for a selected text fragment."""
+
+    async def event_generator() -> AsyncIterator[str]:
+        try:
+            async for chunk in llm_service.generate_stream(
+                _build_inline_edit_messages(req),
+                temperature=0.6,
+            ):
+                data = json.dumps({"content": chunk}, ensure_ascii=False)
+                yield f"data: {data}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            logger.error("Inline edit stream error: %s", exc)
+            error_payload = {"type": "error", "message": "Inline edit failed"}
+            yield f"data: {json.dumps(error_payload, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

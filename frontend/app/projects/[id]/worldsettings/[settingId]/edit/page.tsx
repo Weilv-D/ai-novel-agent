@@ -87,7 +87,7 @@ export default function EditWorldSettingPage() {
   // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-2xl mx-auto px-4 py-8">
           <LoadingSpinner size="lg" text="加载设定中..." />
         </div>
@@ -98,13 +98,13 @@ export default function EditWorldSettingPage() {
   // Error state
   if (error && !setting) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-2xl mx-auto px-4 py-8">
           <Card padding="lg">
             <CardContent>
               <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">加载失败</h3>
-                <p className="text-gray-600 mb-6">{error}</p>
+                <h3 className="text-lg font-medium text-[rgb(var(--ink-950))] mb-2">加载失败</h3>
+                <p className="text-[rgb(var(--ink-800))] mb-6">{error}</p>
                 <Button href={`/projects/${projectId}/worldsettings/${settingId}`}>返回设定</Button>
               </div>
             </CardContent>
@@ -115,17 +115,17 @@ export default function EditWorldSettingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="ink-page">
       <div className="max-w-2xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link
             href={`/projects/${projectId}/worldsettings/${settingId}`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
+            className="ink-backlink mb-4"
           >
             ← 返回设定
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">编辑世界观设定</h1>
+          <h1 className="text-3xl font-bold text-[rgb(var(--ink-950))]">编辑世界观设定</h1>
         </div>
 
         {/* Form */}
@@ -172,11 +172,7 @@ export default function EditWorldSettingPage() {
                 required
               />
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
+              {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 
               <div className="flex gap-4 pt-4">
                 <Button

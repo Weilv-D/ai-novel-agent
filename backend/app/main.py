@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as api_v1_router
+from app.core.cache import cache_service
 from app.core.config import get_settings
 from app.core.exceptions import (
     AppException,
@@ -35,11 +36,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Initialize database connection and extensions
     await init_db()
     await init_database()
+    await cache_service.init()
 
     yield
 
     # Shutdown
     logger.info("Shutting down AI Novel Agent API")
+    await cache_service.close()
     await close_db()
 
 

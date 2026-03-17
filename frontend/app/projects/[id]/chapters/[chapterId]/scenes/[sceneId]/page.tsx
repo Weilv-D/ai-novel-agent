@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { RichTextContent } from "@/components/content/RichTextContent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/Loading";
@@ -66,7 +67,7 @@ export default function SceneDetailPage() {
   // Loading state
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <LoadingSpinner size="lg" text="加载场景中..." />
         </div>
@@ -77,12 +78,12 @@ export default function SceneDetailPage() {
   // Error state
   if (error || !scene) {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="ink-page">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <Card padding="lg">
             <CardContent>
               <div className="text-center py-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-[rgb(var(--ink-950))] mb-2">
                   {error || "场景未找到"}
                 </h3>
                 <Button href={`/projects/${projectId}/chapters/${chapterId}`}>返回章节</Button>
@@ -95,24 +96,24 @@ export default function SceneDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="ink-page">
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link
             href={`/projects/${projectId}/chapters/${chapterId}`}
-            className="text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 mb-4"
+            className="ink-backlink mb-4"
           >
             ← 返回章节
           </Link>
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-sm font-medium text-gray-500">场景 {scene.scene_order}</span>
-                <h1 className="text-3xl font-bold text-gray-900">场景详情</h1>
+                <span className="text-sm font-medium text-[rgb(var(--ink-800))]">场景 {scene.scene_order}</span>
+                <h1 className="text-3xl font-bold text-[rgb(var(--ink-950))]">场景详情</h1>
               </div>
               {scene.location && (
-                <p className="text-gray-600">📍 {scene.location}</p>
+                <p className="text-[rgb(var(--ink-800))]">📍 {scene.location}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -134,23 +135,23 @@ export default function SceneDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-600">序号</span>
+                <span className="text-[rgb(var(--ink-800))]">序号</span>
                 <span className="font-medium">{scene.scene_order}</span>
               </div>
               {scene.pov_character_id && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">POV 角色 ID</span>
+                  <span className="text-[rgb(var(--ink-800))]">POV 角色 ID</span>
                   <span className="font-medium">{scene.pov_character_id}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-gray-600">创建时间</span>
+                <span className="text-[rgb(var(--ink-800))]">创建时间</span>
                 <span className="font-medium">
                   {new Date(scene.created_at).toLocaleDateString("zh-CN")}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">更新时间</span>
+                <span className="text-[rgb(var(--ink-800))]">更新时间</span>
                 <span className="font-medium">
                   {new Date(scene.updated_at).toLocaleDateString("zh-CN")}
                 </span>
@@ -164,7 +165,7 @@ export default function SceneDetailPage() {
                 <CardTitle className="text-lg">地点</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-700">{scene.location}</p>
+                <p className="text-[rgb(var(--ink-800))]">{scene.location}</p>
               </CardContent>
             </Card>
           )}
@@ -177,9 +178,7 @@ export default function SceneDetailPage() {
               <CardTitle className="text-lg">场景内容</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                {scene.content}
-              </p>
+              <RichTextContent content={scene.content} />
             </CardContent>
           </Card>
         )}

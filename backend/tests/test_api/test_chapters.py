@@ -94,6 +94,49 @@ class TestChapterRoutes:
             data = response.json()
             assert data["id"] == str(chapter_id)
 
+    def test_reorder_chapters(self):
+        """Test reordering chapters within a volume."""
+        client = TestClient(app)
+        project_id = uuid.uuid4()
+        volume_id = uuid.uuid4()
+
+        chapter_one = ChapterResponse(
+            id=uuid.uuid4(),
+            project_id=project_id,
+            volume_id=volume_id,
+            chapter_number=1,
+            title="Chapter One",
+            status="draft",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        chapter_two = ChapterResponse(
+            id=uuid.uuid4(),
+            project_id=project_id,
+            volume_id=volume_id,
+            chapter_number=2,
+            title="Chapter Two",
+            status="draft",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch("app.api.v1.chapters.chapter_service.reorder_within_volume", new_callable=AsyncMock) as mock_reorder:
+            mock_reorder.return_value = [chapter_two, chapter_one]
+
+            response = client.post(
+                "/api/v1/chapters/reorder",
+                json={
+                    "project_id": str(project_id),
+                    "volume_id": str(volume_id),
+                    "chapter_ids": [str(chapter_two.id), str(chapter_one.id)],
+                },
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert [item["id"] for item in data] == [str(chapter_two.id), str(chapter_one.id)]
+
 
 class TestSceneRoutes:
     """Tests for Scene endpoints."""
@@ -148,3 +191,42 @@ class TestSceneRoutes:
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
             assert data["id"] == str(scene_id)
+
+    def test_reorder_scenes(self):
+        """Test reordering scenes within a chapter."""
+        client = TestClient(app)
+        chapter_id = uuid.uuid4()
+
+        scene_one = SceneResponse(
+            id=uuid.uuid4(),
+            chapter_id=chapter_id,
+            scene_order=1,
+            content="Scene one",
+            meta={},
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        scene_two = SceneResponse(
+            id=uuid.uuid4(),
+            chapter_id=chapter_id,
+            scene_order=2,
+            content="Scene two",
+            meta={},
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch("app.api.v1.chapters.scene_service.reorder_within_chapter", new_callable=AsyncMock) as mock_reorder:
+            mock_reorder.return_value = [scene_two, scene_one]
+
+            response = client.post(
+                "/api/v1/scenes/reorder",
+                json={
+                    "chapter_id": str(chapter_id),
+                    "scene_ids": [str(scene_two.id), str(scene_one.id)],
+                },
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert [item["id"] for item in data] == [str(scene_two.id), str(scene_one.id)]

@@ -9,9 +9,11 @@ from app.api.deps import get_db
 from app.models.chapter import Chapter, Scene, Volume
 from app.schemas.chapter import (
     ChapterCreate,
+    ChapterReorderRequest,
     ChapterResponse,
     ChapterUpdate,
     SceneCreate,
+    SceneReorderRequest,
     SceneResponse,
     SceneUpdate,
     VolumeCreate,
@@ -122,6 +124,21 @@ async def list_chapters_by_volume(
     return await chapter_service.get_by_volume(db, volume_id=volume_id, skip=skip, limit=limit)
 
 
+@router.post("/reorder", response_model=list[ChapterResponse])
+async def reorder_chapters(
+    *,
+    db: AsyncSession = Depends(get_db),
+    reorder_in: ChapterReorderRequest,
+) -> list[Chapter]:
+    """Reorder all chapters inside a volume."""
+    return await chapter_service.reorder_within_volume(
+        db,
+        project_id=reorder_in.project_id,
+        volume_id=reorder_in.volume_id,
+        chapter_ids=reorder_in.chapter_ids,
+    )
+
+
 @router.get("/{chapter_id}", response_model=ChapterResponse)
 async def get_chapter(
     *,
@@ -189,6 +206,20 @@ async def get_scene(
 ) -> Scene:
     """Get a scene by ID."""
     return await scene_service.get(db, id=scene_id)
+
+
+@scene_router.post("/reorder", response_model=list[SceneResponse])
+async def reorder_scenes(
+    *,
+    db: AsyncSession = Depends(get_db),
+    reorder_in: SceneReorderRequest,
+) -> list[Scene]:
+    """Reorder all scenes inside a chapter."""
+    return await scene_service.reorder_within_chapter(
+        db,
+        chapter_id=reorder_in.chapter_id,
+        scene_ids=reorder_in.scene_ids,
+    )
 
 
 @scene_router.patch("/{scene_id}", response_model=SceneResponse)
