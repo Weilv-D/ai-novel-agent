@@ -4,7 +4,7 @@
  * Prevents data loss on page refresh or accidental navigation.
  */
 
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 const DRAFT_PREFIX = "form-draft-";
 
@@ -23,6 +23,7 @@ export function useFormDraft<T extends Record<string, unknown>>(
   restoreDraft: () => T | null;
 } {
   const storageKey = `${DRAFT_PREFIX}${key}`;
+  const [data, setDataState] = useState<T>(initialData);
 
   const getDraft = useCallback((): T | null => {
     if (typeof window === "undefined") return null;
@@ -37,7 +38,7 @@ export function useFormDraft<T extends Record<string, unknown>>(
     return null;
   }, [storageKey, key]);
 
-  const saveDraft = useCallback(
+  const persistDraft = useCallback(
     (dataToSave: T) => {
       if (typeof window === "undefined") return;
       try {
@@ -54,20 +55,31 @@ export function useFormDraft<T extends Record<string, unknown>>(
     localStorage.removeItem(storageKey);
   }, [storageKey]);
 
-  const hasDraft = getDraft() !== null;
+  const hasDraft = useMemo(() => getDraft() !== null, [getDraft]);
 
   const restoreDraft = useCallback((): T | null => {
     const draft = getDraft();
-    if (draft && options?.onRestore) {
-      options.onRestore(draft);
+    if (draft) {
+      setDataState(draft);
+      if (options?.onRestore) {
+        options.onRestore(draft);
+      }
     }
     return draft;
   }, [getDraft, options]);
 
+  const setData = useCallback((update: T | ((prev: T) => T)) => {
+    setDataState(update);
+  }, []);
+
+  const saveDraft = useCallback(() => {
+    persistDraft(data);
+  }, [persistDraft, data]);
+
   return {
-    data: initialData,
-    setData: () => {},
-    saveDraft: () => saveDraft(initialData),
+    data,
+    setData,
+    saveDraft,
     clearDraft,
     hasDraft,
     restoreDraft,

@@ -37,16 +37,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       timestamp: Date.now(),
     };
 
+    // Build history BEFORE adding the new user message to avoid double-sending
+    const history = get()
+      .messages.filter((m) => m.role === "user" || m.role === "assistant")
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     set((s) => ({
       messages: [...s.messages, userMsg],
       loading: true,
       error: null,
     }));
-
-    const history = get()
-      .messages.filter((m) => m.role === "user" || m.role === "assistant")
-      .slice(-10)
-      .map((m) => ({ role: m.role, content: m.content }));
 
     try {
       const response = await agentApi.chat({
@@ -92,16 +93,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       timestamp: Date.now(),
     };
 
+    // Build history BEFORE adding the new messages to avoid double-sending
+    const history = get()
+      .messages.filter((m) => m.role === "user" || m.role === "assistant")
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     set((s) => ({
       messages: [...s.messages, userMsg, assistantMsg],
       streaming: true,
       error: null,
     }));
-
-    const history = get()
-      .messages.filter((m) => m.role === "user" || m.role === "assistant")
-      .slice(-10)
-      .map((m) => ({ role: m.role, content: m.content }));
 
     try {
       for await (const chunk of agentApi.chatStream({

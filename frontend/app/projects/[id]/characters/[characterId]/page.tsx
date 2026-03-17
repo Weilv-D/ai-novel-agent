@@ -7,9 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
-import { characterApi } from "@/lib/api-client";
+import { useToast } from "@/components/ui/Toast";
+import { ApiError, characterApi } from "@/lib/api-client";
 import type { Character } from "@/lib/types";
-import { ApiError } from "@/lib/api-client";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 
 export default function CharacterDetailPage() {
@@ -21,6 +21,7 @@ export default function CharacterDetailPage() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -55,11 +56,7 @@ export default function CharacterDetailPage() {
       await characterApi.delete(characterId);
       router.push(`/projects/${projectId}/characters`);
     } catch (err) {
-      if (err instanceof ApiError) {
-        alert(err.detail);
-      } else {
-        alert("删除人物失败");
-      }
+      toast.error(err instanceof ApiError ? err.detail : "删除人物失败");
       setDeleting(false);
       setDeleteModalOpen(false);
     }

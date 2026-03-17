@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 import { ApiError, chapterApi, exportApi, projectPackageApi, volumeApi } from "@/lib/api-client";
 import { getProjectStatusMeta } from "@/lib/presentation";
 import { useProjectStore } from "@/lib/stores/projectStore";
@@ -28,6 +29,7 @@ export default function ProjectDetailPage() {
     deleteProject,
   } = useProjectStore();
 
+  const toast = useToast();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [volumes, setVolumes] = useState<Volume[]>([]);
@@ -59,11 +61,7 @@ export default function ProjectDetailPage() {
       await deleteProject(id);
       router.push("/projects");
     } catch (err) {
-      if (err instanceof ApiError) {
-        alert(err.detail);
-      } else {
-        alert("删除项目失败");
-      }
+      toast.error(err instanceof ApiError ? err.detail : "删除项目失败");
       setDeleting(false);
       setDeleteModalOpen(false);
     }

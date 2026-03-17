@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 import { ApiError, chapterApi, sceneApi, volumeApi } from "@/lib/api-client";
 import { getChapterStatusMeta } from "@/lib/presentation";
 import type { Chapter, Scene, Volume } from "@/lib/types";
@@ -24,6 +25,7 @@ export default function ChapterDetailPage() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -73,11 +75,7 @@ export default function ChapterDetailPage() {
       await chapterApi.delete(chapterId);
       router.push(`/projects/${projectId}/chapters`);
     } catch (err) {
-      if (err instanceof ApiError) {
-        alert(err.detail);
-      } else {
-        alert("删除章节失败");
-      }
+      toast.error(err instanceof ApiError ? err.detail : "删除章节失败");
       setDeleting(false);
       setDeleteModalOpen(false);
     }

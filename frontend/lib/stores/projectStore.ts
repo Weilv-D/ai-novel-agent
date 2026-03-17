@@ -52,9 +52,10 @@ export const useProjectStore = create<ProjectState>((set) => ({
     set({ projectsLoading: true, projectsError: null, loading: true, error: null });
     try {
       const response = await projectApi.list(params) as Project[];
+      const projects = response || [];
       set({
-        projects: response || [],
-        projectsTotal: response.length,
+        projects,
+        projectsTotal: projects.length,
         projectsLoading: false,
         loading: false,
       });

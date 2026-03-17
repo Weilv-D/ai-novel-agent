@@ -7,9 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
-import { sceneApi } from "@/lib/api-client";
+import { useToast } from "@/components/ui/Toast";
+import { ApiError, sceneApi } from "@/lib/api-client";
 import type { Scene } from "@/lib/types";
-import { ApiError } from "@/lib/api-client";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 
 export default function SceneDetailPage() {
@@ -22,6 +22,7 @@ export default function SceneDetailPage() {
   const [scene, setScene] = useState<Scene | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -56,11 +57,7 @@ export default function SceneDetailPage() {
       await sceneApi.delete(sceneId);
       router.push(`/projects/${projectId}/chapters/${chapterId}`);
     } catch (err) {
-      if (err instanceof ApiError) {
-        alert(err.detail);
-      } else {
-        alert("删除场景失败");
-      }
+      toast.error(err instanceof ApiError ? err.detail : "删除场景失败");
       setDeleting(false);
       setDeleteModalOpen(false);
     }

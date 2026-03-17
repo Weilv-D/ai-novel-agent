@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 import { ApiError, chapterApi, volumeApi } from "@/lib/api-client";
 import type { Chapter, Volume } from "@/lib/types";
 
@@ -21,6 +22,7 @@ export default function VolumeDetailPage() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -53,7 +55,7 @@ export default function VolumeDetailPage() {
     } catch (err) {
       setDeleting(false);
       setDeleteModalOpen(false);
-      alert(err instanceof ApiError ? err.detail : "删除卷失败");
+      toast.error(err instanceof ApiError ? err.detail : "删除卷失败");
     }
   }
 

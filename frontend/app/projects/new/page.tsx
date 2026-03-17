@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { agentWorkflowApi, ApiError, projectApi } from "@/lib/api-client";
 import type { AgentProfile, ProjectCreate } from "@/lib/types";
@@ -27,6 +28,7 @@ const FALLBACK_PROFILES: AgentProfile[] = [
 ];
 
 export default function NewProjectPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState<ProjectCreate>({
     name: "",
     genre: "",
@@ -64,7 +66,7 @@ export default function NewProjectPage() {
       setLoading(true);
       setError(null);
       const result = await projectApi.create(formData) as { id: string };
-      window.location.href = `/projects/${result.id}`;
+      router.push(`/projects/${result.id}`);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.detail);

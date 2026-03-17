@@ -16,6 +16,11 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { messages, loading, streaming, error, sendMessageStream, clearMessages } = useChatStore();
 
+  // Clear messages when switching to a different project context
+  useEffect(() => {
+    clearMessages();
+  }, [projectId, clearMessages]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -38,6 +43,7 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
     return (
       <button
         onClick={() => setIsOpen(true)}
+        aria-label="Open AI writing assistant"
         className={`fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border border-[rgba(var(--line),0.18)] bg-[linear-gradient(180deg,rgba(var(--ink-950),0.94),rgba(var(--ink-900),0.94))] text-lg font-semibold tracking-[0.2em] text-[rgb(var(--paper-soft))] shadow-[0_28px_60px_-28px_rgba(var(--shadow),0.82)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_32px_72px_-28px_rgba(var(--shadow),0.85)] ${className}`}
       >
         AI
@@ -53,10 +59,10 @@ export function AgentChatPanel({ projectId, context, className = "" }: AgentChat
           <span className="ink-display text-xl font-semibold">AI 写作助手</span>
         </div>
         <div className="flex gap-2">
-          <button onClick={clearMessages} className="text-sm opacity-80 transition-opacity hover:opacity-100">
+          <button onClick={clearMessages} aria-label="Clear chat messages" className="text-sm opacity-80 transition-opacity hover:opacity-100">
             清空
           </button>
-          <button onClick={() => setIsOpen(false)} className="text-sm opacity-80 transition-opacity hover:opacity-100">
+          <button onClick={() => setIsOpen(false)} aria-label="Collapse chat panel" className="text-sm opacity-80 transition-opacity hover:opacity-100">
             收起
           </button>
         </div>

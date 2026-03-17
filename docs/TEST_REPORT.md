@@ -1,7 +1,7 @@
 # 测试报告
 
-测试日期：2026-03-17（第二轮测试）  
-测试执行人：AI Agent  
+测试日期：2026-03-17（第三轮测试）
+测试执行人：AI Agent
 测试环境：
 
 - OS: Linux
@@ -102,7 +102,21 @@
 
 针对本轮修复点（线程并发、项目包导出、导出 UUID、E2E 夹具路径与接口）已完成回归；关键链路通过，未发现新增阻塞问题。
 
-### 5.2 本轮修复验证
+### 5.2 前端修复验证（第三轮）
+
+| 修复项 | 验证方法 | 结果 |
+|---|---|---|
+| FE-001: `useFormDraft` `setData`/`saveDraft` 修复 | 前端 lint + build | 通过 |
+| FE-002: `chatStore` history 双重发送修复 | 前端 lint + build | 通过 |
+| FE-003: `projectStore` null guard 修复 | 前端 lint + build | 通过 |
+| FE-004: `NewProjectPage` 导航方式修复 | 前端 lint + build | 通过 |
+| FE-005: `AgentChatPanel` 状态泄漏修复 | 前端 lint + build | 通过 |
+| FE-006: `Modal` ARIA 属性修复 | 前端 lint + build | 通过 |
+| FE-007: `alert()` 替换为 Toast 通知 | 前端 lint + build | 通过 |
+| FE-008: 全局 error/not-found 边界页 | 前端 lint + build | 通过 |
+| FE-009: `AgentChatPanel` aria-label 补充 | 前端 lint + build | 通过 |
+
+### 5.3 历史修复验证
 
 | 修复项 | 验证方法 | 结果 |
 |---|---|---|

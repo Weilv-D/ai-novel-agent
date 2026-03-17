@@ -4,6 +4,7 @@ import { useState } from "react";
 import { suggestionApi } from "@/lib/api-client";
 import type { Suggestion } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
 import { getSuggestionStatusMeta } from "@/lib/presentation";
 
 interface SuggestionCardProps {
@@ -23,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 export function SuggestionCard({ suggestion, onAction }: SuggestionCardProps) {
   const [acting, setActing] = useState(false);
+  const toast = useToast();
 
   async function handleAction(action: "confirm" | "discard" | "commit") {
     setActing(true);
@@ -30,7 +32,7 @@ export function SuggestionCard({ suggestion, onAction }: SuggestionCardProps) {
       await suggestionApi.action(suggestion.id, action);
       onAction?.(suggestion.id, action);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "操作失败");
+      toast.error(err instanceof Error ? err.message : "操作失败");
     } finally {
       setActing(false);
     }
