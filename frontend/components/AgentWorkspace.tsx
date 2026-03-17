@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { type ReactNode, useEffect, useRef, useState, useTransition } from "react";
 
 import { agentWorkflowApi, ApiError, chapterApi, projectApi, volumeApi } from "@/lib/api-client";
 import type {
@@ -123,6 +123,125 @@ function excerpt(value: string | null | undefined, fallback: string, max = 150):
     return text;
   }
   return `${text.slice(0, max)}...`;
+}
+
+interface MetaItem {
+  label: string;
+  value: ReactNode | null | undefined;
+  tone?: "default" | "danger" | "accent";
+}
+
+function CompactMetaGrid({
+  items,
+  columns = 2,
+  className = "",
+}: {
+  items: MetaItem[];
+  columns?: 2 | 3 | 4;
+  className?: string;
+}) {
+  const visibleItems = items.filter((item) => item.value !== null && item.value !== undefined && item.value !== "");
+  if (visibleItems.length === 0) {
+    return null;
+  }
+
+  const columnClass =
+    columns === 4
+      ? "sm:grid-cols-2 2xl:grid-cols-4"
+      : columns === 3
+        ? "sm:grid-cols-3"
+        : "sm:grid-cols-2";
+
+  return (
+    <div className={`grid grid-cols-1 gap-3 ${columnClass} ${className}`}>
+      {visibleItems.map((item, index) => {
+        const toneClass =
+          item.tone === "danger"
+            ? "text-[rgb(var(--danger))]"
+            : item.tone === "accent"
+              ? "text-[rgb(var(--ink-950))]"
+              : "text-[rgb(var(--ink-900))]";
+        return (
+          <div
+            key={`${item.label}-${index}`}
+            className="rounded-[0.95rem] bg-[rgba(var(--ink-950),0.05)] px-3 py-3"
+          >
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[rgb(var(--ink-700))]">
+              {item.label}
+            </div>
+            <div className={`mt-1 text-sm leading-6 ${toneClass}`}>{item.value}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CompactMetaLine({
+  items,
+  className = "",
+}: {
+  items: MetaItem[];
+  className?: string;
+}) {
+  const visibleItems = items.filter((item) => item.value !== null && item.value !== undefined && item.value !== "");
+  if (visibleItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={`flex flex-wrap gap-x-4 gap-y-1 text-xs leading-6 text-[rgb(var(--ink-800))] ${className}`}>
+      {visibleItems.map((item, index) => {
+        const toneClass =
+          item.tone === "danger"
+            ? "text-[rgb(var(--danger))]"
+            : item.tone === "accent"
+              ? "text-[rgb(var(--ink-950))]"
+              : "text-[rgb(var(--ink-900))]";
+        return (
+          <span key={`${item.label}-${index}`}>
+            <span className="text-[rgb(var(--ink-700))]">{item.label}</span>
+            <span className={`ml-1 ${toneClass}`}>{item.value}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function DisclosureSection({
+  kicker,
+  title,
+  description,
+  children,
+  defaultOpen = false,
+}: {
+  kicker: string;
+  title: string;
+  description?: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details
+      className="rounded-[1.15rem] border border-[rgba(var(--line),0.14)] bg-[var(--surface-strong)] px-4 py-4"
+      open={defaultOpen || undefined}
+    >
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <div>
+          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">{kicker}</div>
+          <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">{title}</div>
+          {description && (
+            <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-800))]">{description}</p>
+          )}
+        </div>
+        <span className="shrink-0 text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+          查看细节
+        </span>
+      </summary>
+      <div className="mt-4 border-t border-[rgba(var(--line),0.12)] pt-4">{children}</div>
+    </details>
+  );
 }
 
 type FocusVolumeSummary = {
@@ -304,37 +423,20 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{subtask.summary}</p>
       )}
       {(source || validationStatus || attemptCount !== null || retryStrategy) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-          {source && (
-            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-              source:{source}
-            </span>
-          )}
-          {validationStatus && (
-            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-              validation:{validationStatus}
-            </span>
-          )}
-          {attemptCount !== null && (
-            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-              attempts:{attemptCount}/{maxAttempts ?? attemptCount}
-            </span>
-          )}
-          {retryStrategy && (
-            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-              strategy:{retryStrategy}
-            </span>
-          )}
-        </div>
+        <CompactMetaLine
+          className="mt-3"
+          items={[
+            { label: "来源", value: source },
+            { label: "校验", value: validationStatus },
+            { label: "尝试", value: attemptCount !== null ? `${attemptCount}/${maxAttempts ?? attemptCount}` : null },
+            { label: "重试策略", value: retryStrategy },
+          ]}
+        />
       )}
       {dependencyList.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-          {dependencyList.map((dependency) => (
-            <span key={dependency} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
-              depends:{dependency}
-            </span>
-          ))}
-        </div>
+        <p className="mt-3 text-xs leading-6 text-[rgb(var(--ink-800))]">
+          依赖：{dependencyList.join(" / ")}
+        </p>
       )}
       {subtask.error_message && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--danger))]">{subtask.error_message}</p>
@@ -360,31 +462,24 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className={riskMeta.className}>{riskMeta.label}</span>
           <span className={verificationMeta.className}>{verificationMeta.label}</span>
-          {operation.target_display && (
-            <span className="rounded-full border border-[rgba(var(--line),0.18)] px-3 py-1 text-xs text-[rgb(var(--ink-800))]">
-              {operation.target_display}
-            </span>
-          )}
         </div>
       </div>
+      <CompactMetaLine
+        className="mb-2"
+        items={[
+          { label: "目标", value: operation.target_display },
+          {
+            label: "涉及字段",
+            value: preview.changed_fields.length > 0 ? preview.changed_fields.join(" / ") : null,
+          },
+        ]}
+      />
       <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{operation.description}</p>
       {operation.reason && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">原因：{operation.reason}</p>
       )}
       {operation.requires_secondary_confirmation && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--danger))]">此步骤会触发二次确认，适用于高风险正文覆盖。</p>
-      )}
-      {preview.changed_fields.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {preview.changed_fields.map((field) => (
-            <span
-              key={field}
-              className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]"
-            >
-              {field}
-            </span>
-          ))}
-        </div>
       )}
       {(preview.before_summary || preview.after_summary) && (
         <div className="mt-4">
@@ -419,31 +514,26 @@ function RiskSummaryCard({ riskSummary }: { riskSummary: AgentRunRiskSummary }) 
           <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">Run Risk</div>
           <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">执行风险摘要</div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={riskMeta.className}>{riskMeta.label}</span>
-          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-            gate:{riskSummary.confirmation_gate}
-          </span>
-          <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-            policy:{riskSummary.policy_version}
-          </span>
-        </div>
+        <span className={riskMeta.className}>{riskMeta.label}</span>
       </div>
+      <CompactMetaLine
+        className="mt-2"
+        items={[
+          { label: "确认门槛", value: riskSummary.confirmation_gate },
+          { label: "策略版本", value: riskSummary.policy_version },
+        ]}
+      />
       <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">{riskSummary.summary}</p>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-          total:{riskSummary.total_operations}
-        </span>
-        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-          low:{riskSummary.low_risk_operation_count}
-        </span>
-        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-          medium:{riskSummary.medium_risk_operation_count}
-        </span>
-        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-          high:{riskSummary.high_risk_operation_count}
-        </span>
-      </div>
+      <CompactMetaGrid
+        className="mt-3"
+        items={[
+          { label: "总步骤", value: riskSummary.total_operations, tone: "accent" },
+          { label: "低风险", value: riskSummary.low_risk_operation_count },
+          { label: "标准写入", value: riskSummary.medium_risk_operation_count },
+          { label: "高风险", value: riskSummary.high_risk_operation_count, tone: "danger" },
+        ]}
+        columns={4}
+      />
       {riskSummary.applied_policies.length > 0 && (
         <div className="mt-3 space-y-2">
           {riskSummary.applied_policies.map((policy: AgentAppliedRiskPolicy) => (
@@ -458,36 +548,43 @@ function RiskSummaryCard({ riskSummary }: { riskSummary: AgentRunRiskSummary }) 
                 </div>
               </div>
               <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{policy.description}</p>
-              {policy.matched_operation_positions.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                  <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
-                    steps:{policy.matched_operation_positions.join(", ")}
-                  </span>
-                  {policy.requires_secondary_confirmation && (
-                    <span className="rounded-full bg-[rgba(var(--danger),0.08)] px-3 py-1 text-[rgb(var(--danger))]">
-                      二次确认
-                    </span>
-                  )}
-                </div>
-              )}
+              <CompactMetaLine
+                className="mt-2"
+                items={[
+                  {
+                    label: "命中步骤",
+                    value: policy.matched_operation_positions.length > 0 ? policy.matched_operation_positions.join(", ") : null,
+                  },
+                  {
+                    label: "附加要求",
+                    value: policy.requires_secondary_confirmation ? "需要二次确认" : null,
+                    tone: policy.requires_secondary_confirmation ? "danger" : "default",
+                  },
+                ]}
+              />
             </div>
           ))}
         </div>
       )}
       {(riskSummary.high_risk_operation_positions.length > 0 ||
         riskSummary.secondary_confirmation_operation_positions.length > 0) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-          {riskSummary.high_risk_operation_positions.length > 0 && (
-            <span className="rounded-full bg-[rgba(var(--danger),0.08)] px-3 py-1 text-[rgb(var(--danger))]">
-              高风险步骤:{riskSummary.high_risk_operation_positions.join(", ")}
-            </span>
-          )}
-          {riskSummary.secondary_confirmation_operation_positions.length > 0 && (
-            <span className="rounded-full bg-[rgba(var(--amber),0.12)] px-3 py-1">
-              二次确认步骤:{riskSummary.secondary_confirmation_operation_positions.join(", ")}
-            </span>
-          )}
-        </div>
+        <CompactMetaLine
+          className="mt-3"
+          items={[
+            {
+              label: "高风险步骤",
+              value: riskSummary.high_risk_operation_positions.length > 0 ? riskSummary.high_risk_operation_positions.join(", ") : null,
+              tone: riskSummary.high_risk_operation_positions.length > 0 ? "danger" : "default",
+            },
+            {
+              label: "二次确认步骤",
+              value:
+                riskSummary.secondary_confirmation_operation_positions.length > 0
+                  ? riskSummary.secondary_confirmation_operation_positions.join(", ")
+                  : null,
+            },
+          ]}
+        />
       )}
     </div>
   );
@@ -503,44 +600,40 @@ function ChildUnitCard({ childUnit }: { childUnit: AgentExecutionChildUnit }) {
         </div>
       </div>
       <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{childUnit.description}</p>
-      <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-          gate:{childUnit.confirmation_gate}
-        </span>
-        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-          mode:{childUnit.mode}
-        </span>
-        {childUnit.requires_confirmation && (
-          <span className="rounded-full bg-[rgba(var(--amber),0.12)] px-3 py-1">requires-confirmation</span>
-        )}
-      </div>
+      <CompactMetaLine
+        className="mt-2"
+        items={[
+          { label: "确认门槛", value: childUnit.confirmation_gate },
+          { label: "模式", value: childUnit.mode },
+          { label: "附加要求", value: childUnit.requires_confirmation ? "需要人工确认" : null },
+        ]}
+      />
       {(childUnit.depends_on.length > 0 || childUnit.operation_positions.length > 0) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-          {childUnit.depends_on.map((dependency) => (
-            <span key={dependency} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
-              depends:{dependency}
-            </span>
-          ))}
-          {childUnit.operation_positions.length > 0 && (
-            <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
-              steps:{childUnit.operation_positions.join(", ")}
-            </span>
-          )}
-        </div>
+        <CompactMetaLine
+          className="mt-3"
+          items={[
+            { label: "依赖", value: childUnit.depends_on.length > 0 ? childUnit.depends_on.join(" / ") : null },
+            {
+              label: "关联步骤",
+              value: childUnit.operation_positions.length > 0 ? childUnit.operation_positions.join(", ") : null,
+            },
+          ]}
+        />
       )}
       {(childUnit.capability_ids.length > 0 || childUnit.tool_scope.length > 0) && (
-        <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-          {childUnit.capability_ids.map((capabilityId) => (
-            <span key={capabilityId} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-              capability:{capabilityId}
-            </span>
-          ))}
-          {Array.from(new Set(childUnit.tool_scope.slice(0, 4))).map((tool) => (
-            <span key={tool} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
-              {tool}
-            </span>
-          ))}
-        </div>
+        <CompactMetaLine
+          className="mt-3"
+          items={[
+            {
+              label: "能力",
+              value: childUnit.capability_ids.length > 0 ? childUnit.capability_ids.join(" / ") : null,
+            },
+            {
+              label: "工具",
+              value: childUnit.tool_scope.length > 0 ? Array.from(new Set(childUnit.tool_scope.slice(0, 4))).join(" / ") : null,
+            },
+          ]}
+        />
       )}
     </div>
   );
@@ -572,6 +665,17 @@ export function AgentWorkspace({
   const projectOutlinePreview = getProjectOutlinePreview(currentRun, project);
   const focusedVolume = getFocusedVolumeSummary(currentRun, volumes, chapters);
   const relatedChapters = getRelatedChapterOutlines(currentRun, chapters, focusedVolume);
+  const relatedChapterPreviews = relatedChapters.slice(0, 2);
+  const hasRunDiagnostics = Boolean(
+    currentRun &&
+      (currentRun.planner_window ||
+        currentRun.compact_policy ||
+        currentRun.retained_window ||
+        currentRun.active_bundle_contract ||
+        currentRun.subtasks.length > 0 ||
+        permissionMatrix.length > 0 ||
+        hookTrace.length > 0),
+  );
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const scrollToBottom = () => {
@@ -736,8 +840,8 @@ export function AgentWorkspace({
   }
 
   return (
-    <div className={`grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] ${className}`}>
-      <Card className="flex h-[clamp(680px,72vh,920px)] flex-col overflow-hidden">
+    <div className={`grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)] lg:items-stretch ${className}`}>
+      <Card className="flex min-h-[680px] flex-col overflow-hidden lg:h-[clamp(720px,calc(100vh-9rem),980px)]">
         <CardHeader className="border-b border-[rgba(var(--line),0.12)] pb-4">
           <p className="ink-kicker">Agent Workspace</p>
           <CardTitle className="mt-3 text-3xl">以自然语言驱动 {projectName}</CardTitle>
@@ -746,42 +850,42 @@ export function AgentWorkspace({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4 pt-6">
-          <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-[1.15rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">Outline Hierarchy</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">Workspace Context</div>
                 <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">当前规划层级</div>
               </div>
-              <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
-                项目大纲 / 卷细纲 / 章纲
-              </div>
+              <p className="max-w-lg text-xs leading-6 text-[rgb(var(--ink-800))]">
+                对话上方只保留当前写作焦点摘要，避免在消息区还没开始前就占用过多垂直空间。
+              </p>
             </div>
-            <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
               <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
                 <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">项目大纲</div>
-                <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
-                  {excerpt(projectOutlinePreview, "尚未填写项目大纲。可以直接让 Agent 先补一版项目总纲。")}
+                <p className="mt-2 line-clamp-3 text-sm leading-6 text-[rgb(var(--ink-900))]">
+                  {excerpt(projectOutlinePreview, "尚未填写项目大纲。可以直接让 Agent 先补一版项目总纲。", 140)}
                 </p>
               </div>
               <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">卷细纲</div>
-                  {focusedVolume && (
-                    <span className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                      {focusedVolume.badge}
-                    </span>
-                  )}
-                </div>
+                <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">卷细纲</div>
                 <p className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">
                   {focusedVolume?.title || "当前没有聚焦到具体卷"}
                 </p>
-                <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
-                  {excerpt(focusedVolume?.outline, "发送“创建卷”或在运行计划里选定卷后，这里会显示卷细纲焦点。")}
+                <CompactMetaLine
+                  className="mt-1"
+                  items={[
+                    { label: "卷标识", value: focusedVolume?.badge },
+                    { label: "关联章纲", value: relatedChapters.length > 0 ? `${relatedChapters.length} 个` : null },
+                  ]}
+                />
+                <p className="mt-2 line-clamp-3 text-sm leading-6 text-[rgb(var(--ink-900))]">
+                  {excerpt(focusedVolume?.outline, "发送“创建卷”或在运行计划里选定卷后，这里会显示卷细纲焦点。", 120)}
                 </p>
               </div>
             </div>
           </div>
-          <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+          <div className="flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
             {messages.length === 0 ? (
               <div className="rounded-[1.4rem] border border-dashed border-[rgba(var(--line),0.18)] bg-[var(--surface-subtle)] px-6 py-12 text-center text-sm leading-7 text-[rgb(var(--ink-800))]">
                 还没有对话。先告诉 Agent 你要修改什么，或者直接给出写作任务。
@@ -866,8 +970,8 @@ export function AgentWorkspace({
         </CardContent>
       </Card>
 
-      <div className="flex flex-col gap-6">
-        <Card className="flex h-[clamp(680px,72vh,920px)] flex-col overflow-hidden">
+      <div className="grid min-h-0 gap-6 lg:h-[clamp(720px,calc(100vh-9rem),980px)] lg:grid-rows-[minmax(0,1.3fr)_minmax(240px,0.82fr)]">
+        <Card className="flex min-h-[560px] flex-col overflow-hidden lg:min-h-0">
           <CardHeader className="border-b border-[rgba(var(--line),0.12)] pb-4">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -885,7 +989,7 @@ export function AgentWorkspace({
               {currentRun?.summary || "当前没有待确认计划。发送一条明确指令，Agent 会生成可执行步骤。"}
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto pr-1">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1">
             {currentRun ? (
               <>
                 {currentRun.warning_message && (
@@ -904,23 +1008,23 @@ export function AgentWorkspace({
                   </div>
                 )}
                 {currentRun.risk_summary && <RiskSummaryCard riskSummary={currentRun.risk_summary} />}
-                <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="rounded-[1.15rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
                         Outline Focus
                       </div>
                       <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">本次计划聚焦层级</div>
                     </div>
-                    <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
-                      Project / Volume / Chapter
-                    </div>
+                    <p className="max-w-xs text-xs leading-6 text-[rgb(var(--ink-800))]">
+                      只展示会直接影响这次写入的上下文，辅助你快速判断计划是否对准对象。
+                    </p>
                   </div>
-                  <div className="mt-3 space-y-3">
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
                       <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">项目大纲</div>
-                      <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
-                        {excerpt(projectOutlinePreview, "当前项目还没有完整项目大纲。")}
+                      <p className="mt-2 line-clamp-4 text-sm leading-6 text-[rgb(var(--ink-900))]">
+                        {excerpt(projectOutlinePreview, "当前项目还没有完整项目大纲。", 120)}
                       </p>
                     </div>
                     <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
@@ -928,21 +1032,35 @@ export function AgentWorkspace({
                       <p className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">
                         {focusedVolume?.title || "未锁定具体卷"}
                       </p>
-                      <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
-                        {excerpt(focusedVolume?.outline, "本次运行暂时没有卷级焦点。")}
+                      <CompactMetaLine
+                        className="mt-1"
+                        items={[
+                          { label: "卷标识", value: focusedVolume?.badge },
+                          { label: "关联章纲", value: relatedChapters.length > 0 ? `${relatedChapters.length} 个` : null },
+                        ]}
+                      />
+                      <p className="mt-2 line-clamp-4 text-sm leading-6 text-[rgb(var(--ink-900))]">
+                        {excerpt(focusedVolume?.outline, "本次运行暂时没有卷级焦点。", 110)}
                       </p>
                     </div>
-                    <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
-                      <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">相关章纲</div>
+                    <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3 md:col-span-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">相关章纲</div>
+                        {relatedChapters.length > relatedChapterPreviews.length && (
+                          <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-700))]">
+                            另有 {relatedChapters.length - relatedChapterPreviews.length} 个关联章纲
+                          </div>
+                        )}
+                      </div>
                       {relatedChapters.length > 0 ? (
-                        <div className="mt-3 space-y-3">
-                          {relatedChapters.map((chapter) => (
+                        <div className="mt-3 space-y-2">
+                          {relatedChapterPreviews.map((chapter) => (
                             <div key={chapter.id} className="rounded-[0.9rem] bg-[rgba(var(--ink-950),0.05)] px-3 py-3">
                               <div className="text-sm font-medium text-[rgb(var(--ink-950))]">
                                 第 {chapter.chapter_number} 章 {chapter.title || "无标题"}
                               </div>
-                              <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-900))]">
-                                {excerpt(chapter.outline, "尚未填写章纲。", 120)}
+                              <p className="mt-2 line-clamp-2 text-sm leading-6 text-[rgb(var(--ink-900))]">
+                                {excerpt(chapter.outline, "尚未填写章纲。", 92)}
                               </p>
                             </div>
                           ))}
@@ -955,231 +1073,204 @@ export function AgentWorkspace({
                     </div>
                   </div>
                 </div>
-                {(currentRun.planner_window || currentRun.compact_policy || currentRun.retained_window || currentRun.active_bundle_contract) && (
-                  <div className="rounded-[1.2rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
-                          Planner Window
-                        </div>
-                        <div className="mt-1 text-base font-medium text-[rgb(var(--ink-950))]">当前规划输入窗口</div>
-                      </div>
-                      {currentRun.planner_window && (
-                        <span className="rounded-full border border-[rgba(var(--line),0.16)] px-3 py-1 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                          mode:{currentRun.planner_window.history_mode}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                      {currentRun.planner_window && (
-                        <>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            history:{currentRun.planner_window.history_message_count}
-                          </span>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            retained:{currentRun.planner_window.retained_message_limit}
-                          </span>
-                          {currentRun.planner_window.checkpoint_id && (
-                            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                              checkpoint:attached
-                            </span>
-                          )}
-                        </>
-                      )}
-                      {currentRun.compact_policy && (
-                        <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                          policy:{currentRun.compact_policy.policy_version}
-                        </span>
-                      )}
-                      {currentRun.retained_window && (
-                        <>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            retained-msgs:{currentRun.retained_window.message_count}
-                          </span>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            retained-chars:{currentRun.retained_window.character_count}
-                          </span>
-                          {currentRun.retained_window.roles.length > 0 && (
-                            <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                              roles:{currentRun.retained_window.roles.join("/")}
-                            </span>
-                          )}
-                        </>
-                      )}
-                      {currentRun.active_bundle_contract && (
-                        <>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            bundle:{currentRun.active_bundle_contract.source}
-                          </span>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            sections:{currentRun.active_bundle_contract.included_sections.length}
-                          </span>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            chars:{currentRun.active_bundle_contract.collections.characters_count}/{currentRun.active_bundle_contract.collections.characters_limit}
-                          </span>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            volumes:{currentRun.active_bundle_contract.collections.volumes_count}/{currentRun.active_bundle_contract.collections.volumes_limit}
-                          </span>
-                          <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                            chapters:{currentRun.active_bundle_contract.collections.chapters_count}/{currentRun.active_bundle_contract.collections.chapters_limit}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    {currentRun.active_bundle_contract?.focused_object_types.length ? (
-                      <div className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
-                        当前聚焦对象：{currentRun.active_bundle_contract.focused_object_types.join(" / ")}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-                {currentRun.subtasks.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
-                      Internal Subtasks
-                    </div>
-                    {currentRun.subtasks.map((subtask) => (
-                      <SubtaskCard key={subtask.id} subtask={subtask} />
-                    ))}
-                  </div>
-                )}
-                {permissionMatrix.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
-                      Permission Matrix
-                    </div>
-                    {permissionMatrix.map((phase: AgentExecutionContractPhase) => {
-                      const phaseName = phase.phase;
-                      const mode = phase.mode;
-                      const levels = phase.allowed_permission_levels;
-                      const tools = phase.tool_scope;
-                      return (
-                        <div
-                          key={phaseName}
-                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] px-4 py-3"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
-                              {phaseName.toUpperCase()} / {mode}
-                            </div>
-                            <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
-                              {`${phase.operation_count} ops / gate:${phase.confirmation_gate} / registry:${currentRun.execution_contract?.registry_version ?? "n/a"}`}
-                            </div>
-                          </div>
-                          {levels.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                              {levels.map((level) => (
-                                <span key={level} className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                                  level:{level}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {phase.child_units.length > 0 && (
-                            <div className="mt-3 space-y-3">
-                              {phase.child_units.map((childUnit: AgentExecutionChildUnit) => (
-                                <ChildUnitCard key={childUnit.unit_id} childUnit={childUnit} />
-                              ))}
-                            </div>
-                          )}
-                          {phase.capabilities.length > 0 && (
-                            <div className="mt-3 space-y-3">
-                              {phase.capabilities.map((capability) => (
-                                <div
-                                  key={capability.capability_id}
-                                  className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.03)] px-3 py-3"
-                                >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
-                                      {capability.name}
-                                    </div>
-                                    <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
-                                      {capability.execution_record
-                                        ? `${capability.execution_record.status} / ${capability.execution_record.source_role}`
-                                        : capability.kind}
-                                    </div>
-                                  </div>
-                                  <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
-                                    {capability.description}
-                                  </p>
-                                  <div className="mt-2 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                                      policy:{capability.policy.execution_phase}/{capability.policy.source_role}
-                                    </span>
-                                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                                      gate:{capability.policy.confirmation_gate}
-                                    </span>
-                                  </div>
-                                  {capability.execution_record?.output_summary && (
-                                    <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
-                                      {capability.execution_record.output_summary}
-                                    </p>
-                                  )}
-                                  <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                                      capability:{capability.capability_id}
-                                    </span>
-                                    {capability.execution_record && (
-                                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                                        attempts:{capability.execution_record.attempt_count}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {tools.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                              {Array.from(new Set(tools.slice(0, 5))).map((tool) => (
-                                <span key={tool} className="rounded-full border border-[rgba(var(--line),0.14)] px-3 py-1">
-                                  {tool}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {hookTrace.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
-                      Hook Trace
-                    </div>
-                    {hookTrace.map((entry) => {
-                      const meta = VERIFICATION_META[
-                        entry.status === "completed"
-                          ? "passed"
-                          : entry.status === "failed"
-                            ? "failed"
-                            : entry.status === "skipped"
-                              ? "skipped"
-                              : "pending"
-                      ];
-                      return (
-                        <div
-                          key={entry.hook_name}
-                          className="rounded-[1.1rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] px-4 py-3"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{entry.hook_name}</div>
-                            <span className={meta.className}>{meta.label}</span>
-                          </div>
-                          {entry.summary && (
-                            <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{entry.summary}</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
                 <div className="space-y-3">
                   {currentRun.operations.map((operation) => (
                     <OperationCard key={operation.id} operation={operation} />
                   ))}
                 </div>
+                {hasRunDiagnostics && (
+                  <DisclosureSection
+                    kicker="Run Diagnostics"
+                    title="运行上下文与诊断"
+                    description="保留 planner window、权限矩阵和 hook trace 等系统级细节，默认收起以降低干扰。"
+                  >
+                    <div className="space-y-4">
+                      {(currentRun.planner_window || currentRun.compact_policy || currentRun.retained_window || currentRun.active_bundle_contract) && (
+                        <div className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-4">
+                          <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">
+                            Planner Window
+                          </div>
+                          <div className="mt-1 text-sm font-medium text-[rgb(var(--ink-950))]">当前规划输入窗口</div>
+                          <CompactMetaGrid
+                            className="mt-3"
+                            items={[
+                              { label: "历史模式", value: currentRun.planner_window?.history_mode },
+                              { label: "历史消息", value: currentRun.planner_window?.history_message_count },
+                              { label: "保留消息", value: currentRun.planner_window?.retained_message_limit },
+                              {
+                                label: "Checkpoint",
+                                value: currentRun.planner_window?.checkpoint_id ? "已附带" : currentRun.planner_window ? "未附带" : null,
+                              },
+                              { label: "策略版本", value: currentRun.compact_policy?.policy_version },
+                              {
+                                label: "保留窗口",
+                                value:
+                                  currentRun.retained_window
+                                    ? `${currentRun.retained_window.message_count} 条 / ${currentRun.retained_window.character_count} 字`
+                                    : null,
+                              },
+                              { label: "Bundle 来源", value: currentRun.active_bundle_contract?.source },
+                              {
+                                label: "聚焦对象",
+                                value:
+                                  currentRun.active_bundle_contract?.focused_object_types.length
+                                    ? currentRun.active_bundle_contract.focused_object_types.join(" / ")
+                                    : null,
+                              },
+                            ]}
+                          />
+                          <CompactMetaLine
+                            className="mt-3"
+                            items={[
+                              {
+                                label: "Bundle 收录",
+                                value:
+                                  currentRun.active_bundle_contract
+                                    ? `人物 ${currentRun.active_bundle_contract.collections.characters_count}/${currentRun.active_bundle_contract.collections.characters_limit} · 卷 ${currentRun.active_bundle_contract.collections.volumes_count}/${currentRun.active_bundle_contract.collections.volumes_limit} · 章 ${currentRun.active_bundle_contract.collections.chapters_count}/${currentRun.active_bundle_contract.collections.chapters_limit}`
+                                    : null,
+                              },
+                              {
+                                label: "保留角色",
+                                value:
+                                  currentRun.retained_window?.roles.length
+                                    ? currentRun.retained_window.roles.join(" / ")
+                                    : null,
+                              },
+                            ]}
+                          />
+                        </div>
+                      )}
+                      {currentRun.subtasks.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
+                            Internal Subtasks
+                          </div>
+                          {currentRun.subtasks.map((subtask) => (
+                            <SubtaskCard key={subtask.id} subtask={subtask} />
+                          ))}
+                        </div>
+                      )}
+                      {permissionMatrix.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
+                            Permission Matrix
+                          </div>
+                          {permissionMatrix.map((phase: AgentExecutionContractPhase) => {
+                            const phaseName = phase.phase;
+                            const mode = phase.mode;
+                            const levels = phase.allowed_permission_levels;
+                            const tools = phase.tool_scope;
+                            return (
+                              <div
+                                key={phaseName}
+                                className="rounded-[1.1rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] px-4 py-3"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
+                                    {phaseName.toUpperCase()} / {mode}
+                                  </div>
+                                  <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
+                                    {`${phase.operation_count} ops / gate:${phase.confirmation_gate} / registry:${currentRun.execution_contract?.registry_version ?? "n/a"}`}
+                                  </div>
+                                </div>
+                                <CompactMetaLine
+                                  className="mt-3"
+                                  items={[
+                                    { label: "权限级别", value: levels.length > 0 ? levels.join(" / ") : null },
+                                    { label: "工具范围", value: tools.length > 0 ? Array.from(new Set(tools.slice(0, 5))).join(" / ") : null },
+                                  ]}
+                                />
+                                {phase.child_units.length > 0 && (
+                                  <div className="mt-3 space-y-3">
+                                    {phase.child_units.map((childUnit: AgentExecutionChildUnit) => (
+                                      <ChildUnitCard key={childUnit.unit_id} childUnit={childUnit} />
+                                    ))}
+                                  </div>
+                                )}
+                                {phase.capabilities.length > 0 && (
+                                  <div className="mt-3 space-y-3">
+                                    {phase.capabilities.map((capability) => (
+                                      <div
+                                        key={capability.capability_id}
+                                        className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.03)] px-3 py-3"
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
+                                            {capability.name}
+                                          </div>
+                                          <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
+                                            {capability.execution_record
+                                              ? `${capability.execution_record.status} / ${capability.execution_record.source_role}`
+                                              : capability.kind}
+                                          </div>
+                                        </div>
+                                        <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
+                                          {capability.description}
+                                        </p>
+                                        <CompactMetaLine
+                                          className="mt-2"
+                                          items={[
+                                            {
+                                              label: "策略",
+                                              value: `${capability.policy.execution_phase}/${capability.policy.source_role}`,
+                                            },
+                                            { label: "确认门槛", value: capability.policy.confirmation_gate },
+                                            { label: "能力 ID", value: capability.capability_id },
+                                            {
+                                              label: "尝试次数",
+                                              value: capability.execution_record?.attempt_count ?? null,
+                                            },
+                                          ]}
+                                        />
+                                        {capability.execution_record?.output_summary && (
+                                          <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
+                                            {capability.execution_record.output_summary}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {hookTrace.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-[rgb(var(--ink-800))]">
+                            Hook Trace
+                          </div>
+                          {hookTrace.map((entry) => {
+                            const meta = VERIFICATION_META[
+                              entry.status === "completed"
+                                ? "passed"
+                                : entry.status === "failed"
+                                  ? "failed"
+                                  : entry.status === "skipped"
+                                    ? "skipped"
+                                    : "pending"
+                            ];
+                            return (
+                              <div
+                                key={entry.hook_name}
+                                className="rounded-[1.1rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] px-4 py-3"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="text-sm font-medium text-[rgb(var(--ink-900))]">{entry.hook_name}</div>
+                                  <span className={meta.className}>{meta.label}</span>
+                                </div>
+                                {entry.summary && (
+                                  <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">{entry.summary}</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </DisclosureSection>
+                )}
                 {currentRun.status === "awaiting_confirmation" && (
                   <div className="flex gap-3 pt-2">
                     <Button onClick={() => handleRunAction("confirm")} disabled={isPending} testId="confirm-run-btn">
@@ -1214,112 +1305,101 @@ export function AgentWorkspace({
           </CardContent>
         </Card>
 
-        {latestCheckpoint && (
-          <Card>
-            <CardHeader>
-              <p className="ink-kicker">Context Checkpoint</p>
-              <CardTitle className="mt-3 text-2xl">最新线程压缩摘要</CardTitle>
+        <div className={`grid min-h-0 gap-6 ${latestCheckpoint ? "sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2" : "grid-cols-1"}`}>
+          {latestCheckpoint && (
+            <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+              <CardHeader className="border-b border-[rgba(var(--line),0.12)] pb-4">
+                <p className="ink-kicker">Context Checkpoint</p>
+                <CardTitle className="mt-3 text-xl">最新线程压缩摘要</CardTitle>
+                <CardDescription>
+                  长线程达到阈值后，系统会生成 checkpoint，后续 planning 会优先参考这里的摘要与对象上下文。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1">
+                <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-4">
+                  <div className="mb-2 text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">Summary</div>
+                  <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{latestCheckpoint.thread_summary}</p>
+                </div>
+                <CompactMetaGrid
+                  items={[
+                    { label: "Profile", value: latestCheckpoint.profile_id, tone: "accent" },
+                    { label: "Messages", value: latestCheckpoint.source_message_count },
+                    { label: "Runs", value: latestCheckpoint.source_run_count },
+                  ]}
+                />
+                {latestCheckpoint.active_bundle_contract?.focused_object_types.length ? (
+                  <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">
+                    压缩时的聚焦对象：{latestCheckpoint.active_bundle_contract.focused_object_types.join(" / ")}
+                  </p>
+                ) : null}
+                {(latestCheckpoint.compact_policy || latestCheckpoint.compaction_boundary || latestCheckpoint.active_bundle_contract) && (
+                  <DisclosureSection
+                    kicker="Checkpoint Policy"
+                    title="压缩策略与上下文收录"
+                    description="常用摘要默认前置展示，细节折叠在这里。"
+                  >
+                    <CompactMetaGrid
+                      items={[
+                        { label: "策略版本", value: latestCheckpoint.compact_policy?.policy_version },
+                        { label: "Recent Window", value: latestCheckpoint.compact_policy?.recent_window_limit },
+                        { label: "Checkpoint Delta", value: latestCheckpoint.compact_policy?.checkpoint_delta_limit },
+                        { label: "Boundary", value: latestCheckpoint.compaction_boundary?.history_mode },
+                        { label: "Bundle 来源", value: latestCheckpoint.active_bundle_contract?.source },
+                        {
+                          label: "Digest",
+                          value:
+                            latestCheckpoint.active_bundle_contract
+                              ? `${latestCheckpoint.active_bundle_contract.collections.recent_run_digest_count}/${latestCheckpoint.active_bundle_contract.collections.recent_run_digest_limit}`
+                              : null,
+                        },
+                      ]}
+                    />
+                  </DisclosureSection>
+                )}
+                <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
+                  生成时间：{formatTimestamp(latestCheckpoint.created_at)}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+            <CardHeader className="border-b border-[rgba(var(--line),0.12)] pb-4">
+              <p className="ink-kicker">Recent Runs</p>
+              <CardTitle className="mt-3 text-xl">最近执行记录</CardTitle>
               <CardDescription>
-                长线程达到阈值后，系统会生成 checkpoint，后续 planning 会优先参考这里的摘要与对象上下文。
+                这里保留最近生成和执行过的计划，便于回看状态变化。
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-800))]">Profile</div>
-                  <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.profile_id}</div>
+            <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
+              {recentRuns.length === 0 ? (
+                <div className="rounded-[1.2rem] border border-dashed border-[rgba(var(--line),0.18)] px-4 py-6 text-sm text-[rgb(var(--ink-800))]">
+                  还没有任何执行记录。
                 </div>
-                <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-800))]">Messages</div>
-                  <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.source_message_count}</div>
-                </div>
-                <div className="rounded-[1rem] bg-[rgba(var(--ink-950),0.05)] px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.14em] text-[rgb(var(--ink-800))]">Runs</div>
-                  <div className="mt-2 text-sm font-medium text-[rgb(var(--ink-950))]">{latestCheckpoint.source_run_count}</div>
-                </div>
-              </div>
-              {(latestCheckpoint.compact_policy || latestCheckpoint.compaction_boundary || latestCheckpoint.active_bundle_contract) && (
-                <div className="flex flex-wrap gap-2 text-xs tracking-[0.08em] text-[rgb(var(--ink-800))]">
-                  {latestCheckpoint.compact_policy && (
-                    <>
-                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                        policy:{latestCheckpoint.compact_policy.policy_version}
-                      </span>
-                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                        recent:{latestCheckpoint.compact_policy.recent_window_limit}
-                      </span>
-                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                        delta:{latestCheckpoint.compact_policy.checkpoint_delta_limit}
-                      </span>
-                    </>
-                  )}
-                  {latestCheckpoint.compaction_boundary && (
-                    <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                      boundary:{latestCheckpoint.compaction_boundary.history_mode}
-                    </span>
-                  )}
-                  {latestCheckpoint.active_bundle_contract && (
-                    <>
-                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                        bundle:{latestCheckpoint.active_bundle_contract.source}
-                      </span>
-                      <span className="rounded-full bg-[rgba(var(--ink-950),0.06)] px-3 py-1">
-                        digest:{latestCheckpoint.active_bundle_contract.collections.recent_run_digest_count}/
-                        {latestCheckpoint.active_bundle_contract.collections.recent_run_digest_limit}
-                      </span>
-                    </>
-                  )}
-                </div>
+              ) : (
+                recentRuns.map((run) => {
+                  const meta = getRunStatusMeta(run.status);
+                  return (
+                    <div
+                      key={run.id}
+                      className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-sm font-medium leading-6 text-[rgb(var(--ink-900))]">
+                          {run.summary || "未命名计划"}
+                        </div>
+                        <span className={meta.className}>{meta.label}</span>
+                      </div>
+                      <div className="mt-2 text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
+                        {formatTimestamp(run.updated_at)}
+                      </div>
+                    </div>
+                  );
+                })
               )}
-              {latestCheckpoint.active_bundle_contract?.focused_object_types.length ? (
-                <div className="text-sm leading-7 text-[rgb(var(--ink-800))]">
-                  压缩时的聚焦对象：{latestCheckpoint.active_bundle_contract.focused_object_types.join(" / ")}
-                </div>
-              ) : null}
-              <div className="rounded-[1.1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-4">
-                <div className="mb-2 text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">Summary</div>
-                <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{latestCheckpoint.thread_summary}</p>
-              </div>
-              <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
-                生成时间：{formatTimestamp(latestCheckpoint.created_at)}
-              </div>
             </CardContent>
           </Card>
-        )}
-
-        <Card>
-          <CardHeader>
-            <p className="ink-kicker">Recent Runs</p>
-            <CardTitle className="mt-3 text-2xl">最近执行记录</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentRuns.length === 0 ? (
-              <div className="rounded-[1.2rem] border border-dashed border-[rgba(var(--line),0.18)] px-4 py-6 text-sm text-[rgb(var(--ink-800))]">
-                还没有任何执行记录。
-              </div>
-            ) : (
-              recentRuns.map((run) => {
-                const meta = getRunStatusMeta(run.status);
-                return (
-                  <div
-                    key={run.id}
-                    className="rounded-[1.2rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-[rgb(var(--ink-900))]">
-                        {run.summary || "未命名计划"}
-                      </div>
-                      <span className={meta.className}>{meta.label}</span>
-                    </div>
-                    <div className="mt-2 text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">
-                      {formatTimestamp(run.updated_at)}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </div>
   );
