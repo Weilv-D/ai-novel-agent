@@ -489,6 +489,9 @@ import type {
   AgentThreadMessageRequest,
   AgentThreadMessageResponse,
   AgentThreadState,
+  TextImportPreview,
+  TextImportProgress,
+  TextImportResponse,
   InlineEditRequest,
   Suggestion,
 } from "@/lib/types";
@@ -831,4 +834,75 @@ export const projectPackageApi = {
 
     return response.json();
   },
+};
+
+export const textImportApi = {
+  analyzeStream: async function* (
+    file: File,
+    projectName: string,
+    genre?: string,
+    options?: { signal?: AbortSignal }
+  ): AsyncGenerator<TextImportProgress, void, unknown> {
+    const url = `${API_BASE_URL}/api/v1/projects/import-text`;
+    const headers = await buildAuthenticatedHeaders();
+    delete headers["Content-Type"];
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("project_name", projectName);
+    if (genre?.trim()) {
+      formData.append("genre", genre.trim());
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: formData,
+      signal: options?.signal,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        response.status,
+        errorData?.detail || errorData?.error?.message || "Text import analysis failed"
+      );
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) return;
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) {
+          continue;
+        }
+        const data = line.slice(6);
+        if (data === "[DONE]") {
+          return;
+        }
+        try {
+          yield JSON.parse(data) as TextImportProgress;
+        } catch {
+          // Ignore malformed SSE frames.
+        }
+      }
+    }
+  },
+
+  confirm: (preview: TextImportPreview) =>
+    fetchApi<TextImportResponse>("/api/v1/projects/import-text/confirm", {
+      method: "POST",
+      body: JSON.stringify({ preview }),
+    }),
 };

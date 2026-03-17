@@ -883,6 +883,69 @@ export interface AgentSkillCatalog {
   operations: AgentSkillSummary[];
 }
 
+export type TextImportPhase =
+  | "structure_detection"
+  | "outline_extraction"
+  | "character_extraction"
+  | "world_setting_extraction"
+  | "completed"
+  | "error";
+
+export interface TextImportProgress {
+  phase: TextImportPhase;
+  progress: number;
+  message: string;
+  data: Record<string, unknown>;
+}
+
+export interface DetectedChapter {
+  chapter_number: number;
+  title?: string | null;
+  content: string;
+  outline?: string | null;
+}
+
+export interface DetectedVolume {
+  volume_number: number;
+  title?: string | null;
+  outline?: string | null;
+  chapter_numbers: number[];
+}
+
+export interface DetectedCharacter {
+  name: string;
+  role?: string | null;
+  profile: Record<string, unknown>;
+  relationships: Record<string, unknown>;
+}
+
+export interface DetectedWorldSetting {
+  category: string;
+  name: string;
+  content: string;
+}
+
+export interface TextImportPreview {
+  project_name: string;
+  genre?: string | null;
+  summary?: string | null;
+  story_outline?: string | null;
+  volumes: DetectedVolume[];
+  chapters: DetectedChapter[];
+  characters: DetectedCharacter[];
+  world_settings: DetectedWorldSetting[];
+  warnings: string[];
+  failed_phases: TextImportPhase[];
+  source_filename?: string | null;
+  source_encoding?: string | null;
+}
+
+export interface TextImportResponse {
+  project_id: string;
+  project_name: string;
+  imported_counts: Record<string, number>;
+}
+
 // Chat types
 export interface ChatMessage {
   id: string;

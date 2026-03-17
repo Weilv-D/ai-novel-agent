@@ -8,6 +8,7 @@
 
 - 提供项目、人物、世界观、卷、章、场景的 CRUD 接口
 - 提供 Snapshot、Dependency、Memory、Suggestion、Export 接口
+- 提供文本导入分析与确认入库接口
 - 提供 Agent Workspace 所需的线程、消息、run、operation、checkpoint 接口
 - 提供 legacy chat、流式响应、自动摘要和连续性检查接口
 - 执行实例级访问控制、健康检查和数据初始化
@@ -193,6 +194,20 @@ make verify
 - `scripts/verify_sqlite_integration.py`：SQLite 驱动的 HTTP 集成验证
 - `scripts/verify_api_integration.py`：联调环境下的 live API smoke
 - `scripts/start_dev.sh`：迁移后启动开发服务
+
+## 文本导入
+
+文本导入走独立分析链路，不复用 Agent Workflow。当前接口为：
+
+- `POST /api/v1/projects/import-text`：上传 `.txt` / `.md` 文件，返回 SSE 进度流，最终事件携带预览结果
+- `POST /api/v1/projects/import-text/confirm`：确认预览并一次性创建项目、卷、章节、角色和世界观
+
+实现特征：
+
+- 上传阶段校验文件大小、最小字数和文本编码
+- 分析阶段按“结构检测 -> 大纲提取 -> 角色提取 -> 世界观提取”推进
+- 若部分 LLM 阶段超时或失败，会自动兜底并在预览里标记 warning / failed phase
+- 导入确认后会保留原文到 `chapter.content`，同时写入 AI 生成的章纲和项目结构
 
 ## 健康检查
 

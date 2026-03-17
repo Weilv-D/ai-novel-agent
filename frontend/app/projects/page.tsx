@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { TextImportWizard } from "@/components/TextImportWizard";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
@@ -20,6 +21,7 @@ export default function ProjectsPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ProjectImportResponse | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [textImportOpen, setTextImportOpen] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -67,6 +69,11 @@ export default function ProjectsPage() {
     }
   }
 
+  async function handleTextImported(result: { project_id: string }) {
+    await fetchProjects();
+    router.push(`/projects/${result.project_id}`);
+  }
+
   return (
     <main className="ink-page">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -96,6 +103,9 @@ export default function ProjectsPage() {
               testId="import-package-btn"
             >
               {importing ? "导入中..." : "导入项目包"}
+            </Button>
+            <Button variant="outline" onClick={() => setTextImportOpen(true)} testId="import-text-btn">
+              导入文本
             </Button>
             <Button href="/projects/new" testId="new-project-btn">新建项目</Button>
           </div>
@@ -202,6 +212,12 @@ export default function ProjectsPage() {
           </div>
         )}
       </Modal>
+
+      <TextImportWizard
+        isOpen={textImportOpen}
+        onClose={() => setTextImportOpen(false)}
+        onImported={handleTextImported}
+      />
     </main>
   );
 }

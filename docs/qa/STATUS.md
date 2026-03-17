@@ -11,6 +11,7 @@ AI Novel Agent 已完成本轮计划内能力落地，当前处于“文档收�
 - 设计系统统一
 - Redis + pgvector HNSW
 - TXT / Markdown / DOCX 导出
+- TXT / Markdown 文本导入结构化
 - TipTap 富文本编辑与内联 AI 改写
 - 章节/场景拖拽排序
 - 人物/依赖图谱
@@ -26,7 +27,7 @@ AI Novel Agent 已完成本轮计划内能力落地，当前处于“文档收�
 | 前端 lint | 通过 | 通过 |
 | 前端 type-check | 通过 | 通过 |
 | 前端 build | 通过 | 通过 |
-| Playwright E2E | `7 passed` | 通过 |
+| Playwright E2E | `9 passed` | 通过 |
 
 ## 3. 当前风险
 

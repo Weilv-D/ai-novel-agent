@@ -487,7 +487,6 @@ class TestVerificationHelpers:
     def test_verify_operation_content_transition_and_snapshot_semantics(self, workflow_service: AgentWorkflowService) -> None:
         project_id = uuid.uuid4()
         volume = _make_volume(project_id)
-        chapter = _make_chapter(project_id, volume.id, title="旧标题", content="旧正文")
 
         write_operation = _operation("write_chapter_content", {"content": "追加正文", "mode": "append"})
         snapshot = SimpleNamespace(data={"content": "旧正文"})

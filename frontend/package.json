@@ -9,7 +9,7 @@
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "node ./node_modules/eslint/bin/eslint.js app components lib scripts --ext .ts,.tsx --max-warnings=0",
     "type-check": "node ./node_modules/next/dist/bin/next typegen && node ./node_modules/typescript/bin/tsc --noEmit",
-    "test:api": "tsx scripts/test-api-integration.ts"
+    "test:api": "node ./node_modules/tsx/dist/cli.mjs scripts/test-api-integration.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

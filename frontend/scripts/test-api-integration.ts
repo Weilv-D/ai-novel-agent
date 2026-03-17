@@ -2,15 +2,30 @@
  * Frontend API Integration Test Script
  *
  * This script tests the frontend API client against the backend server.
- * Run with: npx tsx scripts/test-api-integration.ts
+ * Run with: npm run test:api
  *
  * Prerequisites:
  * - Backend server running on http://localhost:8000
  * - Or set API_URL environment variable
  */
 
-import { projectApi, characterApi, chapterApi, sceneApi, worldSettingApi, healthApi } from '../lib/api-client';
-import type { ProjectCreate, CharacterCreate, WorldSettingCreate, ChapterCreate, SceneCreate } from '../lib/types';
+import {
+  projectApi,
+  characterApi,
+  chapterApi,
+  sceneApi,
+  textImportApi,
+  worldSettingApi,
+  healthApi,
+} from '../lib/api-client';
+import type {
+  ProjectCreate,
+  CharacterCreate,
+  WorldSettingCreate,
+  ChapterCreate,
+  SceneCreate,
+  TextImportPreview,
+} from '../lib/types';
 
 const API_BASE_URL = process.env.API_URL || 'http://localhost:8000';
 
@@ -80,6 +95,9 @@ async function runAllTests() {
   let testWorldSettingId: string | null = null;
   let testChapterId: string | null = null;
   let testSceneId: string | null = null;
+  let importedProjectId: string | null = null;
+  let importedPreview: TextImportPreview | null = null;
+  const importedProjectName = `Imported Project ${Date.now()}`;
 
   // ------------------------------------------------------------------------
   // Health Check
@@ -127,6 +145,74 @@ async function runAllTests() {
     }) as { genre: string };
     if (updated.genre !== 'Science Fiction') {
       throw new Error(`Expected genre 'Science Fiction', got '${updated.genre}'`);
+    }
+  });
+
+  // ------------------------------------------------------------------------
+  // Text Import API
+  // ------------------------------------------------------------------------
+  await runTest('Text Import: Analyze Stream', async () => {
+    const repeatedParagraph = '山道积雪未融，少年背剑而行，风声里夹着山门钟鸣与旧日誓言。';
+    const fileContent = [
+      '第一卷 山门风雪',
+      '第一章 少年下山',
+      repeatedParagraph.repeat(12),
+      '',
+      '第二章 客栈夜雨',
+      repeatedParagraph.repeat(12),
+    ].join('\n');
+
+    const file = new File([fileContent], `text-import-${Date.now()}.txt`, {
+      type: 'text/plain',
+    });
+
+    const events = [];
+    for await (const event of textImportApi.analyzeStream(file, importedProjectName, '仙侠')) {
+      events.push(event);
+    }
+
+    const completedEvent = [...events].reverse().find((event) => event.phase === 'completed');
+    const preview = completedEvent?.data.preview as TextImportPreview | undefined;
+
+    if (!preview) {
+      throw new Error('Expected completed preview payload from SSE stream');
+    }
+    if (preview.chapters.length < 2) {
+      throw new Error(`Expected at least 2 chapters, got ${preview.chapters.length}`);
+    }
+
+    importedPreview = preview;
+    logInfo(`Detected ${preview.volumes.length} volume(s) / ${preview.chapters.length} chapter(s)`);
+  });
+
+  await runTest('Text Import: Confirm Import', async () => {
+    if (!importedPreview) throw new Error('No text import preview available');
+
+    const result = await textImportApi.confirm(importedPreview);
+    importedProjectId = result.project_id;
+
+    if ((result.imported_counts.chapters || 0) < 2) {
+      throw new Error(`Expected imported chapter count >= 2, got ${result.imported_counts.chapters || 0}`);
+    }
+
+    logInfo(`Imported project with ID: ${result.project_id}`);
+  });
+
+  await runTest('Text Import: Verify Imported Project', async () => {
+    if (!importedProjectId) throw new Error('No imported project ID available');
+    if (!importedPreview) throw new Error('No text import preview available');
+
+    const project = await projectApi.getById(importedProjectId) as { name: string };
+    const chapters = await chapterApi.list(importedProjectId) as { title?: string; content?: string }[];
+
+    if (project.name !== importedPreview.project_name) {
+      throw new Error(`Expected imported project name '${importedPreview.project_name}', got '${project.name}'`);
+    }
+    if (chapters.length < 2) {
+      throw new Error(`Expected imported chapter count >= 2, got ${chapters.length}`);
+    }
+    if (!chapters[0]?.content) {
+      throw new Error('Expected imported chapter content to be preserved');
     }
   });
 
@@ -282,6 +368,15 @@ async function runAllTests() {
     if (!testProjectId) throw new Error('No project ID available');
     await projectApi.delete(testProjectId);
     logInfo('Deleted test project');
+  });
+
+  await runTest('Cleanup: Delete Imported Project', async () => {
+    if (!importedProjectId) {
+      logInfo('No imported text project to delete');
+      return;
+    }
+    await projectApi.delete(importedProjectId);
+    logInfo('Deleted imported text project');
   });
 
   // ------------------------------------------------------------------------

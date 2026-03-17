@@ -26,6 +26,7 @@ AI Novel Agent 由三部分组成：
 - 长线程压缩：使用 checkpoint、planner window、retained window 和 active bundle contract 管理长期上下文
 - Profile / Skill 体系：项目可绑定不同写作 profile，并用文件化 skill 规范 planner 和 operation
 - 记忆检索与导出：支持 embedding、相似检索、TXT / Markdown 导出
+- 文本导入结构化：上传 TXT / Markdown，先做 AI 分析预览，再确认入库为项目、卷、章节、角色和世界观
 - 项目包导出导入：完整项目数据打包、迁移与恢复
 
 ## 数据层级
@@ -115,11 +116,12 @@ docker compose up -d
 1. 打开首页。
 2. 如果启用了 `ADMIN_API_KEY`，先在首页保存访问 key。
 3. 创建项目，并为项目选择合适的 Agent profile。
-4. 先补项目大纲，再建立卷细纲与章纲。
-5. 进入项目详情页，使用 Agent Workspace 提出自然语言指令。
-6. 检查 run 生成的 operation 计划、diff 预览、风险摘要和内部执行摘要。
-7. 完成一次确认；若命中高风险策略，再完成二次确认。
-8. 在人物、设定、卷、章节、场景页面做复核或局部手工调整。
+4. 如果已有成稿，可以先在项目列表页导入 TXT / Markdown，预览结构化结果后再确认入库。
+5. 先补项目大纲，再建立卷细纲与章纲。
+6. 进入项目详情页，使用 Agent Workspace 提出自然语言指令。
+7. 检查 run 生成的 operation 计划、diff 预览、风险摘要和内部执行摘要。
+8. 完成一次确认；若命中高风险策略，再完成二次确认。
+9. 在人物、设定、卷、章节、场景页面做复核或局部手工调整。
 
 Agent Workspace 适合处理这些任务：
 

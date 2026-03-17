@@ -15,6 +15,7 @@ from app.api.v1.project_package import router as project_package_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.snapshots import router as snapshots_router
 from app.api.v1.suggestions import router as suggestions_router
+from app.api.v1.text_import import router as text_import_router
 from app.api.v1.timeline import router as timeline_router
 from app.api.v1.world_settings import router as world_settings_router
 
@@ -35,4 +36,5 @@ router.include_router(memories_router, dependencies=[Depends(require_api_access)
 router.include_router(agent_router, dependencies=[Depends(require_api_access)])
 router.include_router(export_router, dependencies=[Depends(require_api_access)])
 router.include_router(project_package_router, dependencies=[Depends(require_api_access)])
+router.include_router(text_import_router, dependencies=[Depends(require_api_access)])
 router.include_router(timeline_router, dependencies=[Depends(require_api_access)])

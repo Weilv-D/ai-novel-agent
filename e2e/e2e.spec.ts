@@ -22,6 +22,50 @@ test.describe("E2E 测试套件", () => {
         await apiContext.delete(`/api/v1/projects/${projectId}`);
       }
     });
+
+    test("导入文本后预览可编辑并跳转到新项目详情", async ({
+      authenticatedPage,
+      apiContext,
+    }) => {
+      const samplePath = path.join(process.cwd(), "e2e/fixtures/text-import-sample.txt");
+
+      await authenticatedPage.goto("/projects");
+      await authenticatedPage.click('[data-testid="import-text-btn"]');
+
+      await authenticatedPage.fill('[data-testid="text-import-project-name"]', "E2E 文本导入项目");
+      await authenticatedPage.locator('[data-testid="text-import-file-input"]').setInputFiles(samplePath);
+      await authenticatedPage.click('[data-testid="text-import-start-btn"]');
+
+      await expect(authenticatedPage.locator('[data-testid="text-import-confirm-btn"]')).toBeVisible({
+        timeout: 30000,
+      });
+
+      await authenticatedPage.click('button:has-text("章节 · 2")');
+      await authenticatedPage.fill('input[value="少年下山"]', "第一章 风雪下山");
+      await authenticatedPage.fill('textarea', "第一章章纲已在预览中被手工修订。");
+
+      await authenticatedPage.click('[data-testid="text-import-confirm-btn"]');
+      await authenticatedPage.waitForURL(/\/projects\/[a-f0-9-]+/);
+
+      await expect(authenticatedPage.locator("h1")).toContainText("E2E 文本导入项目");
+
+      const url = authenticatedPage.url();
+      const newProjectId = url.split("/projects/")[1];
+      expect(newProjectId).toBeTruthy();
+
+      const projectResponse = await apiContext.get(`/api/v1/projects/${newProjectId}`);
+      expect(projectResponse.ok()).toBeTruthy();
+
+      const chaptersResponse = await apiContext.get(`/api/v1/chapters/project/${newProjectId}`);
+      expect(chaptersResponse.ok()).toBeTruthy();
+      const chapters = await chaptersResponse.json();
+      expect(chapters[0].title).toBe("第一章 风雪下山");
+      expect(chapters[0].outline).toContain("手工修订");
+
+      if (newProjectId) {
+        await apiContext.delete(`/api/v1/projects/${newProjectId}`);
+      }
+    });
   });
 
   test.describe("Agent 工作流", () => {
