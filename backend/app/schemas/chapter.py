@@ -6,10 +6,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.types import CONTENT_MAX_LENGTH, NOTES_MAX_LENGTH, OUTLINE_MAX_LENGTH, TargetTypeLiteral
+
 # ============ Enums ============
 
 ChapterStatusLiteral = Literal["draft", "writing", "completed"]
-TargetTypeLiteral = Literal["character", "world_setting", "chapter", "scene"]
 
 # ============ Volume Schemas ============
 
@@ -18,8 +19,8 @@ class VolumeBase(BaseModel):
 
     volume_number: int | None = Field(None, ge=1)
     title: str | None = Field(None, max_length=255)
-    outline: str | None = None
-    notes: str | None = None
+    outline: str | None = Field(None, max_length=OUTLINE_MAX_LENGTH, description=f"Volume outline, max {OUTLINE_MAX_LENGTH} characters")
+    notes: str | None = Field(None, max_length=NOTES_MAX_LENGTH, description=f"Volume notes, max {NOTES_MAX_LENGTH} characters")
 
 
 class VolumeCreate(VolumeBase):
@@ -33,8 +34,8 @@ class VolumeUpdate(BaseModel):
 
     volume_number: int | None = Field(None, ge=1)
     title: str | None = Field(None, max_length=255)
-    outline: str | None = None
-    notes: str | None = None
+    outline: str | None = Field(None, max_length=OUTLINE_MAX_LENGTH, description=f"Volume outline, max {OUTLINE_MAX_LENGTH} characters")
+    notes: str | None = Field(None, max_length=NOTES_MAX_LENGTH, description=f"Volume notes, max {NOTES_MAX_LENGTH} characters")
 
 
 class VolumeResponse(VolumeBase):
@@ -64,10 +65,10 @@ class ChapterBase(BaseModel):
 
     chapter_number: int = Field(..., ge=1)
     title: str | None = Field(None, max_length=255)
-    outline: str | None = None
-    content: str | None = None
+    outline: str | None = Field(None, max_length=OUTLINE_MAX_LENGTH, description=f"Chapter outline, max {OUTLINE_MAX_LENGTH} characters")
+    content: str | None = Field(None, max_length=CONTENT_MAX_LENGTH, description=f"Chapter content, max {CONTENT_MAX_LENGTH} characters")
     status: ChapterStatusLiteral = Field(default="draft")
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=NOTES_MAX_LENGTH, description=f"Chapter notes, max {NOTES_MAX_LENGTH} characters")
 
 
 class ChapterCreate(ChapterBase):
@@ -82,10 +83,10 @@ class ChapterUpdate(BaseModel):
 
     chapter_number: int | None = Field(None, ge=1)
     title: str | None = Field(None, max_length=255)
-    outline: str | None = None
-    content: str | None = None
+    outline: str | None = Field(None, max_length=OUTLINE_MAX_LENGTH, description=f"Chapter outline, max {OUTLINE_MAX_LENGTH} characters")
+    content: str | None = Field(None, max_length=CONTENT_MAX_LENGTH, description=f"Chapter content, max {CONTENT_MAX_LENGTH} characters")
     status: ChapterStatusLiteral | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=NOTES_MAX_LENGTH, description=f"Chapter notes, max {NOTES_MAX_LENGTH} characters")
     volume_id: UUID | None = None
 
 
@@ -109,7 +110,7 @@ class SceneBase(BaseModel):
     scene_order: int = Field(..., ge=1)
     pov_character_id: UUID | None = None
     location: str | None = Field(None, max_length=255)
-    content: str | None = None
+    content: str | None = Field(None, max_length=CONTENT_MAX_LENGTH, description=f"Scene content, max {CONTENT_MAX_LENGTH} characters")
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -125,7 +126,7 @@ class SceneUpdate(BaseModel):
     scene_order: int | None = Field(None, ge=1)
     pov_character_id: UUID | None = None
     location: str | None = Field(None, max_length=255)
-    content: str | None = None
+    content: str | None = Field(None, max_length=CONTENT_MAX_LENGTH, description=f"Scene content, max {CONTENT_MAX_LENGTH} characters")
     meta: dict[str, Any] | None = Field(None)
 
 

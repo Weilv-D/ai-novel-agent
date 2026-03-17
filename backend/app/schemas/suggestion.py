@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.types import TargetTypeLiteral
+
 # ============ Enums ============
 
 # Status literals for suggestions
@@ -21,9 +23,6 @@ SuggestionTypeLiteral = Literal[
     "outline_gen",
     "continuity_fix",
 ]
-
-# Target type literals
-TargetTypeLiteral = Literal["project", "character", "world_setting", "volume", "chapter", "scene"]
 
 # Action literals
 SuggestionActionLiteral = Literal["confirm", "discard", "commit"]

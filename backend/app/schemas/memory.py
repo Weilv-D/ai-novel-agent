@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
+from app.schemas.types import MEMORY_CONTENT_MAX_LENGTH
 
 EMBEDDING_DIMENSION = get_settings().embedding_dimension
 
@@ -47,7 +48,7 @@ class MemoryBase(BaseModel):
     memory_type: MemoryTypeLiteral = Field(
         ..., description="Type of memory (episode, semantic, fact)"
     )
-    content: str = Field(..., description="Memory content text")
+    content: str = Field(..., min_length=1, max_length=MEMORY_CONTENT_MAX_LENGTH, description=f"Memory content text, max {MEMORY_CONTENT_MAX_LENGTH} characters")
     meta: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
     )
@@ -75,7 +76,7 @@ class MemoryCreate(MemoryBase):
 class MemoryUpdate(BaseModel):
     """Schema for updating a memory."""
 
-    content: str | None = None
+    content: str | None = Field(None, min_length=1, max_length=MEMORY_CONTENT_MAX_LENGTH, description=f"Memory content text, max {MEMORY_CONTENT_MAX_LENGTH} characters")
     memory_type: MemoryTypeLiteral | None = None
     meta: dict[str, Any] | None = None
     embedding: list[float] | None = None

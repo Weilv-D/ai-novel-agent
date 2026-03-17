@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.types import TargetTypeLiteral
+
 # ============ Enums ============
 
 # Type literals for dependency sources and targets

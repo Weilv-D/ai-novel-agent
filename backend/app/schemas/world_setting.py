@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.types import CONTENT_MAX_LENGTH
+
 # ============ Enums ============
 
 WorldSettingCategoryLiteral = Literal[
@@ -44,7 +46,7 @@ class WorldSettingBase(BaseModel):
 
     category: WorldSettingCategoryLiteral = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=255)
-    content: str | None = None
+    content: str | None = Field(None, max_length=CONTENT_MAX_LENGTH, description=f"World setting content, max {CONTENT_MAX_LENGTH} characters")
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -59,7 +61,7 @@ class WorldSettingUpdate(BaseModel):
 
     category: WorldSettingCategoryLiteral | None = Field(None, min_length=1, max_length=100)
     name: str | None = Field(None, min_length=1, max_length=255)
-    content: str | None = None
+    content: str | None = Field(None, max_length=CONTENT_MAX_LENGTH, description=f"World setting content, max {CONTENT_MAX_LENGTH} characters")
     meta: dict[str, Any] | None = Field(None)
 
 

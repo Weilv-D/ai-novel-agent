@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.models.project import DEFAULT_AGENT_PROFILE_ID
+from app.schemas.types import NOTES_MAX_LENGTH, OUTLINE_MAX_LENGTH, SUMMARY_MAX_LENGTH
 
 # ============ Enums ============
 
@@ -31,9 +32,9 @@ class ProjectBase(BaseModel):
     genre: str | None = Field(None, max_length=100)
     target_audience: str | None = Field(None, max_length=100)
     target_word_count: int | None = Field(None, ge=0)
-    summary: str | None = None
-    story_outline: str | None = None
-    notes: str | None = None
+    summary: str | None = Field(None, max_length=SUMMARY_MAX_LENGTH, description=f"Project summary, max {SUMMARY_MAX_LENGTH} characters")
+    story_outline: str | None = Field(None, max_length=OUTLINE_MAX_LENGTH, description=f"Story outline, max {OUTLINE_MAX_LENGTH} characters")
+    notes: str | None = Field(None, max_length=NOTES_MAX_LENGTH, description=f"Project notes, max {NOTES_MAX_LENGTH} characters")
     agent_profile_id: str = Field(default=DEFAULT_AGENT_PROFILE_ID, min_length=1, max_length=80)
     meta: dict[str, Any] = Field(default_factory=dict)
 
@@ -52,9 +53,9 @@ class ProjectUpdate(BaseModel):
     target_audience: str | None = Field(None, max_length=100)
     target_word_count: int | None = Field(None, ge=0)
     status: ProjectStatusLiteral | None = None
-    summary: str | None = None
-    story_outline: str | None = None
-    notes: str | None = None
+    summary: str | None = Field(None, max_length=SUMMARY_MAX_LENGTH, description=f"Project summary, max {SUMMARY_MAX_LENGTH} characters")
+    story_outline: str | None = Field(None, max_length=OUTLINE_MAX_LENGTH, description=f"Story outline, max {OUTLINE_MAX_LENGTH} characters")
+    notes: str | None = Field(None, max_length=NOTES_MAX_LENGTH, description=f"Project notes, max {NOTES_MAX_LENGTH} characters")
     agent_profile_id: str | None = Field(None, min_length=1, max_length=80)
     meta: dict[str, Any] | None = Field(None)
 
