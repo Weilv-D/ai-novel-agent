@@ -46,6 +46,8 @@ const WORLD_SETTING_OPTIONS = [
   { label: "规则", value: "rules" },
   { label: "其他", value: "other" },
 ];
+const MAX_TEXT_IMPORT_FILE_BYTES = 64 * 1024 * 1024;
+const CHAPTERS_PER_PAGE = 20;
 
 function normalizePreview(raw: TextImportPreview): TextImportPreview {
   return {
@@ -71,6 +73,7 @@ export function TextImportWizard({
   const [events, setEvents] = useState<TextImportProgress[]>([]);
   const [preview, setPreview] = useState<TextImportPreview | null>(null);
   const [activeTab, setActiveTab] = useState<PreviewTab>("overview");
+  const [chapterPage, setChapterPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -91,6 +94,14 @@ export function TextImportWizard({
     }),
     [preview]
   );
+  const chapterPageCount = Math.max(1, Math.ceil((preview?.chapters.length || 0) / CHAPTERS_PER_PAGE));
+  const pagedChapters = useMemo(() => {
+    if (!preview) {
+      return [];
+    }
+    const start = (chapterPage - 1) * CHAPTERS_PER_PAGE;
+    return preview.chapters.slice(start, start + CHAPTERS_PER_PAGE);
+  }, [chapterPage, preview]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -104,6 +115,7 @@ export function TextImportWizard({
       setEvents([]);
       setPreview(null);
       setActiveTab("overview");
+      setChapterPage(1);
       setError(null);
       setIsAnalyzing(false);
       setIsConfirming(false);
@@ -151,6 +163,10 @@ export function TextImportWizard({
       setError("请填写导入后的项目名称");
       return;
     }
+    if (file.size > MAX_TEXT_IMPORT_FILE_BYTES) {
+      setError("上传文件过大，请控制在 64MB 以内");
+      return;
+    }
 
     const token = runTokenRef.current + 1;
     runTokenRef.current = token;
@@ -187,6 +203,7 @@ export function TextImportWizard({
           if (nextPreview) {
             updatePreview(nextPreview);
             setActiveTab("overview");
+            setChapterPage(1);
             setStep("preview");
           }
         }
@@ -467,7 +484,7 @@ export function TextImportWizard({
                 <div className="mt-4 space-y-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
                   <p>支持 `.txt` 与 `.md` 文件，上传后会先做章节结构识别，再生成章纲、项目总纲、角色和世界观预览。</p>
                   <p>确认导入前，你可以修改项目摘要、章纲、角色和设定内容；原文会保留到 `chapter.content`。</p>
-                  <p>如果文本没有稳定章节标记，系统会按单章兜底，并在预览里给出警告。</p>
+                  <p>如果文本没有稳定章节标记，系统会按单章或安全分段兜底，并在预览里给出警告。当前上传上限为 64MB。</p>
                 </div>
               </div>
             </div>
@@ -537,7 +554,7 @@ export function TextImportWizard({
                   <div className="mt-4 space-y-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
                     <p>章节越多，章纲提取耗时越长。</p>
                     <p>如果某个 AI 阶段失败，系统会保留已完成的结构结果，并在预览里标记警告。</p>
-                    <p>SSE 断开后可以重新点击“开始分析”。</p>
+                    <p>SSE 断开后可以重新点击“开始分析”；超长文本会自动启用分层摘要和代表章节采样。</p>
                   </div>
                   <div className="mt-6">
                     <Button variant="outline" onClick={handleAnalyze} disabled={isAnalyzing}>
@@ -560,6 +577,9 @@ export function TextImportWizard({
                     {preview.warnings.map((warning, index) => (
                       <p key={`${warning}-${index}`}>{warning}</p>
                     ))}
+                    {preview.compact_preview && (
+                      <p>当前是大文本紧凑预览模式：章节正文只展示节选，确认导入时仍会保留完整原文。</p>
+                    )}
                     {preview.failed_phases.length > 0 && (
                       <p>失败阶段：{preview.failed_phases.map((phase) => PHASE_LABELS[phase]).join(" / ")}</p>
                     )}
@@ -634,6 +654,7 @@ export function TextImportWizard({
                         <p>编码：{preview.source_encoding || "未记录"}</p>
                         <p>卷数：{preview.volumes.length}</p>
                         <p>章节数：{preview.chapters.length}</p>
+                        <p>预览模式：{preview.compact_preview ? "长文本紧凑预览" : "完整预览"}</p>
                       </div>
                     </div>
 
@@ -670,7 +691,24 @@ export function TextImportWizard({
 
               {activeTab === "chapters" && (
                 <div className="space-y-4">
-                  {preview.chapters.map((chapter, index) => (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1rem] bg-[rgba(var(--ink-950),0.04)] px-4 py-3 text-sm text-[rgb(var(--ink-800))]">
+                    <div>
+                      显示第 {(chapterPage - 1) * CHAPTERS_PER_PAGE + 1} - {Math.min(chapterPage * CHAPTERS_PER_PAGE, preview.chapters.length)} 章，共 {preview.chapters.length} 章
+                    </div>
+                    {chapterPageCount > 1 && (
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => setChapterPage((current) => Math.max(1, current - 1))} disabled={chapterPage <= 1}>
+                          上一页
+                        </Button>
+                        <Button variant="outline" onClick={() => setChapterPage((current) => Math.min(chapterPageCount, current + 1))} disabled={chapterPage >= chapterPageCount}>
+                          下一页
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  {pagedChapters.map((chapter, pageIndex) => {
+                    const index = (chapterPage - 1) * CHAPTERS_PER_PAGE + pageIndex;
+                    return (
                     <div
                       key={`${chapter.chapter_number}-${index}`}
                       className="rounded-[1.25rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] p-5"
@@ -699,15 +737,23 @@ export function TextImportWizard({
                         </div>
                         <div>
                           <Textarea
-                            label="正文原文"
+                            label={chapter.content_truncated ? "正文节选（导入会保留完整原文）" : "正文原文"}
                             value={chapter.content}
                             onChange={(event) => updateChapter(index, { content: event.target.value })}
                             className="min-h-[320px]"
+                            readOnly={Boolean(chapter.content_truncated)}
                           />
+                          <div className="mt-2 text-xs leading-6 text-[rgb(var(--ink-800))]">
+                            {chapter.content_length
+                              ? `正文长度约 ${chapter.content_length.toLocaleString()} 字符`
+                              : "正文长度未记录"}
+                            {chapter.content_truncated ? "，当前只展示节选。" : ""}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

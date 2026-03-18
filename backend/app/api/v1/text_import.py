@@ -18,6 +18,7 @@ from app.services.text_import import text_import_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["text-import"])
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 @router.post("/import-text")
@@ -32,9 +33,15 @@ async def import_text_preview(
     if not filename.lower().endswith((".txt", ".md", ".markdown")):
         raise BadRequestException("仅支持导入 .txt 或 .md 文本文件")
 
-    file_bytes = await file.read()
-    if len(file_bytes) > text_import_service.MAX_FILE_SIZE:
-        raise BadRequestException("上传文件过大，请控制在 15MB 以内")
+    chunks = bytearray()
+    while True:
+        chunk = await file.read(UPLOAD_CHUNK_SIZE)
+        if not chunk:
+            break
+        chunks.extend(chunk)
+        if len(chunks) > text_import_service.MAX_FILE_SIZE:
+            raise BadRequestException("上传文件过大，请控制在 64MB 以内")
+    file_bytes = bytes(chunks)
 
     text, encoding = text_import_service.decode_bytes(file_bytes)
     if len(text_import_service._normalize_text(text)) < text_import_service.MIN_CHAR_COUNT:

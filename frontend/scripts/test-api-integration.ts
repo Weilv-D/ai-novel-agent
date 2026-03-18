@@ -203,7 +203,7 @@ async function runAllTests() {
     if (!importedPreview) throw new Error('No text import preview available');
 
     const project = await projectApi.getById(importedProjectId) as { name: string };
-    const chapters = await chapterApi.list(importedProjectId) as { title?: string; content?: string }[];
+    const chapters = await chapterApi.list(importedProjectId, { include_content: true }) as { title?: string; content?: string }[];
 
     if (project.name !== importedPreview.project_name) {
       throw new Error(`Expected imported project name '${importedPreview.project_name}', got '${project.name}'`);

@@ -107,9 +107,13 @@ async def list_chapters_by_project(
     project_id: UUID,
     skip: int = 0,
     limit: int = 100,
-) -> list[Chapter]:
+    include_content: bool = False,
+) -> list[ChapterResponse]:
     """List all chapters for a specific project."""
-    return await chapter_service.get_by_project(db, project_id=project_id, skip=skip, limit=limit)
+    chapters = await chapter_service.get_by_project(db, project_id=project_id, skip=skip, limit=limit)
+    if include_content:
+        return [ChapterResponse.model_validate(chapter) for chapter in chapters]
+    return [ChapterResponse.model_validate(chapter).model_copy(update={"content": None}) for chapter in chapters]
 
 
 @router.get("/volume/{volume_id}", response_model=list[ChapterResponse])
@@ -119,9 +123,13 @@ async def list_chapters_by_volume(
     volume_id: UUID,
     skip: int = 0,
     limit: int = 100,
-) -> list[Chapter]:
+    include_content: bool = False,
+) -> list[ChapterResponse]:
     """List all chapters for a specific volume."""
-    return await chapter_service.get_by_volume(db, volume_id=volume_id, skip=skip, limit=limit)
+    chapters = await chapter_service.get_by_volume(db, volume_id=volume_id, skip=skip, limit=limit)
+    if include_content:
+        return [ChapterResponse.model_validate(chapter) for chapter in chapters]
+    return [ChapterResponse.model_validate(chapter).model_copy(update={"content": None}) for chapter in chapters]
 
 
 @router.post("/reorder", response_model=list[ChapterResponse])

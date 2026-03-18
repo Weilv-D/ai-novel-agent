@@ -65,8 +65,12 @@ async def test_import_text_rejects_small_file(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_import_text_rejects_oversized_file(client: AsyncClient) -> None:
-    oversized_payload = "正文内容" * ((text_import_service.MAX_FILE_SIZE // len("正文内容".encode())) + 1)
+async def test_import_text_rejects_oversized_file(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(text_import_service, "MAX_FILE_SIZE", 1024)
+    oversized_payload = "正文内容" * 300
     response = await client.post(
         "/api/v1/projects/import-text",
         data={"project_name": "超大文本"},
@@ -74,7 +78,7 @@ async def test_import_text_rejects_oversized_file(client: AsyncClient) -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["error"]["message"] == "上传文件过大，请控制在 15MB 以内"
+    assert response.json()["error"]["message"] == "上传文件过大，请控制在 64MB 以内"
 
 
 @pytest.mark.asyncio
@@ -129,7 +133,7 @@ async def test_confirm_text_import_creates_project_records(client: AsyncClient) 
     assert payload["imported_counts"]["chapters"] == 1
 
     project_response = await client.get(f"/api/v1/projects/{project_id}")
-    chapters_response = await client.get(f"/api/v1/chapters/project/{project_id}")
+    chapters_response = await client.get(f"/api/v1/chapters/project/{project_id}?include_content=true")
     volumes_response = await client.get(f"/api/v1/volumes/project/{project_id}")
     characters_response = await client.get(f"/api/v1/characters/project/{project_id}")
     settings_response = await client.get(f"/api/v1/world-settings/project/{project_id}")

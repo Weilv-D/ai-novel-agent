@@ -67,6 +67,7 @@ class TestChapterRoutes:
             data = response.json()
             assert len(data) == 1
             assert data[0]["title"] == "Chapter One"
+            assert data[0]["content"] is None
 
     def test_get_chapter_found(self):
         """Test getting a chapter by ID."""

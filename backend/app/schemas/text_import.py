@@ -36,6 +36,8 @@ class DetectedChapter(BaseModel):
     title: str | None = Field(None, max_length=255)
     content: str = Field(..., max_length=CONTENT_MAX_LENGTH)
     outline: str | None = Field(None, max_length=OUTLINE_MAX_LENGTH)
+    content_length: int | None = Field(None, ge=0)
+    content_truncated: bool = False
 
 
 class DetectedVolume(BaseModel):
@@ -67,6 +69,8 @@ class DetectedWorldSetting(BaseModel):
 class TextImportPreview(BaseModel):
     """Preview returned after text analysis and before commit."""
 
+    preview_id: str | None = Field(None, min_length=1, max_length=64)
+    compact_preview: bool = False
     project_name: str = Field(..., min_length=1, max_length=255)
     genre: str | None = Field(None, max_length=100)
     summary: str | None = Field(None, max_length=SUMMARY_MAX_LENGTH)

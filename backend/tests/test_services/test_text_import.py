@@ -84,6 +84,102 @@ class TestTextImportService:
         assert len(chunks) > 1
         assert chunks[0][-10:] == chunks[1][:10]
 
+    def test_normalize_detected_structure_splits_oversized_chapters(self) -> None:
+        oversized_content = "甲" * (text_import_service.MAX_STORED_CHAPTER_CHARS + 20)
+        preview = TextImportPreview(project_name="超长章节项目")
+
+        chapters, volumes = text_import_service._normalize_detected_structure(
+            chapters=[
+                DetectedChapter(
+                    chapter_number=1,
+                    title="超长章节",
+                    content=oversized_content,
+                    outline=None,
+                )
+            ],
+            volumes=[
+                DetectedVolume(
+                    volume_number=1,
+                    title="第一卷",
+                    outline=None,
+                    chapter_numbers=[1],
+                )
+            ],
+            preview=preview,
+        )
+
+        assert len(chapters) == 2
+        assert chapters[0].chapter_number == 1
+        assert chapters[1].chapter_number == 2
+        assert chapters[0].title == "超长章节（1/2）"
+        assert chapters[1].title == "超长章节（2/2）"
+        assert volumes[0].chapter_numbers == [1, 2]
+        assert any("超长章节已自动拆分" in warning for warning in preview.warnings)
+
+    @pytest.mark.asyncio
+    async def test_build_client_preview_compacts_large_payload(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        preview = TextImportPreview(
+            project_name="大体量预览",
+            chapters=[
+                DetectedChapter(
+                    chapter_number=1,
+                    title="第一章",
+                    content="正文" * 5000,
+                    outline="章纲",
+                )
+            ],
+        )
+
+        async def fake_store(_preview: TextImportPreview) -> str:
+            return "preview-token"
+
+        monkeypatch.setattr(text_import_service, "_store_preview_snapshot", fake_store)
+        monkeypatch.setattr(text_import_service, "MAX_INLINE_PREVIEW_CHARS", 100)
+
+        client_preview = await text_import_service._build_client_preview(preview)
+
+        assert client_preview.preview_id == "preview-token"
+        assert client_preview.compact_preview is True
+        assert client_preview.chapters[0].content_truncated is True
+        assert client_preview.chapters[0].content_length == len(preview.chapters[0].content)
+
+    def test_merge_confirmed_preview_preserves_full_content_from_compact_preview(self) -> None:
+        stored_preview = TextImportPreview(
+            preview_id="preview-token",
+            project_name="原始项目",
+            chapters=[
+                DetectedChapter(
+                    chapter_number=1,
+                    title="第一章",
+                    content="完整正文" * 100,
+                    outline="原始章纲",
+                )
+            ],
+        )
+        edited_preview = TextImportPreview(
+            preview_id="preview-token",
+            compact_preview=True,
+            project_name="原始项目",
+            chapters=[
+                DetectedChapter(
+                    chapter_number=1,
+                    title="第一章（已编辑）",
+                    content="节选正文",
+                    outline="编辑后章纲",
+                    content_truncated=True,
+                )
+            ],
+        )
+
+        merged_preview = text_import_service._merge_confirmed_preview(stored_preview, edited_preview)
+
+        assert merged_preview.chapters[0].title == "第一章（已编辑）"
+        assert merged_preview.chapters[0].outline == "编辑后章纲"
+        assert merged_preview.chapters[0].content == stored_preview.chapters[0].content
+
     @pytest.mark.asyncio
     async def test_extract_characters_keeps_partial_results_when_subgroups_fail(
         self,
@@ -229,3 +325,60 @@ class TestTextImportService:
         assert characters[0].name == "林霄"
         assert len(settings) == 1
         assert settings[0].name == "灵气体系"
+
+    @pytest.mark.asyncio
+    async def test_commit_uses_stored_snapshot_for_compact_preview(
+        self,
+        db_session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        stored_preview = TextImportPreview(
+            preview_id="preview-token",
+            project_name="长文本导入项目",
+            summary="原始摘要",
+            chapters=[
+                DetectedChapter(
+                    chapter_number=1,
+                    title="第一章",
+                    content="完整正文" * 1000,
+                    outline="原始章纲",
+                )
+            ],
+        )
+        edited_preview = TextImportPreview(
+            preview_id="preview-token",
+            compact_preview=True,
+            project_name="长文本导入项目（已确认）",
+            chapters=[
+                DetectedChapter(
+                    chapter_number=1,
+                    title="第一章（已编辑）",
+                    content="节选正文",
+                    outline="编辑后章纲",
+                    content_truncated=True,
+                )
+            ],
+        )
+
+        async def fake_load_preview_snapshot(preview_id: str) -> TextImportPreview | None:
+            assert preview_id == "preview-token"
+            return stored_preview
+
+        deleted_preview_ids: list[str | None] = []
+
+        async def fake_delete_preview_snapshot(preview_id: str | None) -> None:
+            deleted_preview_ids.append(preview_id)
+
+        monkeypatch.setattr(text_import_service, "_load_preview_snapshot", fake_load_preview_snapshot)
+        monkeypatch.setattr(text_import_service, "_delete_preview_snapshot", fake_delete_preview_snapshot)
+
+        response = await text_import_service.commit(db_session, edited_preview)
+
+        chapters = await chapter_service.get_by_project(db_session, project_id=response.project_id)
+
+        assert response.project_name == "长文本导入项目（已确认）"
+        assert len(chapters) == 1
+        assert chapters[0].title == "第一章（已编辑）"
+        assert chapters[0].outline == "编辑后章纲"
+        assert chapters[0].content == stored_preview.chapters[0].content
+        assert deleted_preview_ids == ["preview-token"]

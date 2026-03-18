@@ -283,14 +283,20 @@ export const worldSettingApi = {
 // ============================================================================
 
 export const chapterApi = {
-  list: (projectId: string, params?: { skip?: number; limit?: number }) =>
+  list: (
+    projectId: string,
+    params?: { skip?: number; limit?: number; include_content?: boolean }
+  ) =>
     fetchApi<unknown[]>(
-      `/api/v1/chapters/project/${projectId}${buildQueryString(params || {})}`
+      `/api/v1/chapters/project/${projectId}${buildQueryString({ include_content: false, ...(params || {}) })}`
     ),
 
-  listByVolume: (volumeId: string, params?: { skip?: number; limit?: number }) =>
+  listByVolume: (
+    volumeId: string,
+    params?: { skip?: number; limit?: number; include_content?: boolean }
+  ) =>
     fetchApi<unknown[]>(
-      `/api/v1/chapters/volume/${volumeId}${buildQueryString(params || {})}`
+      `/api/v1/chapters/volume/${volumeId}${buildQueryString({ include_content: false, ...(params || {}) })}`
     ),
 
   get: (id: string) =>

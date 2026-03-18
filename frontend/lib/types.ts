@@ -903,6 +903,8 @@ export interface DetectedChapter {
   title?: string | null;
   content: string;
   outline?: string | null;
+  content_length?: number | null;
+  content_truncated?: boolean;
 }
 
 export interface DetectedVolume {
@@ -926,6 +928,8 @@ export interface DetectedWorldSetting {
 }
 
 export interface TextImportPreview {
+  preview_id?: string | null;
+  compact_preview?: boolean;
   project_name: string;
   genre?: string | null;
   summary?: string | null;
