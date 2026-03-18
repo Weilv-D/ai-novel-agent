@@ -18,6 +18,8 @@ from app.services.project import project_service
 class ExportService:
     """Service for exporting project content to various formats."""
 
+    CHAPTER_EXPORT_BATCH_SIZE = 200
+
     @staticmethod
     def _looks_like_html(text: str) -> bool:
         return bool(re.search(r"</?[a-z][^>]*>", text, flags=re.IGNORECASE))
@@ -38,7 +40,19 @@ class ExportService:
     async def _load_project_content(self, db: AsyncSession, project_id: UUID) -> tuple[Project, list[Chapter]]:
         """Load a project and its chapters ordered by chapter number."""
         project = await project_service.get(db, id=project_id)
-        chapters = await chapter_service.get_by_project(db, project_id=project_id, limit=500)
+        chapters: list[Chapter] = []
+        skip = 0
+        while True:
+            batch = await chapter_service.get_by_project(
+                db,
+                project_id=project_id,
+                skip=skip,
+                limit=self.CHAPTER_EXPORT_BATCH_SIZE,
+            )
+            chapters.extend(batch)
+            if len(batch) < self.CHAPTER_EXPORT_BATCH_SIZE:
+                break
+            skip += len(batch)
         return project, sorted(chapters, key=lambda chapter: chapter.chapter_number)
 
     @staticmethod

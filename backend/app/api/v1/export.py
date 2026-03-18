@@ -18,7 +18,7 @@ async def export_project(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    format: str = Query("txt", pattern="^(txt|markdown|docx)$"),
+    format: str = Query("txt", pattern="^(txt|markdown|md|docx)$"),
 ) -> Response:
     """Export project content as TXT, Markdown, or DOCX."""
     if format == "txt":
@@ -30,7 +30,7 @@ async def export_project(
             media_type=media_type,
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
-    elif format == "markdown":
+    elif format in {"markdown", "md"}:
         content = await export_service.export_markdown(db, project_id)
         filename = "novel.md"
         media_type = "text/markdown; charset=utf-8"

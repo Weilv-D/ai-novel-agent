@@ -13,8 +13,10 @@ import {
   projectApi,
   characterApi,
   chapterApi,
+  dependencyApi,
   sceneApi,
   textImportApi,
+  timelineApi,
   worldSettingApi,
   healthApi,
 } from '../lib/api-client';
@@ -204,6 +206,8 @@ async function runAllTests() {
 
     const project = await projectApi.getById(importedProjectId) as { name: string };
     const chapters = await chapterApi.list(importedProjectId, { include_content: true }) as { title?: string; content?: string }[];
+    const dependencies = await dependencyApi.list(importedProjectId) as { id: string }[];
+    const timeline = await timelineApi.get(importedProjectId);
 
     if (project.name !== importedPreview.project_name) {
       throw new Error(`Expected imported project name '${importedPreview.project_name}', got '${project.name}'`);
@@ -213,6 +217,12 @@ async function runAllTests() {
     }
     if (!chapters[0]?.content) {
       throw new Error('Expected imported chapter content to be preserved');
+    }
+    if (dependencies.length < 4) {
+      throw new Error(`Expected structural dependencies to be created, got ${dependencies.length}`);
+    }
+    if ((timeline.total_events || 0) < chapters.length) {
+      throw new Error(`Expected timeline events to cover imported chapters, got ${timeline.total_events || 0}`);
     }
   });
 

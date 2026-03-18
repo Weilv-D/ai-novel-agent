@@ -33,7 +33,7 @@ class TestExportApi:
         assert 'attachment; filename="novel.docx"' in response.headers["content-disposition"]
 
     @pytest.mark.asyncio
-    async def test_export_txt_markdown_and_invalid_format_direct_routes(self) -> None:
+    async def test_export_txt_markdown_md_alias_and_invalid_format_direct_routes(self) -> None:
         """Direct route calls should wrap TXT/Markdown content and reject unsupported formats."""
         project_id = uuid.uuid4()
 
@@ -52,11 +52,18 @@ class TestExportApi:
                     project_id=project_id,
                     format="markdown",
                 )
+                md_alias_response = await export_api.export_project(
+                    db=MagicMock(),
+                    project_id=project_id,
+                    format="md",
+                )
 
         assert txt_response.body == b"plain text"
         assert txt_response.headers["content-disposition"] == 'attachment; filename="novel.txt"'
         assert markdown_response.body == b"# markdown"
         assert markdown_response.headers["content-disposition"] == 'attachment; filename="novel.md"'
+        assert md_alias_response.body == b"# markdown"
+        assert md_alias_response.headers["content-disposition"] == 'attachment; filename="novel.md"'
 
         with pytest.raises(BadRequestException, match="Unsupported format"):
             await export_api.export_project(

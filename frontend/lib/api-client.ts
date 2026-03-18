@@ -7,6 +7,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_KEY_STORAGE_KEY = "api_key";
 const API_KEY_HEADER_STORAGE_KEY = "api_key_header";
 const DEFAULT_API_KEY_HEADER = "X-API-Key";
+const DEFAULT_OFFSET_PAGE_SIZE = 200;
+const DEFAULT_CHAPTER_METADATA_PAGE_SIZE = 200;
 
 export function getStoredApiKey(): string {
   if (typeof window === "undefined") {
@@ -79,6 +81,67 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   });
   const queryString = searchParams.toString();
   return queryString ? `?${queryString}` : "";
+}
+
+async function fetchAllOffsetPages(
+  basePath: string,
+  params?: Record<string, string | number | boolean | undefined>,
+  pageSize: number = DEFAULT_OFFSET_PAGE_SIZE
+): Promise<unknown[]> {
+  if (params?.limit !== undefined) {
+    return fetchApi<unknown[]>(`${basePath}${buildQueryString(params)}`);
+  }
+
+  const allItems: unknown[] = [];
+  let skip = typeof params?.skip === "number" ? params.skip : 0;
+
+  while (true) {
+    const page = await fetchApi<unknown[]>(
+      `${basePath}${buildQueryString({
+        ...(params || {}),
+        skip,
+        limit: pageSize,
+      })}`
+    );
+    allItems.push(...page);
+    if (page.length < pageSize) {
+      break;
+    }
+    skip += page.length;
+  }
+
+  return allItems;
+}
+
+async function fetchAllChapterMetadataPages(
+  basePath: string,
+  params?: { skip?: number; limit?: number; include_content?: boolean }
+): Promise<unknown[]> {
+  if (params?.limit !== undefined || params?.include_content) {
+    return fetchApi<unknown[]>(
+      `${basePath}${buildQueryString({ include_content: false, ...(params || {}) })}`
+    );
+  }
+
+  const allItems: unknown[] = [];
+  let skip = params?.skip || 0;
+
+  while (true) {
+    const page = await fetchApi<unknown[]>(
+      `${basePath}${buildQueryString({
+        include_content: false,
+        skip,
+        limit: DEFAULT_CHAPTER_METADATA_PAGE_SIZE,
+      })}`
+    );
+    allItems.push(...page);
+    if (page.length < DEFAULT_CHAPTER_METADATA_PAGE_SIZE) {
+      break;
+    }
+    skip += page.length;
+  }
+
+  return allItems;
 }
 
 export interface HealthResponse {
@@ -217,9 +280,7 @@ export const projectApi = {
 
 export const characterApi = {
   list: (projectId: string, params?: { skip?: number; limit?: number }) =>
-    fetchApi<unknown[]>(
-      `/api/v1/characters/project/${projectId}${buildQueryString(params || {})}`
-    ),
+    fetchAllOffsetPages(`/api/v1/characters/project/${projectId}`, params),
 
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/characters/${id}`),
@@ -248,14 +309,10 @@ export const characterApi = {
 
 export const worldSettingApi = {
   list: (projectId: string, params?: { skip?: number; limit?: number }) =>
-    fetchApi<unknown[]>(
-      `/api/v1/world-settings/project/${projectId}${buildQueryString(params || {})}`
-    ),
+    fetchAllOffsetPages(`/api/v1/world-settings/project/${projectId}`, params),
 
   getByCategory: (projectId: string, category: string, params?: { skip?: number; limit?: number }) =>
-    fetchApi<unknown[]>(
-      `/api/v1/world-settings/project/${projectId}/category/${category}${buildQueryString(params || {})}`
-    ),
+    fetchAllOffsetPages(`/api/v1/world-settings/project/${projectId}/category/${category}`, params),
 
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/world-settings/${id}`),
@@ -287,17 +344,13 @@ export const chapterApi = {
     projectId: string,
     params?: { skip?: number; limit?: number; include_content?: boolean }
   ) =>
-    fetchApi<unknown[]>(
-      `/api/v1/chapters/project/${projectId}${buildQueryString({ include_content: false, ...(params || {}) })}`
-    ),
+    fetchAllChapterMetadataPages(`/api/v1/chapters/project/${projectId}`, params),
 
   listByVolume: (
     volumeId: string,
     params?: { skip?: number; limit?: number; include_content?: boolean }
   ) =>
-    fetchApi<unknown[]>(
-      `/api/v1/chapters/volume/${volumeId}${buildQueryString({ include_content: false, ...(params || {}) })}`
-    ),
+    fetchAllChapterMetadataPages(`/api/v1/chapters/volume/${volumeId}`, params),
 
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/chapters/${id}`),
@@ -332,9 +385,7 @@ export const chapterApi = {
 
 export const volumeApi = {
   list: (projectId: string, params?: { skip?: number; limit?: number }) =>
-    fetchApi<unknown[]>(
-      `/api/v1/volumes/project/${projectId}${buildQueryString(params || {})}`
-    ),
+    fetchAllOffsetPages(`/api/v1/volumes/project/${projectId}`, params),
 
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/volumes/${id}`),
@@ -363,9 +414,7 @@ export const volumeApi = {
 
 export const sceneApi = {
   list: (chapterId: string, params?: { skip?: number; limit?: number }) =>
-    fetchApi<unknown[]>(
-      `/api/v1/scenes/chapter/${chapterId}${buildQueryString(params || {})}`
-    ),
+    fetchAllOffsetPages(`/api/v1/scenes/chapter/${chapterId}`, params),
 
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/scenes/${id}`),
@@ -400,9 +449,7 @@ export const sceneApi = {
 
 export const memoryApi = {
   list: (projectId: string, params?: { skip?: number; limit?: number }) =>
-    fetchApi<unknown[]>(
-      `/api/v1/memories${buildQueryString({ project_id: projectId, ...params })}`
-    ),
+    fetchAllOffsetPages("/api/v1/memories", { project_id: projectId, ...(params || {}) }),
 
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/memories/${id}`),
@@ -461,8 +508,8 @@ export const snapshotApi = {
 // ============================================================================
 
 export const dependencyApi = {
-  list: (projectId: string) =>
-    fetchApi<unknown[]>(`/api/v1/dependencies?project_id=${projectId}`),
+  list: (projectId: string, params?: { skip?: number; limit?: number }) =>
+    fetchAllOffsetPages("/api/v1/dependencies", { project_id: projectId, ...(params || {}) }),
 
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/dependencies/${id}`),

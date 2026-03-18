@@ -15,6 +15,17 @@ from app.services.project import project_service
 class TestExportService:
     """Tests for ExportService."""
 
+    @pytest.fixture(autouse=True)
+    def restore_service_methods(self):
+        """Restore singleton service methods after each test to avoid cross-test leakage."""
+        original_project_get = project_service.get
+        original_chapter_get_by_project = chapter_service.get_by_project
+        try:
+            yield
+        finally:
+            project_service.get = original_project_get
+            chapter_service.get_by_project = original_chapter_get_by_project
+
     @pytest.fixture
     def mock_db_session(self):
         """Create a mock database session."""
@@ -78,6 +89,42 @@ class TestExportService:
                 assert "Chapter 1 content here" in content
                 assert "第2章 Middle" in content
                 assert "Chapter 2 content here" in content
+
+    @pytest.mark.asyncio
+    async def test_export_txt_loads_all_chapter_pages(self, mock_db_session):
+        """Test that export walks all chapter pages instead of truncating at one batch."""
+        project_id = uuid.uuid4()
+
+        mock_project = MagicMock(spec=Project)
+        mock_project.name = "Paged Novel"
+        mock_project.summary = None
+        mock_project.story_outline = None
+
+        chapter1 = MagicMock(spec=Chapter)
+        chapter1.chapter_number = 1
+        chapter1.title = "Opening"
+        chapter1.content = "Content 1"
+
+        chapter2 = MagicMock(spec=Chapter)
+        chapter2.chapter_number = 201
+        chapter2.title = "Ending"
+        chapter2.content = "Content 201"
+
+        first_batch = [chapter1] * export_service.CHAPTER_EXPORT_BATCH_SIZE
+        second_batch = [chapter2]
+
+        with patch.object(project_service, "get", new_callable=AsyncMock) as mock_get_project:
+            with patch.object(
+                chapter_service, "get_by_project", new_callable=AsyncMock
+            ) as mock_get_chapters:
+                mock_get_project.return_value = mock_project
+                mock_get_chapters.side_effect = [first_batch, second_batch]
+
+                content = await export_service.export_txt(mock_db_session, str(project_id))
+
+                assert "第1章 Opening" in content
+                assert "第201章 Ending" in content
+                assert mock_get_chapters.await_count == 2
 
     @pytest.mark.asyncio
     async def test_export_txt_chapters_sorted_by_number(self, mock_db_session):

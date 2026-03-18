@@ -169,7 +169,7 @@ export function CharacterRelationshipGraph({ projectId }: CharacterRelationshipG
       try {
         setLoading(true);
         setError(null);
-        const data = await characterApi.list(projectId, { limit: 500 }) as Character[];
+        const data = await characterApi.list(projectId) as Character[];
         if (!active) {
           return;
         }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
+from sqlalchemy import text
 from app.schemas.text_import import (
     DetectedChapter,
     DetectedCharacter,
@@ -11,10 +11,7 @@ from app.schemas.text_import import (
     DetectedWorldSetting,
     TextImportPreview,
 )
-from app.services.chapter import chapter_service, volume_service
-from app.services.character import character_service
 from app.services.text_import import text_import_service
-from app.services.world_setting import world_setting_service
 
 
 class TestTextImportService:
@@ -255,6 +252,58 @@ class TestTextImportService:
         assert [setting.name for setting in settings] == ["设定1"]
 
     @pytest.mark.asyncio
+    async def test_extract_characters_retries_with_outline_only_fallback(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=index,
+                title=f"第{index}章",
+                content="章节原文",
+                outline="角色甲与角色乙在城中碰面。",
+            )
+            for index in range(1, 3)
+        ]
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+
+        async def fake_extract_character_group(
+            group,
+            *,
+            include_text_sample=True,
+            max_characters=8,
+            sample_chars=None,
+            max_tokens=1200,
+        ):
+            del group, max_characters, sample_chars, max_tokens
+            if include_text_sample:
+                raise TimeoutError()
+            return [
+                DetectedCharacter(
+                    name="角色甲",
+                    role="主角",
+                    profile={},
+                    relationships={},
+                ),
+                DetectedCharacter(
+                    name="角色乙",
+                    role="配角",
+                    profile={},
+                    relationships={},
+                ),
+            ]
+
+        monkeypatch.setattr(text_import_service, "_extract_character_group", fake_extract_character_group)
+
+        characters = await text_import_service._extract_characters(chapters)
+
+        characters_by_name = {character.name: character for character in characters}
+        assert set(characters_by_name) == {"角色甲", "角色乙"}
+        assert characters_by_name["角色甲"].relationships["角色乙"] == "同章出现"
+        assert characters_by_name["角色乙"].relationships["角色甲"] == "同章出现"
+
+    @pytest.mark.asyncio
     async def test_commit_creates_project_graph(self, db_session) -> None:
         preview = TextImportPreview(
             project_name="导入测试项目",
@@ -309,22 +358,110 @@ class TestTextImportService:
             "chapters": 2,
             "characters": 1,
             "world_settings": 1,
+            "memories": 2,
+            "dependencies": 6,
         }
 
-        volumes = await volume_service.get_by_project(db_session, project_id=response.project_id)
-        chapters = await chapter_service.get_by_project(db_session, project_id=response.project_id)
-        characters = await character_service.get_by_project(db_session, project_id=response.project_id)
-        settings = await world_setting_service.get_by_project(db_session, project_id=response.project_id)
+        project_id = str(response.project_id)
+        volumes = (
+            await db_session.execute(
+                text(
+                    """
+                    select volume_number, title
+                    from volumes
+                    where project_id = :project_id
+                    order by volume_number asc
+                    """
+                ),
+                {"project_id": project_id},
+            )
+        )
+        chapters = (
+            await db_session.execute(
+                text(
+                    """
+                    select chapter_number, title, content, outline
+                    from chapters
+                    where project_id = :project_id
+                    order by chapter_number asc
+                    """
+                ),
+                {"project_id": project_id},
+            )
+        )
+        characters = (
+            await db_session.execute(
+                text(
+                    """
+                    select name
+                    from characters
+                    where project_id = :project_id
+                    order by name asc
+                    """
+                ),
+                {"project_id": project_id},
+            )
+        )
+        settings = (
+            await db_session.execute(
+                text(
+                    """
+                    select name
+                    from world_settings
+                    where project_id = :project_id
+                    order by name asc
+                    """
+                ),
+                {"project_id": project_id},
+            )
+        )
+        memories = (
+            await db_session.execute(
+                text(
+                    """
+                    select memory_type, content, metadata
+                    from memories
+                    where project_id = :project_id
+                    order by created_at asc
+                    """
+                ),
+                {"project_id": project_id},
+            )
+        )
+        dependencies = (
+            await db_session.execute(
+                text(
+                    """
+                    select dependency_type
+                    from dependencies
+                    where project_id = :project_id
+                    order by created_at asc
+                    """
+                ),
+                {"project_id": project_id},
+            )
+        )
+        volume_rows = volumes.mappings().all()
+        chapter_rows = chapters.mappings().all()
+        character_rows = characters.mappings().all()
+        setting_rows = settings.mappings().all()
+        memory_rows = memories.mappings().all()
+        dependency_rows = dependencies.mappings().all()
 
-        assert len(volumes) == 1
-        assert volumes[0].title == "第一卷 山门初开"
-        assert len(chapters) == 2
-        assert chapters[0].content == "第一章原文"
-        assert chapters[1].outline == "第二章章纲"
-        assert len(characters) == 1
-        assert characters[0].name == "林霄"
-        assert len(settings) == 1
-        assert settings[0].name == "灵气体系"
+        assert len(volume_rows) == 1
+        assert volume_rows[0]["title"] == "第一卷 山门初开"
+        assert len(chapter_rows) == 2
+        assert chapter_rows[0]["content"] == "第一章原文"
+        assert chapter_rows[1]["outline"] == "第二章章纲"
+        assert len(character_rows) == 1
+        assert character_rows[0]["name"] == "林霄"
+        assert len(setting_rows) == 1
+        assert setting_rows[0]["name"] == "灵气体系"
+        assert len(memory_rows) == 2
+        assert all(memory["memory_type"] == "episode" for memory in memory_rows)
+        assert any('"chapter_number": 1' in (memory["metadata"] or "") for memory in memory_rows)
+        assert len(dependency_rows) == 6
+        assert any(dependency["dependency_type"] == "precedes" for dependency in dependency_rows)
 
     @pytest.mark.asyncio
     async def test_commit_uses_stored_snapshot_for_compact_preview(
@@ -374,11 +511,24 @@ class TestTextImportService:
 
         response = await text_import_service.commit(db_session, edited_preview)
 
-        chapters = await chapter_service.get_by_project(db_session, project_id=response.project_id)
+        chapters = (
+            await db_session.execute(
+                text(
+                    """
+                    select title, outline, content
+                    from chapters
+                    where project_id = :project_id
+                    order by chapter_number asc
+                    """
+                ),
+                {"project_id": str(response.project_id)},
+            )
+        )
+        chapter_rows = chapters.mappings().all()
 
         assert response.project_name == "长文本导入项目（已确认）"
-        assert len(chapters) == 1
-        assert chapters[0].title == "第一章（已编辑）"
-        assert chapters[0].outline == "编辑后章纲"
-        assert chapters[0].content == stored_preview.chapters[0].content
+        assert len(chapter_rows) == 1
+        assert chapter_rows[0]["title"] == "第一章（已编辑）"
+        assert chapter_rows[0]["outline"] == "编辑后章纲"
+        assert chapter_rows[0]["content"] == stored_preview.chapters[0].content
         assert deleted_preview_ids == ["preview-token"]

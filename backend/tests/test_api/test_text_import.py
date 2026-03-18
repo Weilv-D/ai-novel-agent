@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 from httpx import AsyncClient
-
+from sqlalchemy import text
 from app.schemas.text_import import TextImportPreview, TextImportProgress
 from app.services.text_import import text_import_service
 
@@ -82,7 +82,7 @@ async def test_import_text_rejects_oversized_file(
 
 
 @pytest.mark.asyncio
-async def test_confirm_text_import_creates_project_records(client: AsyncClient) -> None:
+async def test_confirm_text_import_creates_project_records(client: AsyncClient, db_session) -> None:
     preview = {
         "project_name": "接口导入项目",
         "genre": "玄幻",
@@ -131,20 +131,106 @@ async def test_confirm_text_import_creates_project_records(client: AsyncClient) 
     project_id = payload["project_id"]
     assert payload["project_name"] == "接口导入项目"
     assert payload["imported_counts"]["chapters"] == 1
+    assert payload["imported_counts"]["memories"] == 1
+    assert payload["imported_counts"]["dependencies"] == 4
 
-    project_response = await client.get(f"/api/v1/projects/{project_id}")
-    chapters_response = await client.get(f"/api/v1/chapters/project/{project_id}?include_content=true")
-    volumes_response = await client.get(f"/api/v1/volumes/project/{project_id}")
-    characters_response = await client.get(f"/api/v1/characters/project/{project_id}")
-    settings_response = await client.get(f"/api/v1/world-settings/project/{project_id}")
+    project_id_str = str(project_id)
+    stored_project = (
+        await db_session.execute(
+            text("select name from projects where id = :project_id"),
+            {"project_id": project_id_str},
+        )
+    ).mappings().one()
+    stored_volumes = (
+        await db_session.execute(
+            text(
+                """
+                select title
+                from volumes
+                where project_id = :project_id
+                order by volume_number asc
+                """
+            ),
+            {"project_id": project_id_str},
+        )
+    )
+    stored_chapters = (
+        await db_session.execute(
+            text(
+                """
+                select content
+                from chapters
+                where project_id = :project_id
+                order by chapter_number asc
+                """
+            ),
+            {"project_id": project_id_str},
+        )
+    )
+    stored_characters = (
+        await db_session.execute(
+            text(
+                """
+                select name
+                from characters
+                where project_id = :project_id
+                order by name asc
+                """
+            ),
+            {"project_id": project_id_str},
+        )
+    )
+    stored_settings = (
+        await db_session.execute(
+            text(
+                """
+                select name
+                from world_settings
+                where project_id = :project_id
+                order by name asc
+                """
+            ),
+            {"project_id": project_id_str},
+        )
+    )
+    stored_memories = (
+        await db_session.execute(
+            text(
+                """
+                select memory_type, content, metadata
+                from memories
+                where project_id = :project_id
+                order by created_at asc
+                """
+            ),
+            {"project_id": project_id_str},
+        )
+    )
+    stored_dependencies = (
+        await db_session.execute(
+            text(
+                """
+                select dependency_type
+                from dependencies
+                where project_id = :project_id
+                order by created_at asc
+                """
+            ),
+            {"project_id": project_id_str},
+        )
+    )
+    volume_rows = stored_volumes.mappings().all()
+    chapter_rows = stored_chapters.mappings().all()
+    character_rows = stored_characters.mappings().all()
+    setting_rows = stored_settings.mappings().all()
+    memory_rows = stored_memories.mappings().all()
+    dependency_rows = stored_dependencies.mappings().all()
 
-    assert project_response.status_code == 200
-    assert chapters_response.status_code == 200
-    assert volumes_response.status_code == 200
-    assert characters_response.status_code == 200
-    assert settings_response.status_code == 200
-
-    assert chapters_response.json()[0]["content"].startswith("第一章正文")
-    assert volumes_response.json()[0]["title"] == "第一卷"
-    assert characters_response.json()[0]["name"] == "陆沉"
-    assert settings_response.json()[0]["name"] == "灵脉体系"
+    assert stored_project["name"] == "接口导入项目"
+    assert chapter_rows[0]["content"].startswith("第一章正文")
+    assert volume_rows[0]["title"] == "第一卷"
+    assert character_rows[0]["name"] == "陆沉"
+    assert setting_rows[0]["name"] == "灵脉体系"
+    assert memory_rows[0]["memory_type"] == "episode"
+    assert '"chapter_number": 1' in (memory_rows[0]["metadata"] or "")
+    assert len(dependency_rows) == 4

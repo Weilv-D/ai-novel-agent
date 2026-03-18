@@ -19,6 +19,8 @@ from app.core.cache import cache_service
 from app.core.exceptions import BadRequestException
 from app.schemas.chapter import ChapterCreate, ChapterStatus, VolumeCreate
 from app.schemas.character import CharacterCreate
+from app.schemas.dependency import DependencyCreate, DependencyType
+from app.schemas.memory import MemoryCreate, MemoryType
 from app.schemas.project import ProjectCreate
 from app.schemas.text_import import (
     DetectedChapter,
@@ -34,7 +36,9 @@ from app.schemas.types import CONTENT_MAX_LENGTH
 from app.schemas.world_setting import WorldSettingCategory, WorldSettingCreate
 from app.services.chapter import chapter_service, volume_service
 from app.services.character import character_service
+from app.services.dependency import dependency_service
 from app.services.llm import llm_service
+from app.services.memory import memory_service
 from app.services.project import project_service
 from app.services.world_setting import world_setting_service
 
@@ -72,6 +76,8 @@ class TextImportService:
     ENTITY_EXTRACTION_BATCH_SIZE = 3
     ENTITY_GROUP_LIMIT = 24
     ENTITY_SAMPLE_LIMIT = 60000
+    ENTITY_GROUP_SAMPLE_CHARS = 8000
+    ENTITY_RETRY_SAMPLE_CHARS = 2500
     LLM_TEXT_TIMEOUT_SECONDS = 20
     LLM_JSON_TIMEOUT_SECONDS = 60
     PREVIEW_CACHE_TTL_SECONDS = 3600
@@ -79,6 +85,10 @@ class TextImportService:
     CHAPTER_PREVIEW_CONTENT_CHARS = 400
     SUMMARY_GROUP_SIZE = 12
     SUMMARY_DIGEST_TARGET_CHARS = 16000
+    CHARACTER_COOCCURRENCE_MIN_CHAPTERS = 2
+    CHAPTER_MEMORY_SUMMARY_CHARS = 240
+    CHAPTER_MEMORY_CONTENT_CHARS = 600
+    DEPENDENCY_SAMPLE_CHARS = 2400
 
     _CHAPTER_HEADING_RE = re.compile(
         r"^\s*(?:第(?P<cn_num>[零〇一二两三四五六七八九十百千\d]+)(?P<cn_unit>[章节回集篇部])|chapter\s+(?P<en_num>\d+))"
@@ -336,7 +346,9 @@ class TextImportService:
 
         imported_counts: dict[str, int] = {"projects": 1}
         chapter_to_volume_id: dict[int, Any] = {}
+        chapter_to_volume_number: dict[int, int] = {}
         volume_records = resolved_preview.volumes or self._build_default_volumes(resolved_preview.chapters)
+        created_volumes_by_number: dict[int, Any] = {}
 
         for volume in sorted(volume_records, key=lambda item: item.volume_number):
             created_volume = await volume_service.create_with_project(
@@ -349,13 +361,16 @@ class TextImportService:
                 ),
                 project_id=project.id,
             )
+            created_volumes_by_number[volume.volume_number] = created_volume
             for chapter_number in volume.chapter_numbers:
                 chapter_to_volume_id[chapter_number] = created_volume.id
+                chapter_to_volume_number[chapter_number] = volume.volume_number
             imported_counts["volumes"] = imported_counts.get("volumes", 0) + 1
 
+        created_chapters: list[tuple[DetectedChapter, Any]] = []
         for index, chapter in enumerate(resolved_preview.chapters, start=1):
             chapter_number = chapter.chapter_number or index
-            await chapter_service.create_with_project(
+            created_chapter = await chapter_service.create_with_project(
                 db,
                 obj_in=ChapterCreate(
                     project_id=project.id,
@@ -368,10 +383,12 @@ class TextImportService:
                 ),
                 project_id=project.id,
             )
+            created_chapters.append((chapter, created_chapter))
             imported_counts["chapters"] = imported_counts.get("chapters", 0) + 1
 
+        created_characters_by_name: dict[str, Any] = {}
         for character in resolved_preview.characters:
-            await character_service.create_with_project(
+            created_character = await character_service.create_with_project(
                 db,
                 obj_in=CharacterCreate(
                     project_id=project.id,
@@ -382,10 +399,12 @@ class TextImportService:
                 ),
                 project_id=project.id,
             )
+            created_characters_by_name[character.name] = created_character
             imported_counts["characters"] = imported_counts.get("characters", 0) + 1
 
+        created_world_settings_by_name: dict[str, Any] = {}
         for world_setting in resolved_preview.world_settings:
-            await world_setting_service.create_with_project(
+            created_world_setting = await world_setting_service.create_with_project(
                 db,
                 obj_in=WorldSettingCreate(
                     project_id=project.id,
@@ -395,7 +414,45 @@ class TextImportService:
                 ),
                 project_id=project.id,
             )
+            created_world_settings_by_name[world_setting.name] = created_world_setting
             imported_counts["world_settings"] = imported_counts.get("world_settings", 0) + 1
+
+        for detected_chapter, created_chapter in created_chapters:
+            await memory_service.create_with_project(
+                db,
+                obj_in=MemoryCreate(
+                    project_id=project.id,
+                    memory_type=MemoryType.EPISODE,
+                    content=self._build_import_memory_content(detected_chapter),
+                    meta={
+                        "title": detected_chapter.title or f"第{created_chapter.chapter_number}章",
+                        "summary": detected_chapter.outline or self._sample_text(detected_chapter.content, self.CHAPTER_MEMORY_SUMMARY_CHARS),
+                        "chapter_id": str(created_chapter.id),
+                        "chapter_number": created_chapter.chapter_number,
+                        "volume_id": str(created_chapter.volume_id) if created_chapter.volume_id else None,
+                        "volume_number": chapter_to_volume_number.get(created_chapter.chapter_number),
+                        "source": "text_import",
+                    },
+                ),
+                project_id=project.id,
+            )
+            imported_counts["memories"] = imported_counts.get("memories", 0) + 1
+
+        dependency_creates = self._build_import_dependency_creates(
+            project_id=project.id,
+            resolved_preview=resolved_preview,
+            created_volumes_by_number=created_volumes_by_number,
+            created_chapters=created_chapters,
+            created_characters_by_name=created_characters_by_name,
+            created_world_settings_by_name=created_world_settings_by_name,
+        )
+        for dependency_create in dependency_creates:
+            await dependency_service.create_with_project(
+                db,
+                obj_in=dependency_create,
+                project_id=project.id,
+            )
+            imported_counts["dependencies"] = imported_counts.get("dependencies", 0) + 1
 
         await db.commit()
         await self._delete_preview_snapshot(resolved_preview.preview_id)
@@ -405,6 +462,87 @@ class TextImportService:
             project_name=project.name,
             imported_counts=imported_counts,
         )
+
+    def _build_import_memory_content(self, chapter: DetectedChapter) -> str:
+        """Build a compact episode-memory payload for an imported chapter."""
+        return chapter.outline or self._sample_text(chapter.content, self.CHAPTER_MEMORY_CONTENT_CHARS)
+
+    def _build_import_dependency_creates(
+        self,
+        *,
+        project_id: Any,
+        resolved_preview: TextImportPreview,
+        created_volumes_by_number: dict[int, Any],
+        created_chapters: Sequence[tuple[DetectedChapter, Any]],
+        created_characters_by_name: dict[str, Any],
+        created_world_settings_by_name: dict[str, Any],
+    ) -> list[DependencyCreate]:
+        """Derive baseline structural and reference dependencies for an imported project."""
+        edges: set[tuple[str, Any, str, Any, str]] = set()
+
+        for volume in resolved_preview.volumes:
+            created_volume = created_volumes_by_number.get(volume.volume_number)
+            if created_volume is None:
+                continue
+            edges.add(("project", project_id, "volume", created_volume.id, DependencyType.CONTAINS))
+
+        for created_character in created_characters_by_name.values():
+            edges.add(("project", project_id, "character", created_character.id, DependencyType.CONTAINS))
+
+        for created_world_setting in created_world_settings_by_name.values():
+            edges.add(("project", project_id, "world_setting", created_world_setting.id, DependencyType.CONTAINS))
+
+        created_chapter_by_number = {
+            detected_chapter.chapter_number: created_chapter
+            for detected_chapter, created_chapter in created_chapters
+        }
+        for volume in resolved_preview.volumes:
+            created_volume = created_volumes_by_number.get(volume.volume_number)
+            if created_volume is None:
+                continue
+            for chapter_number in volume.chapter_numbers:
+                created_chapter = created_chapter_by_number.get(chapter_number)
+                if created_chapter is None:
+                    continue
+                edges.add(("volume", created_volume.id, "chapter", created_chapter.id, DependencyType.CONTAINS))
+
+        for index in range(len(created_chapters) - 1):
+            _, source_chapter = created_chapters[index]
+            _, target_chapter = created_chapters[index + 1]
+            edges.add(("chapter", source_chapter.id, "chapter", target_chapter.id, DependencyType.PRECEDES))
+
+        lowered_character_names = {
+            name: created_character.id
+            for name, created_character in created_characters_by_name.items()
+        }
+        lowered_world_setting_names = {
+            name: created_world_setting.id
+            for name, created_world_setting in created_world_settings_by_name.items()
+        }
+
+        for detected_chapter, created_chapter in created_chapters:
+            haystack = self._chapter_reference_haystack(detected_chapter, max_chars=self.DEPENDENCY_SAMPLE_CHARS)
+            for name, character_id in lowered_character_names.items():
+                if name.casefold() in haystack:
+                    edges.add(("chapter", created_chapter.id, "character", character_id, DependencyType.REFERENCES))
+            for name, world_setting_id in lowered_world_setting_names.items():
+                if name.casefold() in haystack:
+                    edges.add(("chapter", created_chapter.id, "world_setting", world_setting_id, DependencyType.REFERENCES))
+
+        return [
+            DependencyCreate(
+                project_id=project_id,
+                source_type=source_type,
+                source_id=source_id,
+                target_type=target_type,
+                target_id=target_id,
+                dependency_type=dependency_type,
+            )
+            for source_type, source_id, target_type, target_id, dependency_type in sorted(
+                edges,
+                key=lambda item: (item[0], str(item[1]), item[2], str(item[3]), item[4]),
+            )
+        ]
 
     def _normalize_detected_structure(
         self,
@@ -780,17 +918,34 @@ class TextImportService:
                 *(self._extract_character_group(group) for group in batch),
                 return_exceptions=True,
             )
-            for result in results:
+            for group, result in zip(batch, results, strict=True):
                 if isinstance(result, BaseException):
                     logger.warning("Character extraction subgroup failed: %s", result)
-                    failures.append(result)
+                    try:
+                        fallback_result = await self._extract_character_group(
+                            group,
+                            include_text_sample=False,
+                            max_characters=5,
+                            sample_chars=self.ENTITY_RETRY_SAMPLE_CHARS,
+                            max_tokens=900,
+                        )
+                    except Exception as retry_exc:
+                        logger.warning("Character extraction subgroup retry failed: %s", retry_exc)
+                        failures.append(retry_exc)
+                    else:
+                        candidates.extend(fallback_result)
                     continue
                 candidates.extend(result)
 
-        if not candidates and failures:
-            raise failures[0]
+        if not candidates:
+            outline_candidates = await self._extract_characters_from_outline_digest(chapters)
+            if outline_candidates:
+                return self._backfill_character_relationships(self._merge_characters(outline_candidates)[:20], chapters)
+            if failures:
+                raise failures[0]
+            return []
 
-        return self._merge_characters(candidates)[:20]
+        return self._backfill_character_relationships(self._merge_characters(candidates)[:20], chapters)
 
     async def _extract_world_settings(self, chapters: Sequence[DetectedChapter]) -> list[DetectedWorldSetting]:
         """Extract key world settings from chapter outlines and samples."""
@@ -820,20 +975,51 @@ class TextImportService:
                 *(self._extract_world_setting_group(group, categories) for group in batch),
                 return_exceptions=True,
             )
-            for result in results:
+            for group, result in zip(batch, results, strict=True):
                 if isinstance(result, BaseException):
                     logger.warning("World-setting extraction subgroup failed: %s", result)
-                    failures.append(result)
+                    try:
+                        fallback_result = await self._extract_world_setting_group(
+                            group,
+                            categories,
+                            include_text_sample=False,
+                            max_items=4,
+                            sample_chars=self.ENTITY_RETRY_SAMPLE_CHARS,
+                            max_tokens=900,
+                        )
+                    except Exception as retry_exc:
+                        logger.warning("World-setting extraction subgroup retry failed: %s", retry_exc)
+                        failures.append(retry_exc)
+                    else:
+                        candidates.extend(fallback_result)
                     continue
                 candidates.extend(result)
 
-        if not candidates and failures:
-            raise failures[0]
+        if not candidates:
+            outline_candidates = await self._extract_world_settings_from_outline_digest(chapters, categories)
+            if outline_candidates:
+                return self._merge_world_settings(outline_candidates)[:15]
+            if failures:
+                raise failures[0]
+            return []
 
         return self._merge_world_settings(candidates)[:15]
 
-    async def _extract_character_group(self, chapters: Sequence[DetectedChapter]) -> list[DetectedCharacter]:
+    async def _extract_character_group(
+        self,
+        chapters: Sequence[DetectedChapter],
+        *,
+        include_text_sample: bool = True,
+        max_characters: int = 8,
+        sample_chars: int | None = None,
+        max_tokens: int = 1200,
+    ) -> list[DetectedCharacter]:
         """Extract character candidates for a single chapter group."""
+        prompt_sections = [f"章纲：\n{self._build_outline_block(chapters)}"]
+        if include_text_sample:
+            prompt_sections.append(
+                f"原文采样：\n{self._build_text_sample(chapters, max_chars=sample_chars or self.ENTITY_GROUP_SAMPLE_CHARS)}"
+            )
         payload = await self._generate_json_payload(
             [
                 {
@@ -841,18 +1027,16 @@ class TextImportService:
                     "content": (
                         "你是中文小说人物策划编辑。请从提供的章纲和原文采样中提取关键角色，"
                         "只返回 JSON 数组。每个元素字段为 name、role、profile、relationships。"
-                        "profile 和 relationships 必须是 JSON 对象。不要返回超过 8 个角色。"
+                        f"profile 和 relationships 必须是 JSON 对象。不要返回超过 {max_characters} 个角色。"
                     ),
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"章纲：\n{self._build_outline_block(chapters)}\n\n"
-                        f"原文采样：\n{self._build_text_sample(chapters, max_chars=15000)}"
-                    ),
+                    "content": "\n\n".join(prompt_sections),
                 },
             ],
             expect="array",
+            max_tokens=max_tokens,
         )
         return self._normalize_detected_characters(payload)
 
@@ -860,8 +1044,18 @@ class TextImportService:
         self,
         chapters: Sequence[DetectedChapter],
         categories: str,
+        *,
+        include_text_sample: bool = True,
+        max_items: int = 6,
+        sample_chars: int | None = None,
+        max_tokens: int = 1200,
     ) -> list[DetectedWorldSetting]:
         """Extract world-setting candidates for a single chapter group."""
+        prompt_sections = [f"章纲：\n{self._build_outline_block(chapters)}"]
+        if include_text_sample:
+            prompt_sections.append(
+                f"原文采样：\n{self._build_text_sample(chapters, max_chars=sample_chars or self.ENTITY_GROUP_SAMPLE_CHARS)}"
+            )
         payload = await self._generate_json_payload(
             [
                 {
@@ -869,18 +1063,16 @@ class TextImportService:
                     "content": (
                         "你是中文小说世界观策划编辑。请从提供的章纲和原文采样中提取关键设定，"
                         "只返回 JSON 数组。每个元素字段为 category、name、content。"
-                        f"category 必须从以下枚举中选择：{categories}。不要返回超过 6 个设定。"
+                        f"category 必须从以下枚举中选择：{categories}。不要返回超过 {max_items} 个设定。"
                     ),
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"章纲：\n{self._build_outline_block(chapters)}\n\n"
-                        f"原文采样：\n{self._build_text_sample(chapters, max_chars=15000)}"
-                    ),
+                    "content": "\n\n".join(prompt_sections),
                 },
             ],
             expect="array",
+            max_tokens=max_tokens,
         )
         return self._normalize_detected_world_settings(payload)
 
@@ -1240,6 +1432,126 @@ class TextImportService:
             )
         return "\n\n".join(sections)[:max_chars]
 
+    async def _extract_characters_from_outline_digest(
+        self,
+        chapters: Sequence[DetectedChapter],
+    ) -> list[DetectedCharacter]:
+        """Fallback character extraction using only compressed outline material."""
+        if not chapters or not self._llm_ready():
+            return []
+
+        try:
+            outline_block, _ = await self._prepare_outline_digest(chapters, label="人物阶段")
+            payload = await self._generate_json_payload(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是中文小说人物策划编辑。请只根据故事阶段摘要提取关键角色，"
+                            "只返回 JSON 数组。每个元素字段为 name、role、profile、relationships。"
+                            "profile 和 relationships 可以为空对象，不要返回超过 12 个角色。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"故事阶段摘要：\n{outline_block}",
+                    },
+                ],
+                expect="array",
+                max_tokens=900,
+            )
+        except Exception as exc:  # pragma: no cover - network/model failures
+            logger.warning("Outline-only character extraction failed: %s", exc)
+            return []
+        return self._normalize_detected_characters(payload)
+
+    async def _extract_world_settings_from_outline_digest(
+        self,
+        chapters: Sequence[DetectedChapter],
+        categories: str,
+    ) -> list[DetectedWorldSetting]:
+        """Fallback world-setting extraction using only compressed outline material."""
+        if not chapters or not self._llm_ready():
+            return []
+
+        try:
+            outline_block, _ = await self._prepare_outline_digest(chapters, label="设定阶段")
+            payload = await self._generate_json_payload(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是中文小说世界观策划编辑。请只根据故事阶段摘要提取关键设定，"
+                            "只返回 JSON 数组。每个元素字段为 category、name、content。"
+                            f"category 必须从以下枚举中选择：{categories}。不要返回超过 10 个设定。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"故事阶段摘要：\n{outline_block}",
+                    },
+                ],
+                expect="array",
+                max_tokens=900,
+            )
+        except Exception as exc:  # pragma: no cover - network/model failures
+            logger.warning("Outline-only world-setting extraction failed: %s", exc)
+            return []
+        return self._normalize_detected_world_settings(payload)
+
+    def _chapter_reference_haystack(self, chapter: DetectedChapter, *, max_chars: int) -> str:
+        """Build a compact normalized text block for entity matching."""
+        return self._normalize_text(
+            "\n".join(
+                part
+                for part in [
+                    chapter.title or "",
+                    chapter.outline or "",
+                    self._sample_text(chapter.content, max_chars),
+                ]
+                if part
+            )
+        ).casefold()
+
+    def _backfill_character_relationships(
+        self,
+        characters: Sequence[DetectedCharacter],
+        chapters: Sequence[DetectedChapter],
+    ) -> list[DetectedCharacter]:
+        """Infer lightweight co-occurrence relationships when extraction omits them."""
+        if len(characters) < 2 or not chapters:
+            return list(characters)
+
+        pair_counts: Counter[tuple[str, str]] = Counter()
+        character_names = [character.name for character in characters if character.name]
+        lowered_names = {name: name.casefold() for name in character_names}
+
+        for chapter in chapters:
+            haystack = self._chapter_reference_haystack(chapter, max_chars=self.DEPENDENCY_SAMPLE_CHARS)
+            mentioned = sorted({name for name, lowered in lowered_names.items() if lowered in haystack})
+            if len(mentioned) < 2:
+                continue
+            for index, source_name in enumerate(mentioned):
+                for target_name in mentioned[index + 1 :]:
+                    pair_counts[(source_name, target_name)] += 1
+
+        if not pair_counts:
+            return list(characters)
+
+        enriched: list[DetectedCharacter] = []
+        for character in characters:
+            relationships = dict(character.relationships)
+            for (left_name, right_name), count in pair_counts.items():
+                if count < self.CHARACTER_COOCCURRENCE_MIN_CHAPTERS:
+                    continue
+                label = "频繁共现" if count >= 3 else "同章出现"
+                if character.name == left_name and right_name not in relationships:
+                    relationships[right_name] = label
+                elif character.name == right_name and left_name not in relationships:
+                    relationships[left_name] = label
+            enriched.append(character.model_copy(update={"relationships": relationships}))
+        return enriched
+
     def _build_entity_groups(self, chapters: Sequence[DetectedChapter]) -> list[list[DetectedChapter]]:
         """Group chapters for entity extraction prompts."""
         return [list(chapters[index : index + self.ENTITY_GROUP_SIZE]) for index in range(0, len(chapters), self.ENTITY_GROUP_SIZE)]
@@ -1330,6 +1642,7 @@ class TextImportService:
         messages: list[dict[str, str]],
         *,
         expect: str,
+        max_tokens: int = 1800,
     ) -> Any:
         """Generate a JSON payload from the LLM, retrying once on parse failure."""
         conversation = list(messages)
@@ -1338,7 +1651,7 @@ class TextImportService:
                 self.llm.generate(
                     conversation,
                     temperature=0.1,
-                    max_tokens=1800,
+                    max_tokens=max_tokens,
                 ),
                 timeout=self.LLM_JSON_TIMEOUT_SECONDS,
             )
@@ -1360,7 +1673,15 @@ class TextImportService:
                 return parsed
             if expect == "object" and isinstance(parsed, dict):
                 return parsed
-            raise ValueError(f"Expected {expect} JSON payload")
+            if attempt == 1:
+                raise ValueError(f"Expected {expect} JSON payload")
+            expected_shape = "JSON 数组" if expect == "array" else "JSON 对象"
+            conversation.extend(
+                [
+                    {"role": "assistant", "content": content},
+                    {"role": "user", "content": f"返回结果类型不正确。请只返回合法的 {expected_shape}，不要解释，不要使用 Markdown 代码块。"},
+                ]
+            )
         raise ValueError("Unable to parse JSON payload")
 
     def _parse_json_content(self, content: str) -> Any:

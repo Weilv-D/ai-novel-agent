@@ -103,10 +103,10 @@ export function DependencyGraph({ projectId }: DependencyGraphProps) {
         ] = await Promise.all([
           projectApi.get(projectId) as Promise<Project>,
           dependencyApi.list(projectId) as Promise<Dependency[]>,
-          characterApi.list(projectId, { limit: 500 }) as Promise<Character[]>,
-          worldSettingApi.list(projectId, { limit: 500 }) as Promise<WorldSetting[]>,
-          volumeApi.list(projectId, { limit: 500 }) as Promise<Volume[]>,
-          chapterApi.list(projectId, { limit: 500 }) as Promise<Chapter[]>,
+          characterApi.list(projectId) as Promise<Character[]>,
+          worldSettingApi.list(projectId) as Promise<WorldSetting[]>,
+          volumeApi.list(projectId) as Promise<Volume[]>,
+          chapterApi.list(projectId) as Promise<Chapter[]>,
           suggestionApi.list(projectId, { limit: 500 }) as Promise<Suggestion[]>,
         ]);
 
@@ -119,7 +119,7 @@ export function DependencyGraph({ projectId }: DependencyGraphProps) {
               await Promise.all(
                 chapterData.map(async (chapter) => {
                   try {
-                    return await sceneApi.list(chapter.id, { limit: 500 }) as Scene[];
+                    return await sceneApi.list(chapter.id) as Scene[];
                   } catch {
                     return [];
                   }
