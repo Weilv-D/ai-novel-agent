@@ -85,6 +85,80 @@ class TestTextImportService:
         assert chunks[0][-10:] == chunks[1][:10]
 
     @pytest.mark.asyncio
+    async def test_extract_characters_keeps_partial_results_when_subgroups_fail(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=index,
+                title=f"第{index}章",
+                content="章节原文",
+                outline="章节章纲",
+            )
+            for index in range(1, 7)
+        ]
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+        monkeypatch.setattr(text_import_service, "ENTITY_GROUP_SIZE", 3)
+        monkeypatch.setattr(text_import_service, "ENTITY_EXTRACTION_BATCH_SIZE", 2)
+
+        async def fake_extract_character_group(group):
+            if group[0].chapter_number == 4:
+                raise TimeoutError()
+            return [
+                DetectedCharacter(
+                    name=f"角色{group[0].chapter_number}",
+                    role="主角",
+                    profile={},
+                    relationships={},
+                )
+            ]
+
+        monkeypatch.setattr(text_import_service, "_extract_character_group", fake_extract_character_group)
+
+        characters = await text_import_service._extract_characters(chapters)
+
+        assert [character.name for character in characters] == ["角色1"]
+
+    @pytest.mark.asyncio
+    async def test_extract_world_settings_keeps_partial_results_when_subgroups_fail(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=index,
+                title=f"第{index}章",
+                content="章节原文",
+                outline="章节章纲",
+            )
+            for index in range(1, 7)
+        ]
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+        monkeypatch.setattr(text_import_service, "ENTITY_GROUP_SIZE", 3)
+        monkeypatch.setattr(text_import_service, "ENTITY_EXTRACTION_BATCH_SIZE", 2)
+
+        async def fake_extract_world_setting_group(group, categories):
+            del categories
+            if group[0].chapter_number == 4:
+                raise TimeoutError()
+            return [
+                DetectedWorldSetting(
+                    category="technology",
+                    name=f"设定{group[0].chapter_number}",
+                    content="设定内容",
+                )
+            ]
+
+        monkeypatch.setattr(text_import_service, "_extract_world_setting_group", fake_extract_world_setting_group)
+
+        settings = await text_import_service._extract_world_settings(chapters)
+
+        assert [setting.name for setting in settings] == ["设定1"]
+
+    @pytest.mark.asyncio
     async def test_commit_creates_project_graph(self, db_session) -> None:
         preview = TextImportPreview(
             project_name="导入测试项目",

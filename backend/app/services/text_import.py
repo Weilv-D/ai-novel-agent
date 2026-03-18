@@ -64,9 +64,10 @@ class TextImportService:
     CHAPTER_OUTLINE_MAX_CHARS = 12000
     CHAPTER_OUTLINE_BATCH_SIZE = 4
     ENTITY_GROUP_SIZE = 5
+    ENTITY_EXTRACTION_BATCH_SIZE = 3
     ENTITY_SAMPLE_LIMIT = 60000
     LLM_TEXT_TIMEOUT_SECONDS = 20
-    LLM_JSON_TIMEOUT_SECONDS = 25
+    LLM_JSON_TIMEOUT_SECONDS = 60
 
     _CHAPTER_HEADING_RE = re.compile(
         r"^\s*(?:第(?P<cn_num>[零〇一二两三四五六七八九十百千\d]+)(?P<cn_unit>[章节回集篇部])|chapter\s+(?P<en_num>\d+))"
@@ -509,28 +510,22 @@ class TextImportService:
 
         groups = [chapters[index : index + self.ENTITY_GROUP_SIZE] for index in range(0, len(chapters), self.ENTITY_GROUP_SIZE)]
         candidates: list[DetectedCharacter] = []
-        for group in groups:
-            payload = await self._generate_json_payload(
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "你是中文小说人物策划编辑。请从提供的章纲和原文采样中提取关键角色，"
-                            "只返回 JSON 数组。每个元素字段为 name、role、profile、relationships。"
-                            "profile 和 relationships 必须是 JSON 对象。不要返回超过 8 个角色。"
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"章纲：\n{self._build_outline_block(group)}\n\n"
-                            f"原文采样：\n{self._build_text_sample(group, max_chars=15000)}"
-                        ),
-                    },
-                ],
-                expect="array",
+        failures: list[BaseException] = []
+        for start in range(0, len(groups), self.ENTITY_EXTRACTION_BATCH_SIZE):
+            batch = groups[start : start + self.ENTITY_EXTRACTION_BATCH_SIZE]
+            results = await asyncio.gather(
+                *(self._extract_character_group(group) for group in batch),
+                return_exceptions=True,
             )
-            candidates.extend(self._normalize_detected_characters(payload))
+            for result in results:
+                if isinstance(result, BaseException):
+                    logger.warning("Character extraction subgroup failed: %s", result)
+                    failures.append(result)
+                    continue
+                candidates.extend(result)
+
+        if not candidates and failures:
+            raise failures[0]
 
         return self._merge_characters(candidates)[:20]
 
@@ -555,30 +550,76 @@ class TextImportService:
         )
         groups = [chapters[index : index + self.ENTITY_GROUP_SIZE] for index in range(0, len(chapters), self.ENTITY_GROUP_SIZE)]
         candidates: list[DetectedWorldSetting] = []
-        for group in groups:
-            payload = await self._generate_json_payload(
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "你是中文小说世界观策划编辑。请从提供的章纲和原文采样中提取关键设定，"
-                            "只返回 JSON 数组。每个元素字段为 category、name、content。"
-                            f"category 必须从以下枚举中选择：{categories}。不要返回超过 6 个设定。"
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"章纲：\n{self._build_outline_block(group)}\n\n"
-                            f"原文采样：\n{self._build_text_sample(group, max_chars=15000)}"
-                        ),
-                    },
-                ],
-                expect="array",
+        failures: list[BaseException] = []
+        for start in range(0, len(groups), self.ENTITY_EXTRACTION_BATCH_SIZE):
+            batch = groups[start : start + self.ENTITY_EXTRACTION_BATCH_SIZE]
+            results = await asyncio.gather(
+                *(self._extract_world_setting_group(group, categories) for group in batch),
+                return_exceptions=True,
             )
-            candidates.extend(self._normalize_detected_world_settings(payload))
+            for result in results:
+                if isinstance(result, BaseException):
+                    logger.warning("World-setting extraction subgroup failed: %s", result)
+                    failures.append(result)
+                    continue
+                candidates.extend(result)
+
+        if not candidates and failures:
+            raise failures[0]
 
         return self._merge_world_settings(candidates)[:15]
+
+    async def _extract_character_group(self, chapters: Sequence[DetectedChapter]) -> list[DetectedCharacter]:
+        """Extract character candidates for a single chapter group."""
+        payload = await self._generate_json_payload(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是中文小说人物策划编辑。请从提供的章纲和原文采样中提取关键角色，"
+                        "只返回 JSON 数组。每个元素字段为 name、role、profile、relationships。"
+                        "profile 和 relationships 必须是 JSON 对象。不要返回超过 8 个角色。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"章纲：\n{self._build_outline_block(chapters)}\n\n"
+                        f"原文采样：\n{self._build_text_sample(chapters, max_chars=15000)}"
+                    ),
+                },
+            ],
+            expect="array",
+        )
+        return self._normalize_detected_characters(payload)
+
+    async def _extract_world_setting_group(
+        self,
+        chapters: Sequence[DetectedChapter],
+        categories: str,
+    ) -> list[DetectedWorldSetting]:
+        """Extract world-setting candidates for a single chapter group."""
+        payload = await self._generate_json_payload(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是中文小说世界观策划编辑。请从提供的章纲和原文采样中提取关键设定，"
+                        "只返回 JSON 数组。每个元素字段为 category、name、content。"
+                        f"category 必须从以下枚举中选择：{categories}。不要返回超过 6 个设定。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"章纲：\n{self._build_outline_block(chapters)}\n\n"
+                        f"原文采样：\n{self._build_text_sample(chapters, max_chars=15000)}"
+                    ),
+                },
+            ],
+            expect="array",
+        )
+        return self._normalize_detected_world_settings(payload)
 
     def _chunk_text(self, text: str, max_chars: int = 12000, overlap: int = 500) -> list[str]:
         """Split long text into overlapping chunks."""
