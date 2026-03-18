@@ -677,6 +677,8 @@ class TextImportService:
         volume_markers: list[_VolumeMarker] = []
         next_chapter_number = 1
         next_volume_number = 1
+        used_chapter_numbers: set[int] = set()
+        used_volume_numbers: set[int] = set()
 
         for line_index, line in enumerate(lines):
             stripped = line.strip()
@@ -685,7 +687,12 @@ class TextImportService:
 
             volume_match = self._match_volume_heading(stripped, has_markdown_chapters)
             if volume_match is not None:
-                volume_number = volume_match["number"] or next_volume_number
+                parsed_volume_number = volume_match["number"]
+                if parsed_volume_number is None or parsed_volume_number in used_volume_numbers:
+                    volume_number = next_volume_number
+                else:
+                    volume_number = parsed_volume_number
+                used_volume_numbers.add(volume_number)
                 next_volume_number = max(next_volume_number, volume_number + 1)
                 volume_markers.append(
                     _VolumeMarker(
@@ -698,7 +705,16 @@ class TextImportService:
 
             chapter_match = self._match_chapter_heading(stripped)
             if chapter_match is not None:
-                chapter_number = chapter_match["number"] or next_chapter_number
+                parsed_chapter_number = chapter_match["number"]
+                if (
+                    parsed_chapter_number is None
+                    or parsed_chapter_number in used_chapter_numbers
+                    or parsed_chapter_number < next_chapter_number
+                ):
+                    chapter_number = next_chapter_number
+                else:
+                    chapter_number = parsed_chapter_number
+                used_chapter_numbers.add(chapter_number)
                 next_chapter_number = max(next_chapter_number, chapter_number + 1)
                 chapter_markers.append(
                     _ChapterMarker(
@@ -717,9 +733,10 @@ class TextImportService:
             number = self._parse_heading_number(
                 chapter_match.group("cn_num") or chapter_match.group("en_num")
             )
+            title = self._clean_optional_text(chapter_match.group("title")) or line.strip()
             return {
                 "number": number,
-                "title": self._clean_optional_text(chapter_match.group("title")),
+                "title": title,
             }
 
         markdown_match = self._MARKDOWN_CHAPTER_RE.match(line)
@@ -739,17 +756,18 @@ class TextImportService:
                 or volume_match.group("cn_num_alt")
                 or volume_match.group("en_num")
             )
+            title = self._clean_optional_text(volume_match.group("title")) or line.strip()
             return {
                 "number": number,
-                "title": self._clean_optional_text(volume_match.group("title")),
+                "title": title,
             }
 
         if allow_markdown:
             markdown_match = self._MARKDOWN_VOLUME_RE.match(line)
             if markdown_match:
-                title = self._clean_optional_text(markdown_match.group("title"))
-                if title:
-                    return {"number": None, "title": title}
+                markdown_title = self._clean_optional_text(markdown_match.group("title"))
+                if markdown_title:
+                    return {"number": None, "title": markdown_title}
         return None
 
     def _parse_heading_number(self, value: str | None) -> int | None:

@@ -58,6 +58,25 @@ class TestTextImportService:
         assert volumes[1].volume_number == 2
         assert volumes[1].chapter_numbers == [3]
 
+    def test_split_chapters_renumbers_restarted_headings(self) -> None:
+        text = (
+            "第一章 初入江湖\n"
+            "章一内容\n\n"
+            "第二章 夜探山庄\n"
+            "章二内容\n\n"
+            "第一部\n"
+            "部一内容\n\n"
+            "第二部\n"
+            "部二内容\n"
+        )
+
+        chapters = text_import_service._split_chapters(text)
+
+        assert [chapter.chapter_number for chapter in chapters] == [1, 2, 3, 4]
+        assert [chapter.title for chapter in chapters] == ["初入江湖", "夜探山庄", "第一部", "第二部"]
+        assert "部一内容" in chapters[2].content
+        assert "部二内容" in chapters[3].content
+
     def test_chunk_text_creates_overlap(self) -> None:
         text = "0123456789" * 40
         chunks = text_import_service._chunk_text(text, max_chars=80, overlap=10)
