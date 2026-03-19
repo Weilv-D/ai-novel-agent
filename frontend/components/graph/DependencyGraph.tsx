@@ -315,6 +315,7 @@ export function DependencyGraph({ projectId }: DependencyGraphProps) {
             <ReactFlow
               nodes={graph.nodes}
               edges={graph.edges}
+              style={{ width: "100%", height: "100%" }}
               fitView
               fitViewOptions={{ padding: 0.18 }}
               minZoom={0.3}

@@ -78,6 +78,8 @@ test.describe("E2E 测试套件", () => {
       await authenticatedPage.goto(`/projects/${testProjectId}/relationships`);
 
       await expect(authenticatedPage.getByText("人物关系网络", { exact: true })).toBeVisible();
+      await expect(authenticatedPage.getByRole("button", { name: "放大" })).toBeVisible();
+      await expect(authenticatedPage.getByRole("button", { name: "居中" })).toBeVisible();
       await expect(authenticatedPage.getByText("同行者", { exact: true })).toBeVisible();
       await expect(authenticatedPage.getByText("待补人物", { exact: true })).toHaveCount(0);
       await expect(authenticatedPage.getByText("人物 2", { exact: true })).toBeVisible();
