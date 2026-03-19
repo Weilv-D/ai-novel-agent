@@ -6,6 +6,7 @@ Provides methods for:
 - Streaming responses
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Any, Literal, TypedDict, cast, overload
@@ -96,6 +97,7 @@ class LLMService:
 
         self._client: AsyncOpenAI | None = None
         self._embedding_client: AsyncOpenAI | None = None
+        self._generate_semaphore = asyncio.Semaphore(1)
 
     @property
     def client(self) -> AsyncOpenAI:
@@ -229,7 +231,8 @@ class LLMService:
             )
 
         try:
-            response = await _do_generate()
+            async with self._generate_semaphore:
+                response = await _do_generate()
 
             if stream:
                 # Return streaming response for async handling

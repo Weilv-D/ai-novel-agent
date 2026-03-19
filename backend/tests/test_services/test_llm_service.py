@@ -1,5 +1,6 @@
 """Tests for LLM service."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -274,6 +275,43 @@ class TestLLMServiceGenerate:
                     mock_set.assert_awaited_once()
                     assert mock_set.await_args.kwargs["ttl"] == service.CACHE_TTL_SECONDS
                     assert mock_set.await_args.args[0].startswith("llm:")
+
+    @pytest.mark.asyncio
+    async def test_generate_serializes_concurrent_requests(self) -> None:
+        """Test concurrent generate() calls enter the OpenAI client sequentially."""
+        service = LLMService(api_key="test-key")
+        active_calls = 0
+        peak_concurrency = 0
+
+        async def fake_create(**kwargs):
+            del kwargs
+            nonlocal active_calls, peak_concurrency
+            active_calls += 1
+            peak_concurrency = max(peak_concurrency, active_calls)
+            await asyncio.sleep(0.01)
+            active_calls -= 1
+
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = "Generated text"
+            mock_response.model = "gpt-4o-mini"
+            mock_response.usage.prompt_tokens = 10
+            mock_response.usage.completion_tokens = 20
+            mock_response.usage.total_tokens = 30
+            return mock_response
+
+        mock_client = MockAsyncOpenAI(api_key="test-key", base_url="https://api.openai.com/v1")
+        mock_client.chat.completions.create = AsyncMock(side_effect=fake_create)
+
+        with patch("app.services.llm.AsyncOpenAI", return_value=mock_client):
+            with patch("app.services.llm.cache_service.get", new_callable=AsyncMock) as mock_get:
+                mock_get.return_value = None
+                await asyncio.gather(
+                    service.generate([{"role": "user", "content": "one"}]),
+                    service.generate([{"role": "user", "content": "two"}]),
+                )
+
+        assert peak_concurrency == 1
 
 
 class TestLLMServiceEmbed:

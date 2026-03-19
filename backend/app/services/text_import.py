@@ -87,6 +87,16 @@ class _HeuristicEntityEvidence:
     samples: list[str] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class _ImportAnalysisPlan:
+    large_mode: bool
+    sampled_chapter_numbers: set[int]
+    sampled_chapters: list[DetectedChapter]
+    entity_group_limit: int
+    character_refine_limit: int | None
+    world_setting_refine_limit: int | None
+
+
 class TextImportService:
     """Analyze uploaded text and commit a structured project preview."""
 
@@ -117,9 +127,18 @@ class TextImportService:
     HEURISTIC_CHARACTER_LIMIT = 18
     HEURISTIC_WORLD_SETTING_LIMIT = 12
     MIN_DETAIL_TEXT_CHARS = 48
+    LARGE_IMPORT_CHAPTER_THRESHOLD = 120
+    LARGE_IMPORT_CHAR_THRESHOLD = 500000
+    LARGE_IMPORT_SAMPLE_BUDGET = 48
+    LARGE_IMPORT_ENTITY_GROUP_LIMIT = 12
+    LARGE_IMPORT_CHARACTER_REFINEMENT_LIMIT = 8
+    LARGE_IMPORT_WORLD_SETTING_REFINEMENT_LIMIT = 6
+    FAST_CHAPTER_OUTLINE_CHARS = 150
 
     _CHAPTER_HEADING_RE = re.compile(
-        r"^\s*(?:第(?P<cn_num>[零〇一二两三四五六七八九十百千\d]+)(?P<cn_unit>[章节回集篇部])|chapter\s+(?P<en_num>\d+))"
+        r"^\s*(?:[\[【(（]\s*)?"
+        r"(?:第\s*(?P<cn_num>[零〇一二两三四五六七八九十百千万\d\s]+)\s*(?P<cn_unit>[章节回集篇部话])|chapter\s+(?P<en_num>\d+))"
+        r"\s*(?:[\]】)）])?"
         r"(?:\s*[：:、.\-]\s*|\s+)?(?P<title>.*)$",
         re.IGNORECASE,
     )
@@ -130,6 +149,14 @@ class TextImportService:
     )
     _MARKDOWN_CHAPTER_RE = re.compile(r"^\s*##+\s+(?P<title>.+?)\s*$")
     _MARKDOWN_VOLUME_RE = re.compile(r"^\s*#\s+(?P<title>.+?)\s*$")
+    _CHAPTER_PREFIX_RE = re.compile(
+        r"^\s*(?:(?:[\[【(（]\s*)?(?:正文|vip|免费|番外)\s*(?:[\]】)）]\s*)?)+",
+        re.IGNORECASE,
+    )
+    _LEADING_VOLUME_PREFIX_RE = re.compile(
+        r"^\s*(?:第\s*[零〇一二两三四五六七八九十百千万\d\s]+\s*卷|卷\s*[零〇一二两三四五六七八九十百千万\d\s]+)\s+",
+        re.IGNORECASE,
+    )
     _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
     _HEURISTIC_SENTENCE_SPLIT_RE = re.compile(r"[。！？!?；;\n]+")
     _CHARACTER_CONTEXT_PATTERNS = (
@@ -352,29 +379,43 @@ class TextImportService:
             },
         )
 
+        analysis_plan = self._build_import_analysis_plan(preview.chapters, preview.volumes)
+        if analysis_plan.large_mode:
+            self._append_warning(preview, "文本体量较大，已启用大文件采样章纲模式。")
+            self._append_warning(preview, "未采样章节已自动填充快速章纲，导入后可再逐章优化。")
+            self._append_warning(preview, "大文件模式下会优先保障结构识别与整体摘要稳定性。")
+            for chapter in preview.chapters:
+                chapter.outline = self._fallback_chapter_outline(
+                    chapter,
+                    max_chars=self.FAST_CHAPTER_OUTLINE_CHARS,
+                )
+
         outline_warnings = 0
-        total_chapters = max(len(preview.chapters), 1)
-        for start in range(0, len(preview.chapters), self.CHAPTER_OUTLINE_BATCH_SIZE):
-            batch = preview.chapters[start : start + self.CHAPTER_OUTLINE_BATCH_SIZE]
-            results = await asyncio.gather(
-                *(self._generate_chapter_outline(chapter) for chapter in batch),
+        outline_targets = analysis_plan.sampled_chapters if analysis_plan.large_mode else list(preview.chapters)
+        total_outline_targets = max(len(outline_targets), 1)
+        for completed, chapter in enumerate(outline_targets, start=1):
+            outline = await self._generate_chapter_outline(
+                chapter,
+                use_excerpt_only=analysis_plan.large_mode,
             )
-            for chapter, outline in zip(batch, results, strict=True):
-                if outline.used_fallback:
-                    outline_warnings += 1
-                chapter.outline = outline.content
-            completed = start + len(batch)
+            if outline.used_fallback:
+                outline_warnings += 1
+            chapter.outline = outline.content
             yield TextImportProgress(
                 phase="outline_extraction",
-                progress=0.15 + 0.40 * (completed / total_chapters),
-                message=f"已生成 {completed}/{len(preview.chapters)} 个章纲",
+                progress=0.15 + 0.40 * (completed / total_outline_targets),
+                message=(
+                    f"已生成 {completed}/{len(outline_targets)} 个采样章纲（全书 {len(preview.chapters)} 章）"
+                    if analysis_plan.large_mode
+                    else f"已生成 {completed}/{len(preview.chapters)} 个章纲"
+                ),
             )
 
         if outline_warnings:
             self._append_warning(preview, f"{outline_warnings} 个章纲使用了启发式摘要兜底。")
 
         summary_result = await self._generate_project_summary(
-            preview.chapters,
+            analysis_plan.sampled_chapters if analysis_plan.large_mode else preview.chapters,
             project_name=preview.project_name,
             genre=preview.genre,
         )
@@ -384,7 +425,11 @@ class TextImportService:
         if summary_result["used_fallback"]:
             self._append_warning(preview, "项目摘要与总纲未能完整调用 LLM，已使用启发式摘要兜底。")
 
-        generated_volume_outlines = await self._generate_volume_outlines(preview.volumes, preview.chapters)
+        generated_volume_outlines = await self._generate_volume_outlines(
+            preview.volumes,
+            preview.chapters,
+            sampled_chapter_numbers=analysis_plan.sampled_chapter_numbers if analysis_plan.large_mode else None,
+        )
         for volume, volume_outline in zip(preview.volumes, generated_volume_outlines, strict=True):
             volume.outline = volume_outline
 
@@ -398,11 +443,15 @@ class TextImportService:
             },
         )
 
-        if self._will_sample_entity_groups(preview.chapters):
+        if self._will_sample_entity_groups(preview.chapters, group_limit=analysis_plan.entity_group_limit):
             self._append_warning(preview, "文本体量较大，角色与世界观抽取已启用代表章节采样。")
 
         try:
-            preview.characters = await self._extract_characters(preview.chapters)
+            preview.characters = await self._extract_characters(
+                preview.chapters,
+                group_limit=analysis_plan.entity_group_limit,
+                refine_limit=analysis_plan.character_refine_limit,
+            )
             yield TextImportProgress(
                 phase="character_extraction",
                 progress=0.80,
@@ -421,7 +470,11 @@ class TextImportService:
             )
 
         try:
-            preview.world_settings = await self._extract_world_settings(preview.chapters)
+            preview.world_settings = await self._extract_world_settings(
+                preview.chapters,
+                group_limit=analysis_plan.entity_group_limit,
+                refine_limit=analysis_plan.world_setting_refine_limit,
+            )
             yield TextImportProgress(
                 phase="world_setting_extraction",
                 progress=0.95,
@@ -990,18 +1043,136 @@ class TextImportService:
             return False
         return self._normalize_text(previous.chapter.content) == self._normalize_text(current.chapter.content)
 
-    async def _generate_chapter_outline(self, chapter: DetectedChapter) -> _OutlineResult:
+    def _is_large_import(self, chapters: Sequence[DetectedChapter]) -> bool:
+        """Return whether the import should use sampled-outline mode."""
+        if len(chapters) > self.LARGE_IMPORT_CHAPTER_THRESHOLD:
+            return True
+        total_chars = sum(len(chapter.content) for chapter in chapters)
+        return total_chars > self.LARGE_IMPORT_CHAR_THRESHOLD
+
+    def _build_import_analysis_plan(
+        self,
+        chapters: Sequence[DetectedChapter],
+        volumes: Sequence[DetectedVolume],
+    ) -> _ImportAnalysisPlan:
+        """Build the deterministic sampling plan for one import run."""
+        if not chapters:
+            return _ImportAnalysisPlan(
+                large_mode=False,
+                sampled_chapter_numbers=set(),
+                sampled_chapters=[],
+                entity_group_limit=self.ENTITY_GROUP_LIMIT,
+                character_refine_limit=None,
+                world_setting_refine_limit=None,
+            )
+
+        if not self._is_large_import(chapters):
+            all_numbers = {chapter.chapter_number for chapter in chapters}
+            return _ImportAnalysisPlan(
+                large_mode=False,
+                sampled_chapter_numbers=all_numbers,
+                sampled_chapters=list(chapters),
+                entity_group_limit=self.ENTITY_GROUP_LIMIT,
+                character_refine_limit=None,
+                world_setting_refine_limit=None,
+            )
+
+        sampled_chapters = self._select_outline_sample_chapters(chapters, volumes)
+        sampled_numbers = {chapter.chapter_number for chapter in sampled_chapters}
+        return _ImportAnalysisPlan(
+            large_mode=True,
+            sampled_chapter_numbers=sampled_numbers,
+            sampled_chapters=sampled_chapters,
+            entity_group_limit=self.LARGE_IMPORT_ENTITY_GROUP_LIMIT,
+            character_refine_limit=self.LARGE_IMPORT_CHARACTER_REFINEMENT_LIMIT,
+            world_setting_refine_limit=self.LARGE_IMPORT_WORLD_SETTING_REFINEMENT_LIMIT,
+        )
+
+    def _select_outline_sample_chapters(
+        self,
+        chapters: Sequence[DetectedChapter],
+        volumes: Sequence[DetectedVolume],
+    ) -> list[DetectedChapter]:
+        """Select a stable subset of chapters for large-import outline generation."""
+        if not chapters:
+            return []
+
+        chapter_map = {chapter.chapter_number: chapter for chapter in chapters}
+        selected_numbers: list[int] = []
+
+        def add_chapter_number(number: int | None) -> None:
+            if number is None or number not in chapter_map or number in selected_numbers:
+                return
+            if len(selected_numbers) >= self.LARGE_IMPORT_SAMPLE_BUDGET:
+                return
+            selected_numbers.append(number)
+
+        anchor_indexes = {0, len(chapters) // 2, len(chapters) - 1}
+        for index in sorted(anchor_indexes):
+            add_chapter_number(chapters[index].chapter_number)
+
+        if len(selected_numbers) < self.LARGE_IMPORT_SAMPLE_BUDGET:
+            for volume in volumes:
+                if len(selected_numbers) >= self.LARGE_IMPORT_SAMPLE_BUDGET:
+                    break
+                if volume.chapter_numbers:
+                    add_chapter_number(volume.chapter_numbers[0])
+                    add_chapter_number(volume.chapter_numbers[-1])
+
+        remaining_budget = self.LARGE_IMPORT_SAMPLE_BUDGET - len(selected_numbers)
+        if remaining_budget > 0:
+            total_positions = min(len(chapters), remaining_budget)
+            if total_positions == 1:
+                candidate_indexes = [len(chapters) // 2]
+            else:
+                candidate_indexes = [
+                    round((len(chapters) - 1) * position / max(total_positions - 1, 1))
+                    for position in range(total_positions)
+                ]
+            for index in candidate_indexes:
+                add_chapter_number(chapters[index].chapter_number)
+
+        if not selected_numbers:
+            selected_numbers.append(chapters[0].chapter_number)
+
+        return [chapter_map[number] for number in sorted(selected_numbers)]
+
+    def _select_sampled_volume_chapters(
+        self,
+        volume: DetectedVolume,
+        chapter_map: dict[int, DetectedChapter],
+        *,
+        sampled_chapter_numbers: set[int] | None,
+    ) -> list[DetectedChapter]:
+        """Choose sampled chapters for one volume, with a first-chapter fallback."""
+        scoped = [chapter_map[number] for number in volume.chapter_numbers if number in chapter_map]
+        if not scoped:
+            return []
+        if not sampled_chapter_numbers:
+            return scoped
+        sampled = [chapter for chapter in scoped if chapter.chapter_number in sampled_chapter_numbers]
+        return sampled or scoped[:1]
+
+    async def _generate_chapter_outline(
+        self,
+        chapter: DetectedChapter,
+        *,
+        use_excerpt_only: bool = False,
+    ) -> _OutlineResult:
         """Generate a short outline for a chapter, with heuristic fallback."""
         if not self._llm_ready():
             return _OutlineResult(self._fallback_chapter_outline(chapter), True)
 
         try:
-            chapter_text = chapter.content
-            if len(chapter_text) > self.CHAPTER_OUTLINE_MAX_CHARS:
-                chunk_summaries = await asyncio.gather(
-                    *(self._summarize_chunk(chunk) for chunk in self._chunk_text(chapter_text))
-                )
-                chapter_text = "\n".join(chunk_summaries)
+            if use_excerpt_only:
+                chapter_text = self._sample_text(chapter.content, self.CHAPTER_OUTLINE_MAX_CHARS)
+            else:
+                chapter_text = chapter.content
+                if len(chapter_text) > self.CHAPTER_OUTLINE_MAX_CHARS:
+                    chunk_summaries: list[str] = []
+                    for chunk in self._chunk_text(chapter_text):
+                        chunk_summaries.append(await self._summarize_chunk(chunk))
+                    chapter_text = "\n".join(chunk_summaries)
 
             response = await asyncio.wait_for(
                 self.llm.generate(
@@ -1094,7 +1265,13 @@ class TextImportService:
             "used_fallback": True,
         }
 
-    async def _extract_characters(self, chapters: Sequence[DetectedChapter]) -> list[DetectedCharacter]:
+    async def _extract_characters(
+        self,
+        chapters: Sequence[DetectedChapter],
+        *,
+        group_limit: int | None = None,
+        refine_limit: int | None = None,
+    ) -> list[DetectedCharacter]:
         """Extract key characters from chapter outlines and samples."""
         if not chapters:
             return []
@@ -1103,39 +1280,42 @@ class TextImportService:
 
         heuristic_candidates = self._extract_characters_heuristic(chapters)
 
-        groups = self._select_entity_groups(self._build_entity_groups(chapters))
+        groups = self._select_entity_groups(
+            self._build_entity_groups(chapters),
+            group_limit=group_limit,
+        )
         candidates: list[DetectedCharacter] = []
         failures: list[BaseException] = []
-        for start in range(0, len(groups), self.ENTITY_EXTRACTION_BATCH_SIZE):
-            batch = groups[start : start + self.ENTITY_EXTRACTION_BATCH_SIZE]
-            results = await asyncio.gather(
-                *(self._extract_character_group(group) for group in batch),
-                return_exceptions=True,
-            )
-            for group, result in zip(batch, results, strict=True):
-                if isinstance(result, BaseException):
-                    logger.warning("Character extraction subgroup failed: %s", result)
-                    try:
-                        fallback_result = await self._extract_character_group(
-                            group,
-                            include_text_sample=False,
-                            max_characters=5,
-                            sample_chars=self.ENTITY_RETRY_SAMPLE_CHARS,
-                            max_tokens=900,
-                        )
-                    except Exception as retry_exc:
-                        logger.warning("Character extraction subgroup retry failed: %s", retry_exc)
-                        failures.append(retry_exc)
-                    else:
-                        candidates.extend(fallback_result)
-                    continue
-                candidates.extend(result)
+        for group in groups:
+            try:
+                result = await self._extract_character_group(group)
+            except Exception as exc:
+                logger.warning("Character extraction subgroup failed: %s", exc)
+                try:
+                    fallback_result = await self._extract_character_group(
+                        group,
+                        include_text_sample=False,
+                        max_characters=5,
+                        sample_chars=self.ENTITY_RETRY_SAMPLE_CHARS,
+                        max_tokens=900,
+                    )
+                except Exception as retry_exc:
+                    logger.warning("Character extraction subgroup retry failed: %s", retry_exc)
+                    failures.append(retry_exc)
+                else:
+                    candidates.extend(fallback_result)
+                continue
+            candidates.extend(result)
 
         if not candidates:
             outline_candidates = await self._extract_characters_from_outline_digest(chapters)
             if outline_candidates:
                 merged = self._merge_characters([*outline_candidates, *heuristic_candidates])[:20]
-                refined = await self._refine_character_cards(merged, chapters)
+                refined = await self._refine_character_cards(
+                    merged,
+                    chapters,
+                    limit=refine_limit,
+                )
                 return self._backfill_character_relationships(self._enrich_characters(refined, chapters), chapters)
             if failures:
                 raise failures[0]
@@ -1145,10 +1325,20 @@ class TextImportService:
         if len(candidates) < 4 or all(not character.profile for character in candidates):
             merged_candidates.extend(heuristic_candidates)
         merged = self._merge_characters(merged_candidates)[:20]
-        refined = await self._refine_character_cards(merged, chapters)
+        refined = await self._refine_character_cards(
+            merged,
+            chapters,
+            limit=refine_limit,
+        )
         return self._backfill_character_relationships(self._enrich_characters(refined, chapters), chapters)
 
-    async def _extract_world_settings(self, chapters: Sequence[DetectedChapter]) -> list[DetectedWorldSetting]:
+    async def _extract_world_settings(
+        self,
+        chapters: Sequence[DetectedChapter],
+        *,
+        group_limit: int | None = None,
+        refine_limit: int | None = None,
+    ) -> list[DetectedWorldSetting]:
         """Extract key world settings from chapter outlines and samples."""
         if not chapters:
             return []
@@ -1170,40 +1360,43 @@ class TextImportService:
             ]
         )
         heuristic_candidates = self._extract_world_settings_heuristic(chapters)
-        groups = self._select_entity_groups(self._build_entity_groups(chapters))
+        groups = self._select_entity_groups(
+            self._build_entity_groups(chapters),
+            group_limit=group_limit,
+        )
         candidates: list[DetectedWorldSetting] = []
         failures: list[BaseException] = []
-        for start in range(0, len(groups), self.ENTITY_EXTRACTION_BATCH_SIZE):
-            batch = groups[start : start + self.ENTITY_EXTRACTION_BATCH_SIZE]
-            results = await asyncio.gather(
-                *(self._extract_world_setting_group(group, categories) for group in batch),
-                return_exceptions=True,
-            )
-            for group, result in zip(batch, results, strict=True):
-                if isinstance(result, BaseException):
-                    logger.warning("World-setting extraction subgroup failed: %s", result)
-                    try:
-                        fallback_result = await self._extract_world_setting_group(
-                            group,
-                            categories,
-                            include_text_sample=False,
-                            max_items=4,
-                            sample_chars=self.ENTITY_RETRY_SAMPLE_CHARS,
-                            max_tokens=900,
-                        )
-                    except Exception as retry_exc:
-                        logger.warning("World-setting extraction subgroup retry failed: %s", retry_exc)
-                        failures.append(retry_exc)
-                    else:
-                        candidates.extend(fallback_result)
-                    continue
-                candidates.extend(result)
+        for group in groups:
+            try:
+                result = await self._extract_world_setting_group(group, categories)
+            except Exception as exc:
+                logger.warning("World-setting extraction subgroup failed: %s", exc)
+                try:
+                    fallback_result = await self._extract_world_setting_group(
+                        group,
+                        categories,
+                        include_text_sample=False,
+                        max_items=4,
+                        sample_chars=self.ENTITY_RETRY_SAMPLE_CHARS,
+                        max_tokens=900,
+                    )
+                except Exception as retry_exc:
+                    logger.warning("World-setting extraction subgroup retry failed: %s", retry_exc)
+                    failures.append(retry_exc)
+                else:
+                    candidates.extend(fallback_result)
+                continue
+            candidates.extend(result)
 
         if not candidates:
             outline_candidates = await self._extract_world_settings_from_outline_digest(chapters, categories)
             if outline_candidates:
                 merged = self._merge_world_settings([*outline_candidates, *heuristic_candidates])[:15]
-                refined = await self._refine_world_settings(merged, chapters)
+                refined = await self._refine_world_settings(
+                    merged,
+                    chapters,
+                    limit=refine_limit,
+                )
                 return self._enrich_world_settings(refined, chapters)
             if failures:
                 raise failures[0]
@@ -1213,7 +1406,11 @@ class TextImportService:
         if len(candidates) < 4 or any(len(setting.content.strip()) < self.MIN_DETAIL_TEXT_CHARS for setting in candidates):
             merged_candidates.extend(heuristic_candidates)
         merged = self._merge_world_settings(merged_candidates)[:15]
-        refined = await self._refine_world_settings(merged, chapters)
+        refined = await self._refine_world_settings(
+            merged,
+            chapters,
+            limit=refine_limit,
+        )
         return self._enrich_world_settings(refined, chapters)
 
     async def _extract_character_group(
@@ -1475,42 +1672,48 @@ class TextImportService:
         self,
         candidates: Sequence[DetectedCharacter],
         chapters: Sequence[DetectedChapter],
+        *,
+        limit: int | None = None,
     ) -> list[DetectedCharacter]:
         """Refine merged character candidates into detailed cards."""
         if not candidates or not self._llm_ready():
             return list(candidates)
-        results = await asyncio.gather(
-            *(self._refine_character_card(candidate, chapters) for candidate in candidates),
-            return_exceptions=True,
-        )
+        scoped_candidates = list(candidates[:limit]) if limit is not None else list(candidates)
         refined: list[DetectedCharacter] = []
-        for candidate, result in zip(candidates, results, strict=True):
-            if isinstance(result, BaseException):
-                logger.warning("Character refinement task failed for %s: %s", candidate.name, result)
+        for candidate in scoped_candidates:
+            try:
+                result = await self._refine_character_card(candidate, chapters)
+            except Exception as exc:
+                logger.warning("Character refinement task failed for %s: %s", candidate.name, exc)
                 refined.append(candidate)
                 continue
             refined.append(result)
+        if limit is not None and len(candidates) > limit:
+            refined.extend(list(candidates[limit:]))
         return refined
 
     async def _refine_world_settings(
         self,
         candidates: Sequence[DetectedWorldSetting],
         chapters: Sequence[DetectedChapter],
+        *,
+        limit: int | None = None,
     ) -> list[DetectedWorldSetting]:
         """Refine merged world-setting candidates into detailed cards."""
         if not candidates or not self._llm_ready():
             return list(candidates)
-        results = await asyncio.gather(
-            *(self._refine_world_setting(candidate, chapters) for candidate in candidates),
-            return_exceptions=True,
-        )
+        scoped_candidates = list(candidates[:limit]) if limit is not None else list(candidates)
         refined: list[DetectedWorldSetting] = []
-        for candidate, result in zip(candidates, results, strict=True):
-            if isinstance(result, BaseException):
-                logger.warning("World-setting refinement task failed for %s: %s", candidate.name, result)
+        for candidate in scoped_candidates:
+            try:
+                result = await self._refine_world_setting(candidate, chapters)
+            except Exception as exc:
+                logger.warning("World-setting refinement task failed for %s: %s", candidate.name, exc)
                 refined.append(candidate)
                 continue
             refined.append(result)
+        if limit is not None and len(candidates) > limit:
+            refined.extend(list(candidates[limit:]))
         return refined
 
     def _chunk_text(self, text: str, max_chars: int = 12000, overlap: int = 500) -> list[str]:
@@ -1563,12 +1766,18 @@ class TextImportService:
         self,
         volumes: Sequence[DetectedVolume],
         chapters: Sequence[DetectedChapter],
+        *,
+        sampled_chapter_numbers: set[int] | None = None,
     ) -> list[str | None]:
         """Generate or derive volume outlines from grouped chapter outlines."""
         chapter_map = {chapter.chapter_number: chapter for chapter in chapters}
         outlines: list[str | None] = []
         for volume in volumes:
-            scoped = [chapter_map[number] for number in volume.chapter_numbers if number in chapter_map]
+            scoped = self._select_sampled_volume_chapters(
+                volume,
+                chapter_map,
+                sampled_chapter_numbers=sampled_chapter_numbers,
+            )
             if not scoped:
                 outlines.append(None)
                 continue
@@ -1619,24 +1828,6 @@ class TextImportService:
             if not stripped:
                 continue
 
-            volume_match = self._match_volume_heading(stripped, has_markdown_chapters)
-            if volume_match is not None:
-                parsed_volume_number = volume_match["number"]
-                if parsed_volume_number is None or parsed_volume_number in used_volume_numbers:
-                    volume_number = next_volume_number
-                else:
-                    volume_number = parsed_volume_number
-                used_volume_numbers.add(volume_number)
-                next_volume_number = max(next_volume_number, volume_number + 1)
-                volume_markers.append(
-                    _VolumeMarker(
-                        volume_number=volume_number,
-                        title=volume_match["title"],
-                        line_index=line_index,
-                    )
-                )
-                continue
-
             chapter_match = self._match_chapter_heading(stripped)
             if chapter_match is not None:
                 parsed_chapter_number = chapter_match["number"]
@@ -1657,21 +1848,40 @@ class TextImportService:
                         line_index=line_index,
                     )
                 )
+                continue
+
+            volume_match = self._match_volume_heading(stripped, has_markdown_chapters)
+            if volume_match is not None:
+                parsed_volume_number = volume_match["number"]
+                if parsed_volume_number is None or parsed_volume_number in used_volume_numbers:
+                    volume_number = next_volume_number
+                else:
+                    volume_number = parsed_volume_number
+                used_volume_numbers.add(volume_number)
+                next_volume_number = max(next_volume_number, volume_number + 1)
+                volume_markers.append(
+                    _VolumeMarker(
+                        volume_number=volume_number,
+                        title=volume_match["title"],
+                        line_index=line_index,
+                    )
+                )
 
         return chapter_markers, volume_markers
 
     def _match_chapter_heading(self, line: str) -> dict[str, Any] | None:
         """Match a line as a chapter heading."""
-        chapter_match = self._CHAPTER_HEADING_RE.match(line)
-        if chapter_match:
-            number = self._parse_heading_number(
-                chapter_match.group("cn_num") or chapter_match.group("en_num")
-            )
-            title = self._clean_optional_text(chapter_match.group("title")) or line.strip()
-            return {
-                "number": number,
-                "title": title,
-            }
+        for candidate in self._iter_chapter_heading_candidates(line):
+            chapter_match = self._CHAPTER_HEADING_RE.match(candidate)
+            if chapter_match:
+                number = self._parse_heading_number(
+                    chapter_match.group("cn_num") or chapter_match.group("en_num")
+                )
+                title = self._clean_optional_text(chapter_match.group("title")) or candidate.strip()
+                return {
+                    "number": number,
+                    "title": title,
+                }
 
         markdown_match = self._MARKDOWN_CHAPTER_RE.match(line)
         if markdown_match:
@@ -1680,6 +1890,26 @@ class TextImportService:
                 "title": self._clean_optional_text(markdown_match.group("title")),
             }
         return None
+
+    def _iter_chapter_heading_candidates(self, line: str) -> list[str]:
+        """Build ordered heading candidates before chapter matching."""
+        normalized = re.sub(r"\s+", " ", line.strip())
+        if not normalized:
+            return []
+
+        candidates: list[str] = []
+
+        def append_candidate(candidate: str) -> None:
+            cleaned = candidate.strip()
+            if cleaned and cleaned not in candidates:
+                candidates.append(cleaned)
+
+        append_candidate(normalized)
+        stripped_prefix = self._CHAPTER_PREFIX_RE.sub("", normalized).strip()
+        append_candidate(stripped_prefix)
+        stripped_volume_prefix = self._LEADING_VOLUME_PREFIX_RE.sub("", stripped_prefix or normalized).strip()
+        append_candidate(stripped_volume_prefix)
+        return candidates
 
     def _match_volume_heading(self, line: str, allow_markdown: bool) -> dict[str, Any] | None:
         """Match a line as a volume heading."""
@@ -1708,6 +1938,7 @@ class TextImportService:
         """Parse Arabic or Chinese numerals from heading markers."""
         if not value:
             return None
+        value = re.sub(r"\s+", "", value)
         if value.isdigit():
             return int(value)
 
@@ -1814,9 +2045,9 @@ class TextImportService:
             preview.failed_phases.append(phase)
         self._append_warning(preview, warning)
 
-    def _fallback_chapter_outline(self, chapter: DetectedChapter) -> str:
+    def _fallback_chapter_outline(self, chapter: DetectedChapter, *, max_chars: int = 180) -> str:
         """Build a deterministic fallback outline from chapter content."""
-        snippet = self._sample_text(chapter.content, 180)
+        snippet = self._sample_text(chapter.content, max_chars)
         title = chapter.title or f"第{chapter.chapter_number}章"
         return f"{title}：{snippet}"
 
@@ -2446,22 +2677,34 @@ class TextImportService:
         """Group chapters for entity extraction prompts."""
         return [list(chapters[index : index + self.ENTITY_GROUP_SIZE]) for index in range(0, len(chapters), self.ENTITY_GROUP_SIZE)]
 
-    def _will_sample_entity_groups(self, chapters: Sequence[DetectedChapter]) -> bool:
+    def _will_sample_entity_groups(
+        self,
+        chapters: Sequence[DetectedChapter],
+        *,
+        group_limit: int | None = None,
+    ) -> bool:
         """Whether entity extraction will sample chapter groups for scale control."""
-        return len(self._build_entity_groups(chapters)) > self.ENTITY_GROUP_LIMIT
+        resolved_limit = self.ENTITY_GROUP_LIMIT if group_limit is None else group_limit
+        return len(self._build_entity_groups(chapters)) > resolved_limit
 
-    def _select_entity_groups(self, groups: Sequence[list[DetectedChapter]]) -> list[list[DetectedChapter]]:
+    def _select_entity_groups(
+        self,
+        groups: Sequence[list[DetectedChapter]],
+        *,
+        group_limit: int | None = None,
+    ) -> list[list[DetectedChapter]]:
         """Select representative entity groups when the novel is very large."""
-        if len(groups) <= self.ENTITY_GROUP_LIMIT:
+        resolved_limit = self.ENTITY_GROUP_LIMIT if group_limit is None else group_limit
+        if len(groups) <= resolved_limit:
             return list(groups)
 
-        if self.ENTITY_GROUP_LIMIT <= 1:
+        if resolved_limit <= 1:
             return [list(groups[0])]
 
         selected_indexes: set[int] = set()
         max_index = len(groups) - 1
-        for position in range(self.ENTITY_GROUP_LIMIT):
-            raw_index = round((max_index * position) / (self.ENTITY_GROUP_LIMIT - 1))
+        for position in range(resolved_limit):
+            raw_index = round((max_index * position) / (resolved_limit - 1))
             selected_indexes.add(raw_index)
         return [list(groups[index]) for index in sorted(selected_indexes)]
 

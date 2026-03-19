@@ -53,6 +53,40 @@ class TestTextImportService:
         assert chapters[1].chapter_number == 2
         assert chapters[1].title == "夜宿客栈"
 
+    @pytest.mark.parametrize(
+        ("heading", "expected_number", "expected_title"),
+        [
+            ("第 12 章 山门初开", 12, "山门初开"),
+            ("第001章 山门初开", 1, "山门初开"),
+            ("【第12章】风雪夜归", 12, "风雪夜归"),
+            ("[Chapter 12] Snow Night", 12, "Snow Night"),
+            ("Chapter 001 - Arrival", 1, "Arrival"),
+            ("正文 第12章 山门初开", 12, "山门初开"),
+        ],
+    )
+    def test_split_chapters_supports_extended_heading_formats(
+        self,
+        heading: str,
+        expected_number: int,
+        expected_title: str,
+    ) -> None:
+        text = f"{heading}\n章节内容"
+
+        chapters = text_import_service._split_chapters(text)
+
+        assert len(chapters) == 1
+        assert chapters[0].chapter_number == expected_number
+        assert chapters[0].title == expected_title
+
+    def test_split_chapters_prioritizes_chapter_match_over_leading_volume_prefix(self) -> None:
+        text = "第一卷 第十章 风起\n章节内容"
+
+        chapters = text_import_service._split_chapters(text)
+
+        assert len(chapters) == 1
+        assert chapters[0].chapter_number == 10
+        assert chapters[0].title == "风起"
+
     def test_detect_volumes_tracks_marked_sections(self) -> None:
         text = (
             "第一卷 山门初开\n"
@@ -148,6 +182,30 @@ class TestTextImportService:
         assert volumes[0].chapter_numbers == [1, 2]
         assert any("超长章节已自动拆分" in warning for warning in preview.warnings)
 
+    def test_build_import_analysis_plan_uses_large_import_sampling_budget(self) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=index,
+                title=f"第{index}章",
+                content="正文" * 20,
+                outline=None,
+            )
+            for index in range(1, 201)
+        ]
+        volumes = [
+            DetectedVolume(volume_number=1, title="第一卷", outline=None, chapter_numbers=list(range(1, 101))),
+            DetectedVolume(volume_number=2, title="第二卷", outline=None, chapter_numbers=list(range(101, 201))),
+        ]
+
+        plan = text_import_service._build_import_analysis_plan(chapters, volumes)
+
+        assert plan.large_mode is True
+        assert len(plan.sampled_chapters) <= text_import_service.LARGE_IMPORT_SAMPLE_BUDGET
+        sampled_numbers = {chapter.chapter_number for chapter in plan.sampled_chapters}
+        assert {1, 100, 101, 200}.issubset(sampled_numbers)
+        assert chapters[len(chapters) // 2].chapter_number in sampled_numbers
+        assert plan.entity_group_limit == text_import_service.LARGE_IMPORT_ENTITY_GROUP_LIMIT
+
     @pytest.mark.asyncio
     async def test_build_client_preview_compacts_large_payload(
         self,
@@ -188,7 +246,12 @@ class TestTextImportService:
 
         monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
 
-        async def fake_generate_chapter_outline(_chapter: DetectedChapter) -> SimpleNamespace:
+        async def fake_generate_chapter_outline(
+            _chapter: DetectedChapter,
+            *,
+            use_excerpt_only: bool = False,
+        ) -> SimpleNamespace:
+            del use_excerpt_only
             return SimpleNamespace(content="章纲", used_fallback=False)
 
         async def fake_generate_project_summary(
@@ -207,13 +270,28 @@ class TestTextImportService:
         async def fake_generate_volume_outlines(
             volumes: list[DetectedVolume],
             _chapters: list[DetectedChapter],
+            *,
+            sampled_chapter_numbers: set[int] | None = None,
         ) -> list[str | None]:
+            del sampled_chapter_numbers
             return [volume.outline for volume in volumes]
 
-        async def fake_extract_characters(_chapters: list[DetectedChapter]) -> list[DetectedCharacter]:
+        async def fake_extract_characters(
+            _chapters: list[DetectedChapter],
+            *,
+            group_limit: int | None = None,
+            refine_limit: int | None = None,
+        ) -> list[DetectedCharacter]:
+            del group_limit, refine_limit
             return []
 
-        async def fake_extract_world_settings(_chapters: list[DetectedChapter]) -> list[DetectedWorldSetting]:
+        async def fake_extract_world_settings(
+            _chapters: list[DetectedChapter],
+            *,
+            group_limit: int | None = None,
+            refine_limit: int | None = None,
+        ) -> list[DetectedWorldSetting]:
+            del group_limit, refine_limit
             return []
 
         async def fake_build_client_preview(preview: TextImportPreview) -> TextImportPreview:
@@ -237,6 +315,89 @@ class TestTextImportService:
         assert structure_event.message == "已识别 1 个卷 / 2 个章节"
         assert structure_event.data["chapters"] == 2
         assert any("超长章节已自动拆分" in warning for warning in structure_event.data["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_analyze_large_import_uses_sampled_outline_messages_and_warnings(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters_text = "\n\n".join(
+            f"第{index}章 标题{index}\n章节内容{index}"
+            for index in range(1, text_import_service.LARGE_IMPORT_CHAPTER_THRESHOLD + 3)
+        )
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+
+        async def fake_generate_chapter_outline(
+            chapter: DetectedChapter,
+            *,
+            use_excerpt_only: bool = False,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                content=f"{chapter.title}-{'采样' if use_excerpt_only else '完整'}章纲",
+                used_fallback=False,
+            )
+
+        async def fake_generate_project_summary(
+            _chapters: list[DetectedChapter],
+            *,
+            project_name: str,
+            genre: str | None,
+        ) -> dict[str, str | bool | None]:
+            return {
+                "summary": "摘要",
+                "story_outline": "总纲",
+                "genre": genre,
+                "used_fallback": False,
+            }
+
+        async def fake_generate_volume_outlines(
+            volumes: list[DetectedVolume],
+            _chapters: list[DetectedChapter],
+            *,
+            sampled_chapter_numbers: set[int] | None = None,
+        ) -> list[str | None]:
+            assert sampled_chapter_numbers is not None
+            return [volume.outline for volume in volumes]
+
+        async def fake_extract_characters(
+            _chapters: list[DetectedChapter],
+            *,
+            group_limit: int | None = None,
+            refine_limit: int | None = None,
+        ) -> list[DetectedCharacter]:
+            assert group_limit == text_import_service.LARGE_IMPORT_ENTITY_GROUP_LIMIT
+            assert refine_limit == text_import_service.LARGE_IMPORT_CHARACTER_REFINEMENT_LIMIT
+            return []
+
+        async def fake_extract_world_settings(
+            _chapters: list[DetectedChapter],
+            *,
+            group_limit: int | None = None,
+            refine_limit: int | None = None,
+        ) -> list[DetectedWorldSetting]:
+            assert group_limit == text_import_service.LARGE_IMPORT_ENTITY_GROUP_LIMIT
+            assert refine_limit == text_import_service.LARGE_IMPORT_WORLD_SETTING_REFINEMENT_LIMIT
+            return []
+
+        async def fake_build_client_preview(preview: TextImportPreview) -> TextImportPreview:
+            return preview
+
+        monkeypatch.setattr(text_import_service, "_generate_chapter_outline", fake_generate_chapter_outline)
+        monkeypatch.setattr(text_import_service, "_generate_project_summary", fake_generate_project_summary)
+        monkeypatch.setattr(text_import_service, "_generate_volume_outlines", fake_generate_volume_outlines)
+        monkeypatch.setattr(text_import_service, "_extract_characters", fake_extract_characters)
+        monkeypatch.setattr(text_import_service, "_extract_world_settings", fake_extract_world_settings)
+        monkeypatch.setattr(text_import_service, "_build_client_preview", fake_build_client_preview)
+
+        events = [event async for event in text_import_service.analyze(chapters_text, "大文件项目")]
+
+        outline_event = next(event for event in events if event.phase == "outline_extraction" and "采样章纲" in event.message)
+        completed_preview = events[-1].data["preview"]
+
+        assert f"全书 {text_import_service.LARGE_IMPORT_CHAPTER_THRESHOLD + 2} 章" in outline_event.message
+        assert any("大文件采样章纲模式" in warning for warning in completed_preview["warnings"])
+        assert all(chapter["outline"] for chapter in completed_preview["chapters"])
 
     def test_merge_confirmed_preview_preserves_full_content_from_compact_preview(self) -> None:
         stored_preview = TextImportPreview(
@@ -293,6 +454,75 @@ class TestTextImportService:
         assert len(normalized_volumes) == 1
         assert normalized_volumes[0].title == "第一卷"
         assert normalized_volumes[0].chapter_numbers == list(range(1, 19))
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_outline_excerpt_mode_skips_chunk_summarization(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapter = DetectedChapter(
+            chapter_number=1,
+            title="第一章",
+            content="甲" * (text_import_service.CHAPTER_OUTLINE_MAX_CHARS + 500),
+            outline=None,
+        )
+        called = False
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+
+        async def fake_summarize_chunk(_chunk: str) -> str:
+            nonlocal called
+            called = True
+            return "分块摘要"
+
+        async def fake_generate(*args, **kwargs):
+            del args, kwargs
+            response = SimpleNamespace()
+            response.__getitem__ = None
+            return {"content": "章纲内容"}
+
+        monkeypatch.setattr(text_import_service, "_summarize_chunk", fake_summarize_chunk)
+        monkeypatch.setattr(text_import_service.llm, "generate", fake_generate)
+
+        result = await text_import_service._generate_chapter_outline(chapter, use_excerpt_only=True)
+
+        assert result.content == "章纲内容"
+        assert called is False
+
+    @pytest.mark.asyncio
+    async def test_generate_volume_outlines_prefers_sampled_chapters(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        volumes = [
+            DetectedVolume(volume_number=1, title="第一卷", outline=None, chapter_numbers=[1, 2, 3]),
+        ]
+        chapters = [
+            DetectedChapter(chapter_number=index, title=f"第{index}章", content="正文", outline=f"章纲{index}")
+            for index in range(1, 4)
+        ]
+        captured: list[list[int]] = []
+
+        async def fake_prepare_outline_digest(
+            scoped: list[DetectedChapter],
+            *,
+            label: str,
+        ) -> tuple[str, bool]:
+            del label
+            captured.append([chapter.chapter_number for chapter in scoped])
+            return "章纲摘要", False
+
+        monkeypatch.setattr(text_import_service, "_prepare_outline_digest", fake_prepare_outline_digest)
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: False)
+
+        outlines = await text_import_service._generate_volume_outlines(
+            volumes,
+            chapters,
+            sampled_chapter_numbers={2},
+        )
+
+        assert captured == [[2]]
+        assert len(outlines) == 1
 
     @pytest.mark.asyncio
     async def test_extract_characters_keeps_partial_results_when_subgroups_fail(
@@ -512,8 +742,8 @@ class TestTextImportService:
                 )
             ]
 
-        async def fake_refine_character_cards(candidates, source_chapters):
-            del source_chapters
+        async def fake_refine_character_cards(candidates, source_chapters, *, limit=None):
+            del source_chapters, limit
             return [
                 candidates[0].model_copy(
                     update={
@@ -558,8 +788,8 @@ class TestTextImportService:
                 )
             ]
 
-        async def fake_refine_world_settings(candidates, source_chapters):
-            del source_chapters
+        async def fake_refine_world_settings(candidates, source_chapters, *, limit=None):
+            del source_chapters, limit
             return [
                 candidates[0].model_copy(
                     update={
