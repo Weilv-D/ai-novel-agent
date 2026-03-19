@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 
+from app.models.text_import_job import TextImportJobStatus
 from app.schemas.text_import import TextImportPreview, TextImportProgress
 from app.services.text_import import text_import_service
+from app.services.text_import_jobs import text_import_job_runner
 
 
 async def _fake_progress_stream() -> AsyncIterator[TextImportProgress]:
@@ -35,11 +38,22 @@ async def _fake_progress_stream() -> AsyncIterator[TextImportProgress]:
 
 @pytest.mark.asyncio
 async def test_import_text_stream_returns_preview(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_analyze(*args, **kwargs) -> AsyncIterator[TextImportProgress]:
-        async for item in _fake_progress_stream():
-            yield item
+    def fake_inspect_text(*args, **kwargs) -> TextImportPreview:
+        return TextImportPreview(
+            project_name="流式导入项目",
+            genre="仙侠",
+            chapters=[],
+            volumes=[],
+        )
 
-    monkeypatch.setattr(text_import_service, "analyze", fake_analyze)
+    async def fake_analyze_detected_preview(*args, **kwargs) -> AsyncIterator[TextImportProgress]:
+        async for item in _fake_progress_stream():
+            if item.phase != "structure_detection":
+                yield item
+
+    monkeypatch.setattr(text_import_service, "inspect_text", fake_inspect_text)
+    monkeypatch.setattr(text_import_service, "should_enqueue_background_job", lambda chapters: False)
+    monkeypatch.setattr(text_import_service, "_analyze_detected_preview", fake_analyze_detected_preview)
 
     response = await client.post(
         "/api/v1/projects/import-text",
@@ -51,6 +65,73 @@ async def test_import_text_stream_returns_preview(client: AsyncClient, monkeypat
     assert "text/event-stream" in response.headers["content-type"]
     assert "data: " in response.text
     assert "流式导入项目" in response.text
+
+
+@pytest.mark.asyncio
+async def test_import_text_large_file_returns_background_handoff(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preview = TextImportPreview(
+        project_name="超长文本项目",
+        genre="仙侠",
+        chapters=[{"chapter_number": index, "title": f"第{index}章", "content": "正文"} for index in range(1, 125)],
+        volumes=[],
+    )
+
+    async def fake_create_background_job(*args, **kwargs):
+        del args, kwargs
+        return SimpleNamespace(id="job-123")
+
+    monkeypatch.setattr(text_import_service, "inspect_text", lambda *args, **kwargs: preview)
+    monkeypatch.setattr(text_import_service, "should_enqueue_background_job", lambda chapters: True)
+    monkeypatch.setattr(text_import_service, "create_background_job", fake_create_background_job)
+    monkeypatch.setattr(text_import_job_runner, "notify_new_job", lambda: None)
+
+    response = await client.post(
+        "/api/v1/projects/import-text",
+        data={"project_name": "超长文本项目"},
+        files={"file": ("novel.txt", "第一章\n" + ("正文内容" * 300), "text/plain")},
+    )
+
+    assert response.status_code == 200
+    assert "background_job" in response.text
+    assert "job-123" in response.text
+
+
+@pytest.mark.asyncio
+async def test_get_text_import_job_returns_status_and_preview(client: AsyncClient, db_session) -> None:
+    job = await text_import_service.create_background_job(
+        db_session,
+        text="第一章 起\n正文",
+        project_name="后台任务项目",
+        genre="仙侠",
+    )
+    job.status = TextImportJobStatus.COMPLETED.value
+    job.phase = "completed"
+    job.progress = 1.0
+    job.message = "分析完成"
+    job.preview_payload = TextImportPreview(
+        project_name="后台任务项目",
+        genre="仙侠",
+        summary="项目摘要",
+        story_outline="项目总纲",
+        chapters=[],
+        volumes=[],
+        characters=[],
+        world_settings=[],
+        warnings=[],
+        failed_phases=[],
+    ).model_dump(mode="json")
+    await db_session.commit()
+
+    response = await client.get(f"/api/v1/projects/import-text/jobs/{job.id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["phase"] == "completed"
+    assert payload["preview"]["project_name"] == "后台任务项目"
 
 
 @pytest.mark.asyncio

@@ -24,6 +24,7 @@ from app.models.memory import Memory, MemoryType
 from app.models.project import Project, ProjectStatus
 from app.models.snapshot import Snapshot
 from app.models.suggestion import Suggestion, SuggestionStatus, SuggestionType
+from app.models.text_import_job import TextImportJob, TextImportJobStatus
 from app.models.world_setting import WorldSetting, WorldSettingCategory
 
 __all__ = [
@@ -61,4 +62,6 @@ __all__ = [
     "Snapshot",
     "Dependency",
     "DependencyType",
+    "TextImportJob",
+    "TextImportJobStatus",
 ]

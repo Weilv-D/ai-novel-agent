@@ -1048,6 +1048,27 @@ export interface TextImportResponse {
   imported_counts: Record<string, number>;
 }
 
+export type TextImportJobStatus =
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed";
+
+export interface TextImportJobResponse {
+  id: string;
+  status: TextImportJobStatus;
+  phase?: TextImportPhase | null;
+  progress: number;
+  message?: string | null;
+  warnings: string[];
+  failed_phases: TextImportPhase[];
+  preview?: TextImportPreview | null;
+  error_detail?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
 // Chat types
 export interface ChatMessage {
   id: string;

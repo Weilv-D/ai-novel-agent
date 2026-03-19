@@ -158,15 +158,19 @@ class TestMainModule:
                 with patch("app.main.init_database", new_callable=AsyncMock) as mock_init_database:
                     with patch.object(main_module.cache_service, "init", new_callable=AsyncMock) as mock_cache_init:
                         with patch.object(main_module.cache_service, "close", new_callable=AsyncMock) as mock_cache_close:
-                            with patch("app.main.close_db", new_callable=AsyncMock) as mock_close_db:
-                                with patch.object(main_module.logger, "info") as mock_logger_info:
-                                    async with main_module.lifespan(MagicMock()):
-                                        pass
+                            with patch.object(main_module.text_import_job_runner, "start", new_callable=AsyncMock) as mock_runner_start:
+                                with patch.object(main_module.text_import_job_runner, "stop", new_callable=AsyncMock) as mock_runner_stop:
+                                    with patch("app.main.close_db", new_callable=AsyncMock) as mock_close_db:
+                                        with patch.object(main_module.logger, "info") as mock_logger_info:
+                                            async with main_module.lifespan(MagicMock()):
+                                                pass
 
         mock_setup_logging.assert_called_once_with(main_module.settings)
         mock_init_db.assert_awaited_once()
         mock_init_database.assert_awaited_once()
         mock_cache_init.assert_awaited_once()
+        mock_runner_start.assert_awaited_once()
+        mock_runner_stop.assert_awaited_once()
         mock_cache_close.assert_awaited_once()
         mock_close_db.assert_awaited_once()
         assert mock_logger_info.call_count == 2

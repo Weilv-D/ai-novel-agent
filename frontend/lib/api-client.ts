@@ -548,6 +548,7 @@ import type {
   AgentThreadMessageRequest,
   AgentThreadMessageResponse,
   AgentThreadState,
+  TextImportJobResponse,
   TextImportPreview,
   TextImportProgress,
   TextImportResponse,
@@ -966,4 +967,7 @@ export const textImportApi = {
       method: "POST",
       body: JSON.stringify({ preview }),
     }),
+
+  getJob: (jobId: string) =>
+    fetchApi<TextImportJobResponse>(`/api/v1/projects/import-text/jobs/${jobId}`),
 };

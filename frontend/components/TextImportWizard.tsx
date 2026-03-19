@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, textImportApi } from "@/lib/api-client";
 import type {
@@ -9,6 +9,7 @@ import type {
   DetectedVolume,
   DetectedWorldSetting,
   TextImportPhase,
+  TextImportJobResponse,
   TextImportPreview,
   TextImportProgress,
   TextImportResponse,
@@ -48,6 +49,7 @@ const WORLD_SETTING_OPTIONS = [
 ];
 const MAX_TEXT_IMPORT_FILE_BYTES = 64 * 1024 * 1024;
 const CHAPTERS_PER_PAGE = 20;
+const ACTIVE_TEXT_IMPORT_JOB_KEY = "text-import-active-job-id";
 
 function normalizePreview(raw: TextImportPreview): TextImportPreview {
   return {
@@ -59,6 +61,88 @@ function normalizePreview(raw: TextImportPreview): TextImportPreview {
     warnings: raw.warnings || [],
     failed_phases: raw.failed_phases || [],
   };
+}
+
+function appendProgressEvent(
+  currentEvents: TextImportProgress[],
+  nextEvent: TextImportProgress,
+): TextImportProgress[] {
+  const lastEvent = currentEvents[currentEvents.length - 1];
+  if (
+    lastEvent
+    && lastEvent.phase === nextEvent.phase
+    && lastEvent.progress === nextEvent.progress
+    && lastEvent.message === nextEvent.message
+  ) {
+    return currentEvents;
+  }
+  return [...currentEvents, nextEvent];
+}
+
+function normalizeJobProgress(job: TextImportJobResponse): TextImportProgress {
+  const phase: TextImportPhase =
+    job.phase
+    || (job.status === "failed"
+      ? "error"
+      : job.status === "completed"
+        ? "completed"
+        : "structure_detection");
+
+  return {
+    phase,
+    progress: job.progress,
+    message:
+      job.message
+      || (job.status === "queued" ? "任务已排队，等待后台分析" : "后台分析进行中"),
+    data: {
+      warnings: job.warnings,
+      failed_phases: job.failed_phases,
+    },
+  };
+}
+
+function getStoredTextImportJobId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.sessionStorage.getItem(ACTIVE_TEXT_IMPORT_JOB_KEY);
+}
+
+function setStoredTextImportJobId(jobId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(ACTIVE_TEXT_IMPORT_JOB_KEY, jobId);
+}
+
+function clearStoredTextImportJobId(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.removeItem(ACTIVE_TEXT_IMPORT_JOB_KEY);
+}
+
+function waitForNextPoll(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", handleAbort);
+    };
+
+    const handleAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    if (signal) {
+      signal.addEventListener("abort", handleAbort, { once: true });
+    }
+  });
 }
 
 export function TextImportWizard({
@@ -77,6 +161,7 @@ export function TextImportWizard({
   const [error, setError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
   const [jsonErrors, setJsonErrors] = useState<Record<string, string>>({});
   const runTokenRef = useRef(0);
@@ -103,6 +188,42 @@ export function TextImportWizard({
     return preview.chapters.slice(start, start + CHAPTERS_PER_PAGE);
   }, [chapterPage, preview]);
 
+  const pollBackgroundJob = useCallback(async (jobId: string, token: number, signal?: AbortSignal) => {
+    setActiveJobId(jobId);
+    setStoredTextImportJobId(jobId);
+
+    while (token === runTokenRef.current) {
+      const job = await textImportApi.getJob(jobId);
+      if (token !== runTokenRef.current) {
+        return;
+      }
+
+      setEvents((prev) => appendProgressEvent(prev, normalizeJobProgress(job)));
+
+      if (job.status === "completed") {
+        clearStoredTextImportJobId();
+        setActiveJobId(null);
+        const nextPreview = job.preview;
+        if (!nextPreview) {
+          throw new ApiError(500, "后台分析完成，但未返回预览结果");
+        }
+        setPreview(normalizePreview(nextPreview));
+        setActiveTab("overview");
+        setChapterPage(1);
+        setStep("preview");
+        return;
+      }
+
+      if (job.status === "failed") {
+        clearStoredTextImportJobId();
+        setActiveJobId(null);
+        throw new ApiError(500, job.error_detail || job.message || "后台文本分析失败");
+      }
+
+      await waitForNextPoll(2000, signal);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isOpen) {
       runTokenRef.current += 1;
@@ -119,6 +240,7 @@ export function TextImportWizard({
       setError(null);
       setIsAnalyzing(false);
       setIsConfirming(false);
+      setActiveJobId(null);
       setJsonDrafts({});
       setJsonErrors({});
       document.body.style.overflow = "";
@@ -140,6 +262,56 @@ export function TextImportWizard({
     return () => document.removeEventListener("keydown", onEscape);
   });
 
+  useEffect(() => {
+    if (!isOpen || isAnalyzing || preview) {
+      return;
+    }
+
+    const storedJobId = getStoredTextImportJobId();
+    if (!storedJobId) {
+      return;
+    }
+
+    const token = runTokenRef.current + 1;
+    runTokenRef.current = token;
+    analyzeAbortRef.current?.abort();
+    const controller = new AbortController();
+    analyzeAbortRef.current = controller;
+    setError(null);
+    setEvents([
+      {
+        phase: "structure_detection",
+        progress: 0.15,
+        message: "已恢复后台分析任务，正在同步最新进度",
+        data: { mode: "background_job", job_id: storedJobId },
+      },
+    ]);
+    setStep("analysis");
+    setIsAnalyzing(true);
+
+    void pollBackgroundJob(storedJobId, token, controller.signal)
+      .catch((err) => {
+        if (token !== runTokenRef.current) {
+          return;
+        }
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return;
+        }
+        setActiveJobId(null);
+        clearStoredTextImportJobId();
+        setError(err instanceof ApiError ? err.detail : "文本分析失败");
+        setStep("upload");
+      })
+      .finally(() => {
+        if (token === runTokenRef.current) {
+          setIsAnalyzing(false);
+        }
+        if (analyzeAbortRef.current === controller) {
+          analyzeAbortRef.current = null;
+        }
+      });
+  }, [isOpen, isAnalyzing, pollBackgroundJob, preview]);
+
   function handleClose() {
     if (isConfirming) {
       return;
@@ -152,6 +324,10 @@ export function TextImportWizard({
 
   function updatePreview(nextPreview: TextImportPreview | null) {
     setPreview(nextPreview ? normalizePreview(nextPreview) : null);
+  }
+
+  function appendEvent(nextEvent: TextImportProgress) {
+    setEvents((prev) => appendProgressEvent(prev, nextEvent));
   }
 
   async function handleAnalyze() {
@@ -176,12 +352,15 @@ export function TextImportWizard({
     setError(null);
     setEvents([]);
     setPreview(null);
+    setActiveJobId(null);
+    clearStoredTextImportJobId();
     setJsonDrafts({});
     setJsonErrors({});
     setStep("analysis");
     setIsAnalyzing(true);
 
     try {
+      let backgroundJobId: string | null = null;
       for await (const event of textImportApi.analyzeStream(
         file,
         projectName.trim(),
@@ -191,22 +370,36 @@ export function TextImportWizard({
         if (token !== runTokenRef.current) {
           return;
         }
-        setEvents((prev) => [...prev, event]);
+        appendEvent(event);
 
         if (event.phase === "error") {
           const detail = typeof event.data.detail === "string" ? event.data.detail : event.message;
           throw new ApiError(500, detail || "文本分析失败");
         }
 
+        if (event.data.mode === "background_job") {
+          const jobId = typeof event.data.job_id === "string" ? event.data.job_id : "";
+          if (!jobId) {
+            throw new ApiError(500, "后台分析任务创建失败");
+          }
+          backgroundJobId = jobId;
+          break;
+        }
+
         if (event.phase === "completed") {
           const nextPreview = event.data.preview as TextImportPreview | undefined;
           if (nextPreview) {
+            clearStoredTextImportJobId();
             updatePreview(nextPreview);
             setActiveTab("overview");
             setChapterPage(1);
             setStep("preview");
           }
         }
+      }
+
+      if (backgroundJobId) {
+        await pollBackgroundJob(backgroundJobId, token, controller.signal);
       }
     } catch (err) {
       if (token !== runTokenRef.current) {
@@ -215,6 +408,8 @@ export function TextImportWizard({
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
       }
+      setActiveJobId(null);
+      clearStoredTextImportJobId();
       setError(err instanceof ApiError ? err.detail : "文本分析失败");
       setStep("upload");
     } finally {
@@ -235,6 +430,8 @@ export function TextImportWizard({
     setError(null);
     try {
       const result = await textImportApi.confirm(preview);
+      clearStoredTextImportJobId();
+      setActiveJobId(null);
       await onImported(result);
       handleClose();
     } catch (err) {
@@ -485,6 +682,7 @@ export function TextImportWizard({
                   <p>支持 `.txt` 与 `.md` 文件，上传后会先做章节结构识别，再生成章纲、项目总纲、角色和世界观预览。</p>
                   <p>确认导入前，你可以修改项目摘要、章纲、角色和设定内容；原文会保留到 `chapter.content`。</p>
                   <p>如果文本没有稳定章节标记，系统会按单章或安全分段兜底，并在预览里给出警告。当前上传上限为 64MB。</p>
+                  <p>超长文本会自动转后台全量分析；关闭窗口不会取消任务，重新打开后会继续恢复进度。</p>
                 </div>
               </div>
             </div>
@@ -554,7 +752,8 @@ export function TextImportWizard({
                   <div className="mt-4 space-y-3 text-sm leading-7 text-[rgb(var(--ink-800))]">
                     <p>章节越多，章纲提取耗时越长。</p>
                     <p>如果某个 AI 阶段失败，系统会保留已完成的结构结果，并在预览里标记警告。</p>
-                    <p>SSE 断开后可以重新点击“开始分析”；超长文本会自动启用分层摘要和代表章节采样。</p>
+                    <p>超长文本会自动转后台全量分析；关闭弹窗不会取消任务，重新打开会自动恢复轮询。</p>
+                    {activeJobId && <p>后台任务 ID：{activeJobId}</p>}
                   </div>
                   <div className="mt-6">
                     <Button variant="outline" onClick={handleAnalyze} disabled={isAnalyzing}>
@@ -915,7 +1114,15 @@ export function TextImportWizard({
               )}
               {step === "preview" && (
                 <>
-                  <Button variant="outline" onClick={() => setStep("upload")} disabled={isConfirming}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      clearStoredTextImportJobId();
+                      setActiveJobId(null);
+                      setStep("upload");
+                    }}
+                    disabled={isConfirming}
+                  >
                     返回重选文件
                   </Button>
                   <Button onClick={handleConfirmImport} loading={isConfirming} testId="text-import-confirm-btn">

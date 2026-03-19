@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -97,3 +98,23 @@ class TextImportResponse(BaseModel):
     project_id: UUID
     project_name: str
     imported_counts: dict[str, int]
+
+
+TextImportJobStatusLiteral = Literal["queued", "processing", "completed", "failed"]
+
+
+class TextImportJobResponse(BaseModel):
+    """Background text-import job status payload."""
+
+    id: UUID
+    status: TextImportJobStatusLiteral
+    phase: TextImportPhaseLiteral | None = None
+    progress: float = Field(..., ge=0, le=1)
+    message: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    failed_phases: list[TextImportPhaseLiteral] = Field(default_factory=list)
+    preview: TextImportPreview | None = None
+    error_detail: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None

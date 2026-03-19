@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
 import re
@@ -11,12 +12,14 @@ from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from time import time
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_service
 from app.core.exceptions import BadRequestException
+from app.models.text_import_job import TextImportJob, TextImportJobStatus
 from app.schemas.chapter import ChapterCreate, VolumeCreate
 from app.schemas.character import CharacterCreate
 from app.schemas.dependency import (
@@ -32,6 +35,7 @@ from app.schemas.text_import import (
     DetectedCharacter,
     DetectedVolume,
     DetectedWorldSetting,
+    TextImportJobResponse,
     TextImportPhaseLiteral,
     TextImportPreview,
     TextImportProgress,
@@ -87,16 +91,6 @@ class _HeuristicEntityEvidence:
     samples: list[str] = field(default_factory=list)
 
 
-@dataclass(slots=True)
-class _ImportAnalysisPlan:
-    large_mode: bool
-    sampled_chapter_numbers: set[int]
-    sampled_chapters: list[DetectedChapter]
-    entity_group_limit: int
-    character_refine_limit: int | None
-    world_setting_refine_limit: int | None
-
-
 class TextImportService:
     """Analyze uploaded text and commit a structured project preview."""
 
@@ -127,13 +121,8 @@ class TextImportService:
     HEURISTIC_CHARACTER_LIMIT = 18
     HEURISTIC_WORLD_SETTING_LIMIT = 12
     MIN_DETAIL_TEXT_CHARS = 48
-    LARGE_IMPORT_CHAPTER_THRESHOLD = 120
-    LARGE_IMPORT_CHAR_THRESHOLD = 500000
-    LARGE_IMPORT_SAMPLE_BUDGET = 48
-    LARGE_IMPORT_ENTITY_GROUP_LIMIT = 12
-    LARGE_IMPORT_CHARACTER_REFINEMENT_LIMIT = 8
-    LARGE_IMPORT_WORLD_SETTING_REFINEMENT_LIMIT = 6
-    FAST_CHAPTER_OUTLINE_CHARS = 150
+    BACKGROUND_IMPORT_CHAPTER_THRESHOLD = 120
+    BACKGROUND_IMPORT_CHAR_THRESHOLD = 500000
 
     _CHAPTER_HEADING_RE = re.compile(
         r"^\s*(?:[\[【(（]\s*)?"
@@ -331,7 +320,7 @@ class TextImportService:
 
         raise BadRequestException("无法识别文件编码，请确认上传的是有效的 TXT 或 Markdown 文本")
 
-    async def analyze(
+    def inspect_text(
         self,
         text: str,
         project_name: str,
@@ -339,8 +328,8 @@ class TextImportService:
         *,
         source_filename: str | None = None,
         source_encoding: str | None = None,
-    ) -> AsyncIterator[TextImportProgress]:
-        """Analyze uploaded text and stream progress events."""
+    ) -> TextImportPreview:
+        """Run fast structure detection and build the initial preview shell."""
         if not self._llm_ready():
             raise BadRequestException("未配置 LLM，无法进行导入分析，请先完成模型配置后重试")
 
@@ -356,19 +345,23 @@ class TextImportService:
             source_encoding=source_encoding,
         )
 
-        yield TextImportProgress(
-            phase="structure_detection",
-            progress=0.02,
-            message="正在识别章节与卷结构",
-        )
-
         chapters = self._split_chapters(normalized_text)
         volumes = self._detect_volumes(normalized_text, chapters)
         preview.chapters, preview.volumes = self._normalize_detected_structure(chapters, volumes, preview)
         if len(chapters) == 1:
             self._append_warning(preview, "未检测到稳定章节标记，已按单章导入。")
+        return preview
 
-        yield TextImportProgress(
+    def should_enqueue_background_job(self, chapters: Sequence[DetectedChapter]) -> bool:
+        """Whether the import should be handed off to the background worker."""
+        if len(chapters) > self.BACKGROUND_IMPORT_CHAPTER_THRESHOLD:
+            return True
+        total_chars = sum(len(chapter.content) for chapter in chapters)
+        return total_chars > self.BACKGROUND_IMPORT_CHAR_THRESHOLD
+
+    def build_structure_detection_progress(self, preview: TextImportPreview) -> TextImportProgress:
+        """Build the stable post-structure-detection progress event."""
+        return TextImportProgress(
             phase="structure_detection",
             progress=0.15,
             message=f"已识别 {len(preview.volumes)} 个卷 / {len(preview.chapters)} 个章节",
@@ -379,43 +372,57 @@ class TextImportService:
             },
         )
 
-        analysis_plan = self._build_import_analysis_plan(preview.chapters, preview.volumes)
-        if analysis_plan.large_mode:
-            self._append_warning(preview, "文本体量较大，已启用大文件采样章纲模式。")
-            self._append_warning(preview, "未采样章节已自动填充快速章纲，导入后可再逐章优化。")
-            self._append_warning(preview, "大文件模式下会优先保障结构识别与整体摘要稳定性。")
-            for chapter in preview.chapters:
-                chapter.outline = self._fallback_chapter_outline(
-                    chapter,
-                    max_chars=self.FAST_CHAPTER_OUTLINE_CHARS,
-                )
+    async def analyze(
+        self,
+        text: str,
+        project_name: str,
+        genre: str | None = None,
+        *,
+        source_filename: str | None = None,
+        source_encoding: str | None = None,
+    ) -> AsyncIterator[TextImportProgress]:
+        """Analyze uploaded text and stream progress events."""
+        yield TextImportProgress(
+            phase="structure_detection",
+            progress=0.02,
+            message="正在识别章节与卷结构",
+        )
 
+        preview = self.inspect_text(
+            text,
+            project_name,
+            genre,
+            source_filename=source_filename,
+            source_encoding=source_encoding,
+        )
+        yield self.build_structure_detection_progress(preview)
+
+        async for event in self._analyze_detected_preview(preview):
+            yield event
+
+    async def _analyze_detected_preview(
+        self,
+        preview: TextImportPreview,
+    ) -> AsyncIterator[TextImportProgress]:
+        """Run the full sequential analysis pipeline for a detected preview."""
         outline_warnings = 0
-        outline_targets = analysis_plan.sampled_chapters if analysis_plan.large_mode else list(preview.chapters)
-        total_outline_targets = max(len(outline_targets), 1)
-        for completed, chapter in enumerate(outline_targets, start=1):
-            outline = await self._generate_chapter_outline(
-                chapter,
-                use_excerpt_only=analysis_plan.large_mode,
-            )
+        total_chapters = max(len(preview.chapters), 1)
+        for completed, chapter in enumerate(preview.chapters, start=1):
+            outline = await self._generate_chapter_outline(chapter)
             if outline.used_fallback:
                 outline_warnings += 1
             chapter.outline = outline.content
             yield TextImportProgress(
                 phase="outline_extraction",
-                progress=0.15 + 0.40 * (completed / total_outline_targets),
-                message=(
-                    f"已生成 {completed}/{len(outline_targets)} 个采样章纲（全书 {len(preview.chapters)} 章）"
-                    if analysis_plan.large_mode
-                    else f"已生成 {completed}/{len(preview.chapters)} 个章纲"
-                ),
+                progress=0.15 + 0.40 * (completed / total_chapters),
+                message=f"已生成 {completed}/{len(preview.chapters)} 个章纲",
             )
 
         if outline_warnings:
             self._append_warning(preview, f"{outline_warnings} 个章纲使用了启发式摘要兜底。")
 
         summary_result = await self._generate_project_summary(
-            analysis_plan.sampled_chapters if analysis_plan.large_mode else preview.chapters,
+            preview.chapters,
             project_name=preview.project_name,
             genre=preview.genre,
         )
@@ -425,11 +432,7 @@ class TextImportService:
         if summary_result["used_fallback"]:
             self._append_warning(preview, "项目摘要与总纲未能完整调用 LLM，已使用启发式摘要兜底。")
 
-        generated_volume_outlines = await self._generate_volume_outlines(
-            preview.volumes,
-            preview.chapters,
-            sampled_chapter_numbers=analysis_plan.sampled_chapter_numbers if analysis_plan.large_mode else None,
-        )
+        generated_volume_outlines = await self._generate_volume_outlines(preview.volumes, preview.chapters)
         for volume, volume_outline in zip(preview.volumes, generated_volume_outlines, strict=True):
             volume.outline = volume_outline
 
@@ -443,15 +446,8 @@ class TextImportService:
             },
         )
 
-        if self._will_sample_entity_groups(preview.chapters, group_limit=analysis_plan.entity_group_limit):
-            self._append_warning(preview, "文本体量较大，角色与世界观抽取已启用代表章节采样。")
-
         try:
-            preview.characters = await self._extract_characters(
-                preview.chapters,
-                group_limit=analysis_plan.entity_group_limit,
-                refine_limit=analysis_plan.character_refine_limit,
-            )
+            preview.characters = await self._extract_characters(preview.chapters)
             yield TextImportProgress(
                 phase="character_extraction",
                 progress=0.80,
@@ -470,11 +466,7 @@ class TextImportService:
             )
 
         try:
-            preview.world_settings = await self._extract_world_settings(
-                preview.chapters,
-                group_limit=analysis_plan.entity_group_limit,
-                refine_limit=analysis_plan.world_setting_refine_limit,
-            )
+            preview.world_settings = await self._extract_world_settings(preview.chapters)
             yield TextImportProgress(
                 phase="world_setting_extraction",
                 progress=0.95,
@@ -493,13 +485,156 @@ class TextImportService:
             )
 
         client_preview = await self._build_client_preview(preview)
-
         yield TextImportProgress(
             phase="completed",
             progress=1.0,
             message="分析完成，请预览后确认导入",
             data={"preview": client_preview.model_dump(mode="json")},
         )
+
+    async def create_background_job(
+        self,
+        db: AsyncSession,
+        *,
+        text: str,
+        project_name: str,
+        genre: str | None = None,
+        source_filename: str | None = None,
+        source_encoding: str | None = None,
+    ) -> TextImportJob:
+        """Persist a large-file import job for background processing."""
+        job = TextImportJob(
+            status=TextImportJobStatus.QUEUED.value,
+            phase=None,
+            progress=0.0,
+            message="任务已排队，等待后台分析",
+            project_name=project_name.strip() or "未命名项目",
+            genre=self._clean_optional_text(genre),
+            source_filename=source_filename,
+            source_encoding=source_encoding,
+            source_text=self._normalize_text(text),
+            error_detail=None,
+            preview_payload=None,
+            warnings=[],
+            failed_phases=[],
+            completed_at=None,
+        )
+        db.add(job)
+        await db.flush()
+        return job
+
+    async def get_background_job(
+        self,
+        db: AsyncSession,
+        job_id: UUID | str,
+    ) -> TextImportJob:
+        """Load a persisted background text-import job."""
+        result = await db.execute(select(TextImportJob).where(TextImportJob.id == job_id))
+        job = result.scalar_one_or_none()
+        if job is None:
+            raise BadRequestException("导入任务不存在或已失效")
+        return job
+
+    def build_background_job_response(self, job: TextImportJob) -> TextImportJobResponse:
+        """Convert a job model into an API response."""
+        preview = (
+            TextImportPreview.model_validate(job.preview_payload)
+            if isinstance(job.preview_payload, dict)
+            else None
+        )
+        valid_phases = {
+            "structure_detection",
+            "outline_extraction",
+            "character_extraction",
+            "world_setting_extraction",
+            "completed",
+            "error",
+        }
+        failed_phases = [
+            cast(TextImportPhaseLiteral, phase)
+            for phase in job.failed_phases
+            if phase in valid_phases
+        ]
+        phase = cast(TextImportPhaseLiteral | None, job.phase) if job.phase else None
+        return TextImportJobResponse(
+            id=job.id,
+            status=cast(Any, job.status),
+            phase=phase,
+            progress=job.progress,
+            message=job.message,
+            warnings=list(job.warnings or []),
+            failed_phases=failed_phases,
+            preview=preview,
+            error_detail=job.error_detail,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            completed_at=job.completed_at,
+        )
+
+    async def _apply_job_progress(
+        self,
+        db: AsyncSession,
+        job: TextImportJob,
+        event: TextImportProgress,
+    ) -> None:
+        """Persist a streamed analysis event onto a background job."""
+        job.phase = event.phase
+        job.progress = event.progress
+        job.message = event.message
+        preview_payload = event.data.get("preview")
+        if event.phase == "completed" and isinstance(preview_payload, dict):
+            preview = TextImportPreview.model_validate(preview_payload)
+            job.status = TextImportJobStatus.COMPLETED.value
+            job.preview_payload = preview.model_dump(mode="json")
+            job.warnings = list(preview.warnings)
+            job.failed_phases = list(preview.failed_phases)
+            job.error_detail = None
+            job.completed_at = datetime.datetime.now(datetime.UTC)
+        else:
+            warnings = event.data.get("warnings")
+            if isinstance(warnings, list):
+                job.warnings = [str(item) for item in warnings]
+        await db.commit()
+
+    async def process_background_job(
+        self,
+        db: AsyncSession,
+        job_id: UUID | str,
+    ) -> None:
+        """Execute one persisted background import job from start to finish."""
+        job = await self.get_background_job(db, job_id)
+        job.status = TextImportJobStatus.PROCESSING.value
+        job.phase = "structure_detection"
+        job.progress = 0.02
+        job.message = "正在识别章节与卷结构"
+        job.preview_payload = None
+        job.error_detail = None
+        job.warnings = []
+        job.failed_phases = []
+        job.completed_at = None
+        await db.commit()
+
+        try:
+            preview = self.inspect_text(
+                job.source_text,
+                job.project_name,
+                job.genre,
+                source_filename=job.source_filename,
+                source_encoding=job.source_encoding,
+            )
+            structure_event = self.build_structure_detection_progress(preview)
+            await self._apply_job_progress(db, job, structure_event)
+
+            async for event in self._analyze_detected_preview(preview):
+                await self._apply_job_progress(db, job, event)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.exception("Background text import job failed: %s", exc)
+            job.status = TextImportJobStatus.FAILED.value
+            job.phase = "error"
+            job.message = "文本分析失败"
+            job.error_detail = str(exc)
+            job.completed_at = datetime.datetime.now(datetime.UTC)
+            await db.commit()
 
     async def commit(
         self,
@@ -1043,115 +1178,13 @@ class TextImportService:
             return False
         return self._normalize_text(previous.chapter.content) == self._normalize_text(current.chapter.content)
 
-    def _is_large_import(self, chapters: Sequence[DetectedChapter]) -> bool:
-        """Return whether the import should use sampled-outline mode."""
-        if len(chapters) > self.LARGE_IMPORT_CHAPTER_THRESHOLD:
-            return True
-        total_chars = sum(len(chapter.content) for chapter in chapters)
-        return total_chars > self.LARGE_IMPORT_CHAR_THRESHOLD
-
-    def _build_import_analysis_plan(
-        self,
-        chapters: Sequence[DetectedChapter],
-        volumes: Sequence[DetectedVolume],
-    ) -> _ImportAnalysisPlan:
-        """Build the deterministic sampling plan for one import run."""
-        if not chapters:
-            return _ImportAnalysisPlan(
-                large_mode=False,
-                sampled_chapter_numbers=set(),
-                sampled_chapters=[],
-                entity_group_limit=self.ENTITY_GROUP_LIMIT,
-                character_refine_limit=None,
-                world_setting_refine_limit=None,
-            )
-
-        if not self._is_large_import(chapters):
-            all_numbers = {chapter.chapter_number for chapter in chapters}
-            return _ImportAnalysisPlan(
-                large_mode=False,
-                sampled_chapter_numbers=all_numbers,
-                sampled_chapters=list(chapters),
-                entity_group_limit=self.ENTITY_GROUP_LIMIT,
-                character_refine_limit=None,
-                world_setting_refine_limit=None,
-            )
-
-        sampled_chapters = self._select_outline_sample_chapters(chapters, volumes)
-        sampled_numbers = {chapter.chapter_number for chapter in sampled_chapters}
-        return _ImportAnalysisPlan(
-            large_mode=True,
-            sampled_chapter_numbers=sampled_numbers,
-            sampled_chapters=sampled_chapters,
-            entity_group_limit=self.LARGE_IMPORT_ENTITY_GROUP_LIMIT,
-            character_refine_limit=self.LARGE_IMPORT_CHARACTER_REFINEMENT_LIMIT,
-            world_setting_refine_limit=self.LARGE_IMPORT_WORLD_SETTING_REFINEMENT_LIMIT,
-        )
-
-    def _select_outline_sample_chapters(
-        self,
-        chapters: Sequence[DetectedChapter],
-        volumes: Sequence[DetectedVolume],
-    ) -> list[DetectedChapter]:
-        """Select a stable subset of chapters for large-import outline generation."""
-        if not chapters:
-            return []
-
-        chapter_map = {chapter.chapter_number: chapter for chapter in chapters}
-        selected_numbers: list[int] = []
-
-        def add_chapter_number(number: int | None) -> None:
-            if number is None or number not in chapter_map or number in selected_numbers:
-                return
-            if len(selected_numbers) >= self.LARGE_IMPORT_SAMPLE_BUDGET:
-                return
-            selected_numbers.append(number)
-
-        anchor_indexes = {0, len(chapters) // 2, len(chapters) - 1}
-        for index in sorted(anchor_indexes):
-            add_chapter_number(chapters[index].chapter_number)
-
-        if len(selected_numbers) < self.LARGE_IMPORT_SAMPLE_BUDGET:
-            for volume in volumes:
-                if len(selected_numbers) >= self.LARGE_IMPORT_SAMPLE_BUDGET:
-                    break
-                if volume.chapter_numbers:
-                    add_chapter_number(volume.chapter_numbers[0])
-                    add_chapter_number(volume.chapter_numbers[-1])
-
-        remaining_budget = self.LARGE_IMPORT_SAMPLE_BUDGET - len(selected_numbers)
-        if remaining_budget > 0:
-            total_positions = min(len(chapters), remaining_budget)
-            if total_positions == 1:
-                candidate_indexes = [len(chapters) // 2]
-            else:
-                candidate_indexes = [
-                    round((len(chapters) - 1) * position / max(total_positions - 1, 1))
-                    for position in range(total_positions)
-                ]
-            for index in candidate_indexes:
-                add_chapter_number(chapters[index].chapter_number)
-
-        if not selected_numbers:
-            selected_numbers.append(chapters[0].chapter_number)
-
-        return [chapter_map[number] for number in sorted(selected_numbers)]
-
-    def _select_sampled_volume_chapters(
+    def _select_volume_chapters(
         self,
         volume: DetectedVolume,
         chapter_map: dict[int, DetectedChapter],
-        *,
-        sampled_chapter_numbers: set[int] | None,
     ) -> list[DetectedChapter]:
-        """Choose sampled chapters for one volume, with a first-chapter fallback."""
-        scoped = [chapter_map[number] for number in volume.chapter_numbers if number in chapter_map]
-        if not scoped:
-            return []
-        if not sampled_chapter_numbers:
-            return scoped
-        sampled = [chapter for chapter in scoped if chapter.chapter_number in sampled_chapter_numbers]
-        return sampled or scoped[:1]
+        """Choose all chapters assigned to one volume."""
+        return [chapter_map[number] for number in volume.chapter_numbers if number in chapter_map]
 
     async def _generate_chapter_outline(
         self,
@@ -1766,18 +1799,12 @@ class TextImportService:
         self,
         volumes: Sequence[DetectedVolume],
         chapters: Sequence[DetectedChapter],
-        *,
-        sampled_chapter_numbers: set[int] | None = None,
     ) -> list[str | None]:
         """Generate or derive volume outlines from grouped chapter outlines."""
         chapter_map = {chapter.chapter_number: chapter for chapter in chapters}
         outlines: list[str | None] = []
         for volume in volumes:
-            scoped = self._select_sampled_volume_chapters(
-                volume,
-                chapter_map,
-                sampled_chapter_numbers=sampled_chapter_numbers,
-            )
+            scoped = self._select_volume_chapters(volume, chapter_map)
             if not scoped:
                 outlines.append(None)
                 continue
@@ -2684,7 +2711,9 @@ class TextImportService:
         group_limit: int | None = None,
     ) -> bool:
         """Whether entity extraction will sample chapter groups for scale control."""
-        resolved_limit = self.ENTITY_GROUP_LIMIT if group_limit is None else group_limit
+        if group_limit is None:
+            return False
+        resolved_limit = group_limit
         return len(self._build_entity_groups(chapters)) > resolved_limit
 
     def _select_entity_groups(
@@ -2694,7 +2723,9 @@ class TextImportService:
         group_limit: int | None = None,
     ) -> list[list[DetectedChapter]]:
         """Select representative entity groups when the novel is very large."""
-        resolved_limit = self.ENTITY_GROUP_LIMIT if group_limit is None else group_limit
+        if group_limit is None:
+            return [list(group) for group in groups]
+        resolved_limit = group_limit
         if len(groups) <= resolved_limit:
             return list(groups)
 

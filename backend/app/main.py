@@ -19,6 +19,7 @@ from app.core.exceptions import (
 from app.core.logging import get_logger, setup_logging
 from app.db import close_db, init_db
 from app.db.init_db import init_database
+from app.services.text_import_jobs import text_import_job_runner
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -37,11 +38,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_db()
     await init_database()
     await cache_service.init()
+    await text_import_job_runner.start()
 
     yield
 
     # Shutdown
     logger.info("Shutting down AI Novel Agent API")
+    await text_import_job_runner.stop()
     await cache_service.close()
     await close_db()
 
