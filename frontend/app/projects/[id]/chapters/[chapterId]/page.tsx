@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
 import { AgentChatPanel } from "@/components/AgentChatPanel";
+import { RichTextContent } from "@/components/content/RichTextContent";
 import { SortableList } from "@/components/dnd/SortableList";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -138,6 +139,7 @@ export default function ChapterDetailPage() {
   }
 
   const statusMeta = getChapterStatusMeta(chapter.status);
+  const hasChapterContent = Boolean(chapter.content?.trim());
 
   return (
     <main className="ink-page">
@@ -224,6 +226,20 @@ export default function ChapterDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {hasChapterContent && (
+            <Card className="md:col-span-3">
+              <CardHeader>
+                <CardTitle className="text-lg">正文原文</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <RichTextContent
+                  content={chapter.content}
+                  className="prose prose-gray max-w-none text-sm leading-7 text-[rgb(var(--ink-800))]"
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {chapter.notes && (
             <Card className="md:col-span-3">

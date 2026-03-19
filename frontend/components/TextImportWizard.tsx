@@ -895,7 +895,11 @@ export function TextImportWizard({
 
         <div className="border-t border-[rgba(var(--line),0.12)] px-8 py-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="text-sm leading-7 text-[rgb(var(--ink-800))]">
+            <div
+              className="text-sm leading-7 text-[rgb(var(--ink-800))]"
+              data-testid="text-import-status-message"
+              role={error ? "alert" : undefined}
+            >
               {error || (step === "preview" ? "确认后会一次性创建项目、卷、章节、角色和世界观记录。" : "上传分析完成前不会写入项目数据。")}
             </div>
             <div className="flex flex-wrap gap-3">

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
+from app.core.exceptions import BadRequestException
 from app.schemas.text_import import (
     DetectedChapter,
     DetectedCharacter,
@@ -304,7 +305,7 @@ class TestTextImportService:
 
         settings = await text_import_service._extract_world_settings(chapters)
 
-        assert [setting.name for setting in settings] == ["设定1"]
+        assert "设定1" in [setting.name for setting in settings]
 
     @pytest.mark.asyncio
     async def test_extract_characters_retries_with_outline_only_fallback(
@@ -357,6 +358,164 @@ class TestTextImportService:
         assert set(characters_by_name) == {"角色甲", "角色乙"}
         assert characters_by_name["角色甲"].relationships["角色乙"] == "同章出现"
         assert characters_by_name["角色乙"].relationships["角色甲"] == "同章出现"
+
+    @pytest.mark.asyncio
+    async def test_extract_characters_requires_llm(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=1,
+                title="初入青州城",
+                content=(
+                    "林霄低声说道，他要先进青州城。"
+                    "苏晚点头答应，跟着林霄一起走进城门。"
+                    "林霄看着苏晚，提醒她小心天机阁的人。"
+                ),
+                outline="林霄与苏晚在青州城碰头，准备调查天机阁。",
+            ),
+            DetectedChapter(
+                chapter_number=2,
+                title="夜探天机阁",
+                content=(
+                    "林霄抱拳说道，今夜要潜入天机阁。"
+                    "苏晚低声问他是否已经摸清路线。"
+                    "林霄点头，让苏晚先守在后巷。"
+                ),
+                outline="林霄和苏晚配合夜探天机阁。",
+            ),
+        ]
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: False)
+
+        with pytest.raises(BadRequestException, match="未配置 LLM"):
+            await text_import_service._extract_characters(chapters)
+
+    @pytest.mark.asyncio
+    async def test_extract_world_settings_requires_llm(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=1,
+                title="青州城风声",
+                content=(
+                    "青州城里人人都在议论灵脉体系失衡。"
+                    "天机阁派出弟子巡视青州城的城门。"
+                    "灵脉体系若继续紊乱，整座青州城都会受影响。"
+                ),
+                outline="青州城与天机阁都围绕灵脉体系出现异动。",
+            ),
+            DetectedChapter(
+                chapter_number=2,
+                title="阁中议事",
+                content=(
+                    "天机阁长老认为灵脉体系必须重新梳理。"
+                    "青州城的商路和守备都要听命于天机阁。"
+                ),
+                outline="天机阁召开议事，讨论青州城的灵脉体系。",
+            ),
+        ]
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: False)
+
+        with pytest.raises(BadRequestException, match="未配置 LLM"):
+            await text_import_service._extract_world_settings(chapters)
+
+    @pytest.mark.asyncio
+    async def test_extract_characters_refines_cards_with_llm(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=1,
+                title="第一章",
+                content="林霄与苏晚同行。",
+                outline="林霄与苏晚同行。",
+            )
+        ]
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+
+        async def fake_extract_character_group(group):
+            del group
+            return [
+                DetectedCharacter(
+                    name="林霄",
+                    role="主角",
+                    profile={},
+                    relationships={},
+                )
+            ]
+
+        async def fake_refine_character_cards(candidates, source_chapters):
+            del source_chapters
+            return [
+                candidates[0].model_copy(
+                    update={
+                        "profile": {"background": "完整背景", "personality": "冷静果断"},
+                        "relationships": {"苏晚": "同行者"},
+                    }
+                )
+            ]
+
+        monkeypatch.setattr(text_import_service, "_extract_character_group", fake_extract_character_group)
+        monkeypatch.setattr(text_import_service, "_refine_character_cards", fake_refine_character_cards)
+        monkeypatch.setattr(text_import_service, "_extract_characters_heuristic", lambda chapters: [])
+
+        characters = await text_import_service._extract_characters(chapters)
+
+        assert characters[0].profile["background"] == "完整背景"
+        assert characters[0].relationships["苏晚"] == "同行者"
+
+    @pytest.mark.asyncio
+    async def test_extract_world_settings_refines_cards_with_llm(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        chapters = [
+            DetectedChapter(
+                chapter_number=1,
+                title="第一章",
+                content="灵脉体系开始失衡。",
+                outline="灵脉体系开始失衡。",
+            )
+        ]
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+
+        async def fake_extract_world_setting_group(group, categories):
+            del group, categories
+            return [
+                DetectedWorldSetting(
+                    category="other",
+                    name="灵脉体系",
+                    content="标题级描述",
+                )
+            ]
+
+        async def fake_refine_world_settings(candidates, source_chapters):
+            del source_chapters
+            return [
+                candidates[0].model_copy(
+                    update={
+                        "category": "magic_system",
+                        "content": "灵脉体系控制修行与冲突升级，是全书核心力量规则。",
+                    }
+                )
+            ]
+
+        monkeypatch.setattr(text_import_service, "_extract_world_setting_group", fake_extract_world_setting_group)
+        monkeypatch.setattr(text_import_service, "_refine_world_settings", fake_refine_world_settings)
+        monkeypatch.setattr(text_import_service, "_extract_world_settings_heuristic", lambda chapters: [])
+
+        settings = await text_import_service._extract_world_settings(chapters)
+
+        assert settings[0].category == "magic_system"
+        assert "核心力量规则" in settings[0].content
 
     @pytest.mark.asyncio
     async def test_commit_creates_project_graph(self, db_session) -> None:

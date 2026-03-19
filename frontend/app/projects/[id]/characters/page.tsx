@@ -10,6 +10,25 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 
+function formatStructuredValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => formatStructuredValue(item))
+      .filter(Boolean)
+      .join("、");
+  }
+  if (value && typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return "";
+}
+
 export default function CharactersPage() {
   const params = useParams();
   const projectId = params.id as string;
@@ -42,6 +61,26 @@ export default function CharactersPage() {
 
   const hasProfileKey = (character: Character, key: string): boolean => {
     return character.profile !== undefined && key in character.profile;
+  };
+
+  const getCharacterSummary = (character: Character): string => {
+    const preferredKeys = ["background", "personality", "appearance", "key_events", "chapter_scope"];
+    for (const key of preferredKeys) {
+      const value = formatStructuredValue(character.profile?.[key]);
+      if (value) {
+        return value;
+      }
+    }
+    for (const value of Object.values(character.profile ?? {})) {
+      const formatted = formatStructuredValue(value);
+      if (formatted) {
+        return formatted;
+      }
+    }
+    if (character.relationships && Object.keys(character.relationships).length > 0) {
+      return `已记录 ${Object.keys(character.relationships).length} 条人物关系。`;
+    }
+    return "当前只有基础条目，尚未生成更多人物细节。";
   };
 
   useEffect(() => {
@@ -142,9 +181,15 @@ export default function CharactersPage() {
                     )}
                   </div>
 
-                  {hasProfileKey(character, "appearance") && (
-                    <p className="mt-4 line-clamp-2 text-sm leading-7 text-[rgb(var(--ink-800))]">
-                      {getProfileValue<string>(character, "appearance", "")}
+                  <p className="mt-4 line-clamp-4 whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">
+                    {hasProfileKey(character, "appearance")
+                      ? getProfileValue<string>(character, "appearance", "")
+                      : getCharacterSummary(character)}
+                  </p>
+
+                  {character.relationships && Object.keys(character.relationships).length > 0 && (
+                    <p className="mt-3 text-xs text-[rgb(var(--ink-800))]">
+                      关系数 {Object.keys(character.relationships).length}
                     </p>
                   )}
 

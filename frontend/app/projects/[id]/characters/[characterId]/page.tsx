@@ -12,6 +12,39 @@ import { ApiError, characterApi } from "@/lib/api-client";
 import type { Character } from "@/lib/types";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 
+const PROFILE_LABELS: Record<string, string> = {
+  age: "年龄",
+  gender: "性别",
+  appearance: "外貌描写",
+  personality: "性格特点",
+  background: "背景故事",
+  key_events: "关键情节",
+  chapter_scope: "涉及章节",
+};
+
+function formatFieldLabel(key: string): string {
+  return PROFILE_LABELS[key] || key.replaceAll("_", " ");
+}
+
+function formatStructuredValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => formatStructuredValue(item))
+      .filter(Boolean)
+      .join("、");
+  }
+  if (value && typeof value === "object") {
+    return JSON.stringify(value, null, 2);
+  }
+  return "";
+}
+
 export default function CharacterDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -102,6 +135,14 @@ export default function CharacterDetailPage() {
   const hasProfileKey = (key: string): boolean => {
     return character.profile !== undefined && key in character.profile;
   };
+
+  const standardProfileKeys = new Set(["age", "gender", "appearance", "personality", "background"]);
+  const additionalProfileEntries = Object.entries(character.profile ?? {})
+    .map(([key, value]) => [key, formatStructuredValue(value)] as const)
+    .filter(([key, value]) => !standardProfileKeys.has(key) && value);
+  const relationshipEntries = Object.entries(character.relationships ?? {})
+    .map(([key, value]) => [key, formatStructuredValue(value)] as const)
+    .filter(([, value]) => value);
 
   return (
     <main className="ink-page">
@@ -196,12 +237,44 @@ export default function CharacterDetailPage() {
 
         {/* Background */}
         {hasProfileKey("background") && (
-          <Card>
+          <Card className="mb-8">
             <CardHeader>
               <CardTitle className="text-lg">背景故事</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-gray-700 whitespace-pre-wrap">{getProfileValue<string>("background", "")}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {additionalProfileEntries.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="text-lg">扩展档案</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {additionalProfileEntries.map(([key, value]) => (
+                <div key={key}>
+                  <h3 className="text-sm font-medium text-[rgb(var(--ink-950))]">{formatFieldLabel(key)}</h3>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">{value}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {relationshipEntries.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="text-lg">人物关系</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {relationshipEntries.map(([key, value]) => (
+                <div key={key} className="rounded-[1rem] bg-[rgba(var(--ink-950),0.04)] px-4 py-3">
+                  <p className="text-sm font-medium text-[rgb(var(--ink-950))]">{key}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-7 text-[rgb(var(--ink-800))]">{value}</p>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}

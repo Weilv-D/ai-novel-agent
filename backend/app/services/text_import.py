@@ -8,7 +8,7 @@ import logging
 import re
 from collections import Counter
 from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import time
 from typing import Any, cast
 from uuid import uuid4
@@ -79,6 +79,14 @@ class _ChapterSegment:
     line_index: int
 
 
+@dataclass(slots=True)
+class _HeuristicEntityEvidence:
+    mentions: int = 0
+    score: int = 0
+    chapter_numbers: set[int] = field(default_factory=set)
+    samples: list[str] = field(default_factory=list)
+
+
 class TextImportService:
     """Analyze uploaded text and commit a structured project preview."""
 
@@ -104,6 +112,11 @@ class TextImportService:
     CHAPTER_MEMORY_SUMMARY_CHARS = 240
     CHAPTER_MEMORY_CONTENT_CHARS = 600
     DEPENDENCY_SAMPLE_CHARS = 2400
+    HEURISTIC_CHAPTER_SAMPLE_CHARS = 2800
+    HEURISTIC_DETAIL_SENTENCE_LIMIT = 4
+    HEURISTIC_CHARACTER_LIMIT = 18
+    HEURISTIC_WORLD_SETTING_LIMIT = 12
+    MIN_DETAIL_TEXT_CHARS = 48
 
     _CHAPTER_HEADING_RE = re.compile(
         r"^\s*(?:第(?P<cn_num>[零〇一二两三四五六七八九十百千\d]+)(?P<cn_unit>[章节回集篇部])|chapter\s+(?P<en_num>\d+))"
@@ -118,6 +131,100 @@ class TextImportService:
     _MARKDOWN_CHAPTER_RE = re.compile(r"^\s*##+\s+(?P<title>.+?)\s*$")
     _MARKDOWN_VOLUME_RE = re.compile(r"^\s*#\s+(?P<title>.+?)\s*$")
     _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
+    _HEURISTIC_SENTENCE_SPLIT_RE = re.compile(r"[。！？!?；;\n]+")
+    _CHARACTER_CONTEXT_PATTERNS = (
+        re.compile(
+            r"(?<![\u4e00-\u9fff])(?P<name>[\u4e00-\u9fff]{2,4}?)"
+            r"(?=(?:轻声|低声|沉声|厉声|冷声|笑着|笑道|说道|说|道|问|答|喝道|喊道|看着|望着|想着|抬头|点头|皱眉|转身|起身|抱拳|行礼|出手|拔刀|拔剑))"
+        ),
+        re.compile(r"(?:对|向|朝|跟|同|与)(?P<name>[\u4e00-\u9fff]{2,4}?)(?=(?:说|道|问|抱拳|行礼|看去|走去))"),
+        re.compile(r"(?:名叫|叫做|唤作|唤做|正是)(?P<name>[\u4e00-\u9fff]{2,4}?)"),
+    )
+    _WORLD_SETTING_PATTERN = re.compile(
+        r"(?P<name>[\u4e00-\u9fff]{2,10}?(?:"
+        r"帝国|王朝|皇城|王城|书院|学院|商会|王庭|部族|部落|王府|"
+        r"体系|法则|阵法|功法|术法|心法|灵脉|血脉|禁制|礼制|祭典|历法|律法|规约|契约|商路|货币|"
+        r"城|镇|村|山|谷|岭|峰|海|河|湖|江|洲|州|国|郡|关|岛|川|"
+        r"宫|殿|阁|府|院|门|宗|派|盟|教|司|营|寨|部|族|军"
+        r"))"
+    )
+    _COMMON_SURNAMES = frozenset(
+        "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜"
+        "戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳鲍史唐"
+        "费廉岑薛雷贺倪汤滕殷罗毕郝安常乐于时傅皮卞齐康伍余元顾孟平黄和"
+        "穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁"
+        "杜阮蓝闵席季麻强贾路娄危江童颜郭梅盛林刁钟徐邱骆高夏蔡田樊胡凌"
+        "霍虞万支柯昝管卢莫经房裘缪干解应宗丁宣贲邓郁单杭洪包诸左石崔吉"
+        "龚程嵇邢滑裴陆荣翁荀羊甄曲家封芮羿储靳汲邴糜松井段富巫乌焦巴弓"
+        "牧隗山谷车侯宓蓬全郗班仰秋仲伊宫宁仇栾暴甘斜厉戎祖武符刘景詹束"
+        "龙叶幸司韶郜黎蓟薄印宿白怀蒲台从鄂索籍赖卓蔺屠蒙池乔阴郁胥能苍"
+        "双闻莘党翟谭贡劳逄姬申扶堵冉宰郦雍却璩桑桂濮牛寿通边扈燕冀僧隋"
+        "浦尚农温别庄晏柴瞿阎慕连茹习艾鱼容向古易慎戈廖庾终暨居衡步都耿"
+        "满弘匡国文寇广禄阙东欧殳沃利蔚越夔隆师巩厍聂晁勾敖融冷辛阚那简"
+        "饶空曾毋沙乜养鞠须丰巢关蒯相查后荆红游竺权逯盖益桓公"
+    )
+    _CHARACTER_STOPWORDS = frozenset(
+        {
+            "自己",
+            "众人",
+            "少年",
+            "少女",
+            "男人",
+            "女人",
+            "老人",
+            "孩子",
+            "掌柜",
+            "店小二",
+            "先生",
+            "公子",
+            "姑娘",
+            "师父",
+            "师兄",
+            "师姐",
+            "师弟",
+            "大人",
+            "陛下",
+            "将军",
+            "皇帝",
+            "王爷",
+            "时候",
+            "地方",
+            "东西",
+            "事情",
+            "声音",
+            "目光",
+            "身影",
+            "空气",
+            "天地",
+            "门外",
+            "城里",
+            "体内",
+            "身后",
+            "眼前",
+            "chapter",
+        }
+    )
+    _WORLD_SETTING_STOPWORDS = frozenset(
+        {
+            "第一章",
+            "第二章",
+            "第三章",
+            "第四章",
+            "第五章",
+            "第六章",
+            "第七章",
+            "第八章",
+            "第九章",
+            "第十章",
+            "众人",
+            "自己",
+            "少年",
+            "少女",
+            "事情",
+            "时候",
+            "地方",
+        }
+    )
 
     def __init__(self) -> None:
         self.llm = llm_service
@@ -207,6 +314,9 @@ class TextImportService:
         source_encoding: str | None = None,
     ) -> AsyncIterator[TextImportProgress]:
         """Analyze uploaded text and stream progress events."""
+        if not self._llm_ready():
+            raise BadRequestException("未配置 LLM，无法进行导入分析，请先完成模型配置后重试")
+
         normalized_text = self._normalize_text(text)
         preview = TextImportPreview(
             preview_id=None,
@@ -450,7 +560,7 @@ class TextImportService:
                     content=self._build_import_memory_content(detected_chapter),
                     meta={
                         "title": detected_chapter.title or f"第{created_chapter.chapter_number}章",
-                        "summary": detected_chapter.outline or self._sample_text(detected_chapter.content, self.CHAPTER_MEMORY_SUMMARY_CHARS),
+                        "summary": self._build_import_memory_summary(detected_chapter),
                         "chapter_id": str(created_chapter.id),
                         "chapter_number": created_chapter.chapter_number,
                         "volume_id": str(created_chapter.volume_id) if created_chapter.volume_id else None,
@@ -491,7 +601,20 @@ class TextImportService:
 
     def _build_import_memory_content(self, chapter: DetectedChapter) -> str:
         """Build a compact episode-memory payload for an imported chapter."""
-        return chapter.outline or self._sample_text(chapter.content, self.CHAPTER_MEMORY_CONTENT_CHARS)
+        outline = self._clean_optional_text(chapter.outline)
+        title = chapter.title or f"第{chapter.chapter_number}章"
+        body_sample = self._sample_text(chapter.content, self.CHAPTER_MEMORY_CONTENT_CHARS)
+        if outline and len(outline) >= self.MIN_DETAIL_TEXT_CHARS and outline != title:
+            return self._sample_text(f"{outline}\n\n{body_sample}", self.CHAPTER_MEMORY_CONTENT_CHARS)
+        return self._sample_text(f"{title}：{body_sample}", self.CHAPTER_MEMORY_CONTENT_CHARS)
+
+    def _build_import_memory_summary(self, chapter: DetectedChapter) -> str:
+        """Build a timeline-friendly summary for imported chapter memories."""
+        outline = self._clean_optional_text(chapter.outline)
+        title = chapter.title or f"第{chapter.chapter_number}章"
+        if outline and len(outline) >= self.MIN_DETAIL_TEXT_CHARS and outline != title:
+            return self._sample_text(outline, self.CHAPTER_MEMORY_SUMMARY_CHARS)
+        return self._sample_text(f"{title}：{chapter.content}", self.CHAPTER_MEMORY_SUMMARY_CHARS)
 
     def _build_import_dependency_creates(
         self,
@@ -973,8 +1096,12 @@ class TextImportService:
 
     async def _extract_characters(self, chapters: Sequence[DetectedChapter]) -> list[DetectedCharacter]:
         """Extract key characters from chapter outlines and samples."""
-        if not chapters or not self._llm_ready():
+        if not chapters:
             return []
+        if not self._llm_ready():
+            raise BadRequestException("未配置 LLM，无法生成人物卡分析")
+
+        heuristic_candidates = self._extract_characters_heuristic(chapters)
 
         groups = self._select_entity_groups(self._build_entity_groups(chapters))
         candidates: list[DetectedCharacter] = []
@@ -1007,17 +1134,26 @@ class TextImportService:
         if not candidates:
             outline_candidates = await self._extract_characters_from_outline_digest(chapters)
             if outline_candidates:
-                return self._backfill_character_relationships(self._merge_characters(outline_candidates)[:20], chapters)
+                merged = self._merge_characters([*outline_candidates, *heuristic_candidates])[:20]
+                refined = await self._refine_character_cards(merged, chapters)
+                return self._backfill_character_relationships(self._enrich_characters(refined, chapters), chapters)
             if failures:
                 raise failures[0]
-            return []
+            return self._backfill_character_relationships(heuristic_candidates[:20], chapters)
 
-        return self._backfill_character_relationships(self._merge_characters(candidates)[:20], chapters)
+        merged_candidates = list(candidates)
+        if len(candidates) < 4 or all(not character.profile for character in candidates):
+            merged_candidates.extend(heuristic_candidates)
+        merged = self._merge_characters(merged_candidates)[:20]
+        refined = await self._refine_character_cards(merged, chapters)
+        return self._backfill_character_relationships(self._enrich_characters(refined, chapters), chapters)
 
     async def _extract_world_settings(self, chapters: Sequence[DetectedChapter]) -> list[DetectedWorldSetting]:
         """Extract key world settings from chapter outlines and samples."""
-        if not chapters or not self._llm_ready():
+        if not chapters:
             return []
+        if not self._llm_ready():
+            raise BadRequestException("未配置 LLM，无法生成世界观分析")
 
         categories = ", ".join(
             [
@@ -1033,6 +1169,7 @@ class TextImportService:
                 WorldSettingCategory.OTHER,
             ]
         )
+        heuristic_candidates = self._extract_world_settings_heuristic(chapters)
         groups = self._select_entity_groups(self._build_entity_groups(chapters))
         candidates: list[DetectedWorldSetting] = []
         failures: list[BaseException] = []
@@ -1065,12 +1202,19 @@ class TextImportService:
         if not candidates:
             outline_candidates = await self._extract_world_settings_from_outline_digest(chapters, categories)
             if outline_candidates:
-                return self._merge_world_settings(outline_candidates)[:15]
+                merged = self._merge_world_settings([*outline_candidates, *heuristic_candidates])[:15]
+                refined = await self._refine_world_settings(merged, chapters)
+                return self._enrich_world_settings(refined, chapters)
             if failures:
                 raise failures[0]
-            return []
+            return self._enrich_world_settings(heuristic_candidates[:15], chapters)
 
-        return self._merge_world_settings(candidates)[:15]
+        merged_candidates = list(candidates)
+        if len(candidates) < 4 or any(len(setting.content.strip()) < self.MIN_DETAIL_TEXT_CHARS for setting in candidates):
+            merged_candidates.extend(heuristic_candidates)
+        merged = self._merge_world_settings(merged_candidates)[:15]
+        refined = await self._refine_world_settings(merged, chapters)
+        return self._enrich_world_settings(refined, chapters)
 
     async def _extract_character_group(
         self,
@@ -1142,6 +1286,232 @@ class TextImportService:
             max_tokens=max_tokens,
         )
         return self._normalize_detected_world_settings(payload)
+
+    def _select_entity_focus_chapters(
+        self,
+        name: str,
+        chapters: Sequence[DetectedChapter],
+        *,
+        max_chapters: int = 6,
+    ) -> list[DetectedChapter]:
+        """Select the chapters most relevant to one named entity."""
+        scored: list[tuple[int, DetectedChapter]] = []
+        lowered_name = name.casefold()
+        for chapter in chapters:
+            title = (chapter.title or "").casefold()
+            outline = (chapter.outline or "").casefold()
+            sample = self._sample_text(chapter.content, self.DEPENDENCY_SAMPLE_CHARS).casefold()
+            score = title.count(lowered_name) * 5 + outline.count(lowered_name) * 3 + sample.count(lowered_name)
+            if score <= 0:
+                continue
+            scored.append((score, chapter))
+        scored.sort(key=lambda item: (-item[0], item[1].chapter_number))
+        return [chapter for _, chapter in scored[:max_chapters]]
+
+    def _build_entity_focus_context(self, name: str, chapters: Sequence[DetectedChapter]) -> str:
+        """Build focused, evidence-oriented context for a single entity."""
+        sections: list[str] = []
+        for chapter in self._select_entity_focus_chapters(name, chapters):
+            sentences = [
+                sentence
+                for sentence in self._split_heuristic_sentences(
+                    self._build_heuristic_source(chapter, max_chars=self.HEURISTIC_CHAPTER_SAMPLE_CHARS)
+                )
+                if name in sentence
+            ]
+            detail = self._sample_text(
+                "；".join(sentences) or self._build_heuristic_source(chapter, max_chars=1200),
+                900,
+            )
+            sections.append(
+                "\n".join(
+                    [
+                        f"[第{chapter.chapter_number}章 {chapter.title or '未命名'}]",
+                        f"章纲：{chapter.outline or self._fallback_chapter_outline(chapter)}",
+                        f"相关原文：{detail}",
+                    ]
+                )
+            )
+        return "\n\n".join(sections)
+
+    def _normalize_character_object(
+        self,
+        payload: Any,
+        *,
+        fallback: DetectedCharacter,
+    ) -> DetectedCharacter:
+        """Normalize one refined character payload with safe fallback."""
+        normalized = self._normalize_detected_characters([payload])
+        if not normalized:
+            return fallback
+        candidate = normalized[0]
+        return candidate.model_copy(
+            update={
+                "name": candidate.name or fallback.name,
+                "role": candidate.role or fallback.role,
+                "profile": candidate.profile or fallback.profile,
+                "relationships": candidate.relationships or fallback.relationships,
+            }
+        )
+
+    def _normalize_world_setting_object(
+        self,
+        payload: Any,
+        *,
+        fallback: DetectedWorldSetting,
+    ) -> DetectedWorldSetting:
+        """Normalize one refined world-setting payload with safe fallback."""
+        normalized = self._normalize_detected_world_settings([payload])
+        if not normalized:
+            return fallback
+        candidate = normalized[0]
+        return candidate.model_copy(
+            update={
+                "name": candidate.name or fallback.name,
+                "category": candidate.category or fallback.category,
+                "content": candidate.content or fallback.content,
+            }
+        )
+
+    async def _refine_character_card(
+        self,
+        candidate: DetectedCharacter,
+        chapters: Sequence[DetectedChapter],
+    ) -> DetectedCharacter:
+        """Use LLM understanding to expand one character card from full-text evidence."""
+        if not self._llm_ready():
+            return candidate
+
+        focus_context = self._build_entity_focus_context(candidate.name, chapters)
+        if not focus_context:
+            return candidate
+
+        try:
+            payload = await self._generate_json_payload(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是中文长篇小说人物分析 agent。请只围绕指定角色阅读多章证据，"
+                            "输出完整人物卡。只返回 JSON 对象，字段为 name、role、profile、relationships。"
+                            "profile 尽量包含 background、personality、appearance、motivation、key_events。"
+                            "relationships 使用 {人物名: 关系概述}。不要机械摘抄标题，不要编造没有证据的设定。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"目标角色：{candidate.name}\n"
+                            f"已有角色信息：{json.dumps(candidate.model_dump(mode='json'), ensure_ascii=False)}\n\n"
+                            f"相关章节证据：\n{focus_context}"
+                        ),
+                    },
+                ],
+                expect="object",
+                max_tokens=1200,
+            )
+        except Exception as exc:  # pragma: no cover - network/model failures
+            logger.warning("Character refinement failed for %s: %s", candidate.name, exc)
+            return candidate
+        return self._normalize_character_object(payload, fallback=candidate)
+
+    async def _refine_world_setting(
+        self,
+        candidate: DetectedWorldSetting,
+        chapters: Sequence[DetectedChapter],
+    ) -> DetectedWorldSetting:
+        """Use LLM understanding to expand one world-setting entry from full-text evidence."""
+        if not self._llm_ready():
+            return candidate
+
+        focus_context = self._build_entity_focus_context(candidate.name, chapters)
+        if not focus_context:
+            return candidate
+
+        categories = ", ".join(
+            [
+                WorldSettingCategory.MAGIC_SYSTEM,
+                WorldSettingCategory.GEOGRAPHY,
+                WorldSettingCategory.HISTORY,
+                WorldSettingCategory.ORGANIZATION,
+                WorldSettingCategory.TECHNOLOGY,
+                WorldSettingCategory.CULTURE,
+                WorldSettingCategory.RELIGION,
+                WorldSettingCategory.ECONOMY,
+                WorldSettingCategory.RULES,
+                WorldSettingCategory.OTHER,
+            ]
+        )
+        try:
+            payload = await self._generate_json_payload(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是中文长篇小说设定分析 agent。请只围绕指定设定阅读多章证据，"
+                            "输出完整设定卡。只返回 JSON 对象，字段为 category、name、content。"
+                            f"category 必须从以下枚举中选择：{categories}。"
+                            "content 需要概括来源场景、运作规则或作用，以及它对人物/剧情的影响，不要只写标题。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"目标设定：{candidate.name}\n"
+                            f"已有设定信息：{json.dumps(candidate.model_dump(mode='json'), ensure_ascii=False)}\n\n"
+                            f"相关章节证据：\n{focus_context}"
+                        ),
+                    },
+                ],
+                expect="object",
+                max_tokens=1100,
+            )
+        except Exception as exc:  # pragma: no cover - network/model failures
+            logger.warning("World-setting refinement failed for %s: %s", candidate.name, exc)
+            return candidate
+        return self._normalize_world_setting_object(payload, fallback=candidate)
+
+    async def _refine_character_cards(
+        self,
+        candidates: Sequence[DetectedCharacter],
+        chapters: Sequence[DetectedChapter],
+    ) -> list[DetectedCharacter]:
+        """Refine merged character candidates into detailed cards."""
+        if not candidates or not self._llm_ready():
+            return list(candidates)
+        results = await asyncio.gather(
+            *(self._refine_character_card(candidate, chapters) for candidate in candidates),
+            return_exceptions=True,
+        )
+        refined: list[DetectedCharacter] = []
+        for candidate, result in zip(candidates, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.warning("Character refinement task failed for %s: %s", candidate.name, result)
+                refined.append(candidate)
+                continue
+            refined.append(result)
+        return refined
+
+    async def _refine_world_settings(
+        self,
+        candidates: Sequence[DetectedWorldSetting],
+        chapters: Sequence[DetectedChapter],
+    ) -> list[DetectedWorldSetting]:
+        """Refine merged world-setting candidates into detailed cards."""
+        if not candidates or not self._llm_ready():
+            return list(candidates)
+        results = await asyncio.gather(
+            *(self._refine_world_setting(candidate, chapters) for candidate in candidates),
+            return_exceptions=True,
+        )
+        refined: list[DetectedWorldSetting] = []
+        for candidate, result in zip(candidates, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.warning("World-setting refinement task failed for %s: %s", candidate.name, result)
+                refined.append(candidate)
+                continue
+            refined.append(result)
+        return refined
 
     def _chunk_text(self, text: str, max_chars: int = 12000, overlap: int = 500) -> list[str]:
         """Split long text into overlapping chunks."""
@@ -1495,6 +1865,432 @@ class TextImportService:
             f"{normalized[tail_start:]}"
         )
 
+    def _build_heuristic_source(self, chapter: DetectedChapter, *, max_chars: int | None = None) -> str:
+        """Build a deterministic, bounded text block for heuristic extraction."""
+        parts = [
+            chapter.title or "",
+            chapter.outline or "",
+            self._sample_text(chapter.content, max_chars or self.HEURISTIC_CHAPTER_SAMPLE_CHARS),
+        ]
+        return self._normalize_text("\n".join(part for part in parts if part))
+
+    def _split_heuristic_sentences(self, text: str) -> list[str]:
+        """Split sampled text into compact sentences for heuristic matching."""
+        normalized = self._normalize_text(text)
+        if not normalized:
+            return []
+        sentences: list[str] = []
+        for raw in self._HEURISTIC_SENTENCE_SPLIT_RE.split(normalized):
+            sentence = raw.strip(" ，、：:；;,.!?！？\"'“”‘’()（）[]【】<>《》")
+            if sentence:
+                sentences.append(sentence)
+        return sentences
+
+    def _append_unique_sample(self, samples: list[str], sample: str, *, limit: int) -> None:
+        """Keep short, deduplicated evidence snippets."""
+        excerpt = self._sample_text(sample, 120)
+        if not excerpt or excerpt in samples or len(samples) >= limit:
+            return
+        samples.append(excerpt)
+
+    def _format_chapter_scope(self, chapter_numbers: Sequence[int]) -> str:
+        """Render chapter coverage in a compact human-readable form."""
+        ordered = sorted(set(chapter_numbers))
+        if not ordered:
+            return "导入文本"
+        if len(ordered) == 1:
+            return f"第{ordered[0]}章"
+        if len(ordered) <= 4:
+            return "第" + "、".join(str(number) for number in ordered) + "章"
+        return f"第{ordered[0]}至第{ordered[-1]}章"
+
+    def _looks_like_character_name(self, candidate: str) -> bool:
+        """Filter noisy short phrases before treating them as character names."""
+        name = candidate.strip()
+        if len(name) < 2 or len(name) > 4:
+            return False
+        if any(not ("\u4e00" <= char <= "\u9fff") for char in name):
+            return False
+        if name in self._CHARACTER_STOPWORDS:
+            return False
+        if name.startswith(("第", "这", "那", "其", "某", "每", "我", "你", "他", "她", "它", "不", "却", "仍", "又", "便", "仰", "低", "轻")):
+            return False
+        if name.endswith(("的", "了", "着", "们", "男", "女", "人")):
+            return False
+        if name.endswith(
+            (
+                "门",
+                "宗",
+                "派",
+                "宫",
+                "殿",
+                "阁",
+                "城",
+                "镇",
+                "村",
+                "国",
+                "洲",
+                "州",
+                "山",
+                "海",
+                "谷",
+                "岭",
+                "岛",
+                "关",
+                "河",
+                "湖",
+                "江",
+                "院",
+                "司",
+                "营",
+                "寨",
+                "体系",
+                "法则",
+                "阵法",
+                "功法",
+                "术法",
+                "血脉",
+                "灵脉",
+            )
+        ):
+            return False
+        return True
+
+    def _normalize_character_name_candidate(self, candidate: str) -> str:
+        """Trim action adverbs accidentally captured together with a name."""
+        name = candidate.strip()
+        for suffix in (
+            "低声",
+            "轻声",
+            "沉声",
+            "厉声",
+            "冷声",
+            "笑着",
+            "笑道",
+            "说道",
+            "点头",
+            "摇头",
+            "皱眉",
+            "看着",
+            "望着",
+            "想着",
+            "起身",
+            "转身",
+            "抱拳",
+            "行礼",
+        ):
+            if len(name) > len(suffix) and name.endswith(suffix):
+                name = name[: -len(suffix)]
+                break
+        if len(name) > 2 and name.endswith(("在", "看", "摇", "笑", "问", "说", "道")):
+            name = name[:-1]
+        return name
+
+    def _collect_character_evidence(
+        self,
+        chapters: Sequence[DetectedChapter],
+    ) -> dict[str, _HeuristicEntityEvidence]:
+        """Collect candidate characters from dialogue and action context."""
+        evidence: dict[str, _HeuristicEntityEvidence] = {}
+
+        for chapter in chapters:
+            sentences = self._split_heuristic_sentences(self._build_heuristic_source(chapter))
+            for sentence in sentences:
+                names: set[str] = set()
+                for pattern in self._CHARACTER_CONTEXT_PATTERNS:
+                    for match in pattern.finditer(sentence):
+                        candidate = self._normalize_character_name_candidate(match.group("name"))
+                        if self._looks_like_character_name(candidate):
+                            names.add(candidate)
+
+                for name in names:
+                    entity = evidence.setdefault(name, _HeuristicEntityEvidence())
+                    entity.mentions += 1
+                    entity.score += 3 if name[:1] in self._COMMON_SURNAMES else 2
+                    entity.chapter_numbers.add(chapter.chapter_number)
+                    self._append_unique_sample(
+                        entity.samples,
+                        sentence,
+                        limit=self.HEURISTIC_DETAIL_SENTENCE_LIMIT,
+                    )
+
+        return evidence
+
+    def _infer_character_role(self, *, index: int, chapter_hits: int, total_mentions: int) -> str:
+        """Infer a lightweight role label for imported character previews."""
+        if index == 0 or chapter_hits >= 4 or total_mentions >= 6:
+            return "主角"
+        if chapter_hits >= 2 or total_mentions >= 3:
+            return "重要角色"
+        return "配角"
+
+    def _infer_character_personality(self, name: str, samples: Sequence[str]) -> str:
+        """Derive a concise personality note from repeated action words."""
+        haystack = "\n".join(samples)
+        trait_keywords = {
+            "冷静克制": ("沉声", "冷声", "皱眉", "思索", "盘算", "看着", "低声"),
+            "果决强硬": ("喝道", "厉声", "拔刀", "拔剑", "出手", "杀", "斩"),
+            "机敏谨慎": ("小心", "试探", "留意", "观察", "低声", "悄悄"),
+            "坚忍执拗": ("咬牙", "忍住", "坚持", "硬撑", "不退"),
+            "温和从容": ("笑道", "微笑", "安慰", "点头", "抱拳"),
+        }
+        matched = [
+            trait
+            for trait, keywords in trait_keywords.items()
+            if any(keyword in haystack for keyword in keywords)
+        ]
+        if matched:
+            return f"从原文表现看，{name}偏向" + "、".join(matched[:2]) + "。"
+        return f"从相关章节表现看，{name}持续参与关键冲突与推进。"
+
+    def _extract_character_appearance(self, name: str, samples: Sequence[str]) -> str | None:
+        """Extract appearance-oriented evidence when the prose mentions it."""
+        appearance_keywords = (
+            "目光",
+            "眉",
+            "眼",
+            "脸",
+            "面容",
+            "长发",
+            "短发",
+            "衣",
+            "袍",
+            "甲",
+            "身形",
+            "高大",
+            "瘦削",
+        )
+        for sample in samples:
+            if name in sample and any(keyword in sample for keyword in appearance_keywords):
+                return self._sample_text(sample, 120)
+        return None
+
+    def _build_character_heuristic_profile(
+        self,
+        *,
+        name: str,
+        evidence: _HeuristicEntityEvidence,
+    ) -> dict[str, Any]:
+        """Build a renderable profile payload for heuristic character extraction."""
+        chapter_scope = self._format_chapter_scope(sorted(evidence.chapter_numbers))
+        story_excerpt = self._sample_text("；".join(evidence.samples), 180)
+        profile: dict[str, Any] = {
+            "background": f"{name}主要活跃于{chapter_scope}。相关情节：{story_excerpt or '原文片段不足，建议导入后继续补充。'}",
+            "personality": self._infer_character_personality(name, evidence.samples),
+            "key_events": story_excerpt or f"{name}在导入文本中多次出现。",
+            "chapter_scope": chapter_scope,
+        }
+        appearance = self._extract_character_appearance(name, evidence.samples)
+        if appearance:
+            profile["appearance"] = appearance
+        return profile
+
+    def _extract_characters_heuristic(self, chapters: Sequence[DetectedChapter]) -> list[DetectedCharacter]:
+        """Fallback character extraction when LLM output is unavailable or too thin."""
+        evidence_by_name = self._collect_character_evidence(chapters)
+        ranked_names = sorted(
+            evidence_by_name,
+            key=lambda name: (
+                -len(evidence_by_name[name].chapter_numbers),
+                -evidence_by_name[name].score,
+                -evidence_by_name[name].mentions,
+                name,
+            ),
+        )
+
+        characters: list[DetectedCharacter] = []
+        for index, name in enumerate(ranked_names[: self.HEURISTIC_CHARACTER_LIMIT]):
+            evidence = evidence_by_name[name]
+            if evidence.mentions < 2 and len(evidence.chapter_numbers) < 2:
+                continue
+            characters.append(
+                DetectedCharacter(
+                    name=name,
+                    role=self._infer_character_role(
+                        index=index,
+                        chapter_hits=len(evidence.chapter_numbers),
+                        total_mentions=evidence.mentions,
+                    ),
+                    profile=self._build_character_heuristic_profile(name=name, evidence=evidence),
+                    relationships={},
+                )
+            )
+        return characters
+
+    def _enrich_characters(
+        self,
+        characters: Sequence[DetectedCharacter],
+        chapters: Sequence[DetectedChapter],
+    ) -> list[DetectedCharacter]:
+        """Fill missing profile detail so imported characters are not title-only."""
+        heuristic_lookup = {
+            character.name: character
+            for character in self._extract_characters_heuristic(chapters)
+        }
+        enriched: list[DetectedCharacter] = []
+        for index, character in enumerate(characters):
+            heuristic = heuristic_lookup.get(character.name)
+            merged_profile = dict(heuristic.profile) if heuristic is not None else {}
+            merged_profile.update(character.profile)
+            if heuristic is not None:
+                if not merged_profile.get("background"):
+                    merged_profile["background"] = heuristic.profile.get("background")
+                if not merged_profile.get("personality"):
+                    merged_profile["personality"] = heuristic.profile.get("personality")
+                if not merged_profile.get("appearance") and heuristic.profile.get("appearance"):
+                    merged_profile["appearance"] = heuristic.profile.get("appearance")
+                if not merged_profile.get("key_events"):
+                    merged_profile["key_events"] = heuristic.profile.get("key_events")
+
+            role = character.role or (
+                heuristic.role
+                if heuristic is not None
+                else self._infer_character_role(
+                    index=index,
+                    chapter_hits=1,
+                    total_mentions=max(len(character.relationships), 1),
+                )
+            )
+            enriched.append(character.model_copy(update={"role": role, "profile": merged_profile}))
+        return enriched
+
+    def _looks_like_world_setting_name(self, candidate: str) -> bool:
+        """Filter noisy matched phrases before treating them as world-setting entities."""
+        name = candidate.strip()
+        if len(name) < 2 or len(name) > 12:
+            return False
+        if name in self._WORLD_SETTING_STOPWORDS or name.startswith("第"):
+            return False
+        if any(marker in name for marker in ("的", "了", "着", "我", "你", "他", "她", "它", "不")):
+            return False
+        return all("\u4e00" <= char <= "\u9fff" for char in name)
+
+    def _infer_world_setting_category(
+        self,
+        name: str,
+        samples: Sequence[str],
+    ) -> WorldSettingCategoryLiteral:
+        """Infer a setting category from the matched name and context."""
+        haystack = f"{name}\n" + "\n".join(samples)
+        if name.endswith(("城", "镇", "村", "山", "谷", "岭", "峰", "海", "河", "湖", "江", "洲", "州", "国", "郡", "关", "岛", "川", "原", "境", "域")):
+            return WorldSettingCategory.GEOGRAPHY
+        if name.endswith(("宫", "殿", "阁", "府", "院", "门", "宗", "派", "盟", "教", "会", "司", "营", "寨", "部", "族", "军")):
+            return WorldSettingCategory.ORGANIZATION
+        if any(keyword in haystack for keyword in ("体系", "法则", "阵法", "功法", "术法", "心法", "灵脉", "血脉", "修行", "修炼", "境界", "禁制")):
+            return WorldSettingCategory.MAGIC_SYSTEM
+        if any(keyword in haystack for keyword in ("前朝", "旧朝", "大战", "劫", "纪元", "旧事", "史")):
+            return WorldSettingCategory.HISTORY
+        if any(keyword in haystack for keyword in ("祭", "礼", "俗", "传统", "婚", "葬", "节")):
+            return WorldSettingCategory.CULTURE
+        if any(keyword in haystack for keyword in ("神", "佛", "庙", "祭司", "教义", "信徒")):
+            return WorldSettingCategory.RELIGION
+        if any(keyword in haystack for keyword in ("商", "市", "币", "税", "贸易", "货币", "商路")):
+            return WorldSettingCategory.ECONOMY
+        if any(keyword in haystack for keyword in ("律", "禁", "规", "约", "誓", "契约")):
+            return WorldSettingCategory.RULES
+        if any(keyword in haystack for keyword in ("机关", "火器", "工坊", "机括")):
+            return WorldSettingCategory.TECHNOLOGY
+        return WorldSettingCategory.OTHER
+
+    def _build_world_setting_heuristic_content(
+        self,
+        *,
+        name: str,
+        category: WorldSettingCategoryLiteral,
+        evidence: _HeuristicEntityEvidence,
+    ) -> str:
+        """Expand a setting title into readable detail for detail pages and graphs."""
+        chapter_scope = self._format_chapter_scope(sorted(evidence.chapter_numbers))
+        category_labels = {
+            WorldSettingCategory.MAGIC_SYSTEM: "力量体系",
+            WorldSettingCategory.GEOGRAPHY: "地理场域",
+            WorldSettingCategory.HISTORY: "历史背景",
+            WorldSettingCategory.ORGANIZATION: "组织势力",
+            WorldSettingCategory.TECHNOLOGY: "技术器物",
+            WorldSettingCategory.CULTURE: "文化习俗",
+            WorldSettingCategory.RELIGION: "宗教信仰",
+            WorldSettingCategory.ECONOMY: "经济流通",
+            WorldSettingCategory.RULES: "规则约束",
+            WorldSettingCategory.OTHER: "综合设定",
+        }
+        detail = self._sample_text("；".join(evidence.samples), 220)
+        return (
+            f"{name}属于{category_labels.get(category, '综合设定')}，主要见于{chapter_scope}。"
+            f"{detail or '当前仅从原文中提取到名称，建议导入后继续补充具体规则与影响。'}"
+        )
+
+    def _extract_world_settings_heuristic(
+        self,
+        chapters: Sequence[DetectedChapter],
+    ) -> list[DetectedWorldSetting]:
+        """Fallback world-setting extraction using suffix and context heuristics."""
+        evidence_by_name: dict[str, _HeuristicEntityEvidence] = {}
+        for chapter in chapters:
+            sentences = self._split_heuristic_sentences(self._build_heuristic_source(chapter))
+            for sentence in sentences:
+                for match in self._WORLD_SETTING_PATTERN.finditer(sentence):
+                    name = match.group("name").strip()
+                    if not self._looks_like_world_setting_name(name):
+                        continue
+                    entity = evidence_by_name.setdefault(name, _HeuristicEntityEvidence())
+                    entity.mentions += 1
+                    entity.score += 2
+                    entity.chapter_numbers.add(chapter.chapter_number)
+                    self._append_unique_sample(
+                        entity.samples,
+                        sentence,
+                        limit=self.HEURISTIC_DETAIL_SENTENCE_LIMIT,
+                    )
+
+        ranked_names = sorted(
+            evidence_by_name,
+            key=lambda name: (
+                -len(evidence_by_name[name].chapter_numbers),
+                -evidence_by_name[name].mentions,
+                name,
+            ),
+        )
+        settings: list[DetectedWorldSetting] = []
+        for name in ranked_names[: self.HEURISTIC_WORLD_SETTING_LIMIT]:
+            evidence = evidence_by_name[name]
+            if evidence.mentions < 2 and len(evidence.chapter_numbers) < 2:
+                continue
+            category = self._infer_world_setting_category(name, evidence.samples)
+            settings.append(
+                DetectedWorldSetting(
+                    category=category,
+                    name=name,
+                    content=self._build_world_setting_heuristic_content(
+                        name=name,
+                        category=category,
+                        evidence=evidence,
+                    ),
+                )
+            )
+        return settings
+
+    def _enrich_world_settings(
+        self,
+        settings: Sequence[DetectedWorldSetting],
+        chapters: Sequence[DetectedChapter],
+    ) -> list[DetectedWorldSetting]:
+        """Fill shallow setting content so imported pages do not show title-only entries."""
+        heuristic_lookup = {
+            setting.name: setting
+            for setting in self._extract_world_settings_heuristic(chapters)
+        }
+        enriched: list[DetectedWorldSetting] = []
+        for setting in settings:
+            heuristic = heuristic_lookup.get(setting.name)
+            content = setting.content.strip()
+            if heuristic is not None and (len(content) < self.MIN_DETAIL_TEXT_CHARS or content == setting.name):
+                content = heuristic.content
+            category = setting.category
+            if heuristic is not None and category == WorldSettingCategory.OTHER:
+                category = heuristic.category
+            enriched.append(setting.model_copy(update={"category": category, "content": content}))
+        return enriched
+
     def _render_outline_lines(self, chapters: Sequence[DetectedChapter]) -> list[str]:
         """Render outline lines for a chapter collection."""
         return [
@@ -1626,12 +2422,18 @@ class TextImportService:
         if not pair_counts:
             return list(characters)
 
+        selected_pairs = [
+            (pair, count)
+            for pair, count in pair_counts.items()
+            if count >= self.CHARACTER_COOCCURRENCE_MIN_CHAPTERS
+        ]
+        if not selected_pairs:
+            selected_pairs = pair_counts.most_common(6)
+
         enriched: list[DetectedCharacter] = []
         for character in characters:
             relationships = dict(character.relationships)
-            for (left_name, right_name), count in pair_counts.items():
-                if count < self.CHARACTER_COOCCURRENCE_MIN_CHAPTERS:
-                    continue
+            for (left_name, right_name), count in selected_pairs:
                 label = "频繁共现" if count >= 3 else "同章出现"
                 if character.name == left_name and right_name not in relationships:
                     relationships[right_name] = label
