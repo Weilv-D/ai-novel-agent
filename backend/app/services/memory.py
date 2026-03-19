@@ -87,7 +87,7 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
                 return cached_matches, cached_total_count
 
         # Import Vector for distance calculation
-        from pgvector.sqlalchemy import Vector
+        from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
         from sqlalchemy import cast
 
         # Build query with cosine distance

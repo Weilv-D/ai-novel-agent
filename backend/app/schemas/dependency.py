@@ -1,7 +1,7 @@
 """Dependency schemas for impact analysis and relationship tracking."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -20,10 +20,10 @@ DependencyTypeLiteral = Literal["references", "influences", "contains", "precede
 class DependencyType:
     """Dependency type constants."""
 
-    REFERENCES = "references"  # e.g., chapter references character
-    INFLUENCES = "influences"  # e.g., setting influences character
-    CONTAINS = "contains"  # e.g., volume contains chapter
-    PRECEDES = "precedes"  # e.g., chapter precedes another chapter
+    REFERENCES: Final[DependencyTypeLiteral] = "references"  # e.g., chapter references character
+    INFLUENCES: Final[DependencyTypeLiteral] = "influences"  # e.g., setting influences character
+    CONTAINS: Final[DependencyTypeLiteral] = "contains"  # e.g., volume contains chapter
+    PRECEDES: Final[DependencyTypeLiteral] = "precedes"  # e.g., chapter precedes another chapter
 
 
 # ============ Dependency Schemas ============

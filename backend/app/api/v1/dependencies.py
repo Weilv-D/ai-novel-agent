@@ -9,7 +9,9 @@ from app.api.deps import get_db
 from app.models.dependency import Dependency
 from app.schemas.dependency import (
     DependencyCreate,
+    DependencyEntityTypeLiteral,
     DependencyResponse,
+    DependencyTypeLiteral,
     DependencyUpdate,
     ImpactAnalysisRequest,
     ImpactAnalysisResponse,
@@ -36,11 +38,11 @@ async def query_dependencies(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    source_type: str | None = None,
+    source_type: DependencyEntityTypeLiteral | None = None,
     source_id: UUID | None = None,
-    target_type: str | None = None,
+    target_type: DependencyEntityTypeLiteral | None = None,
     target_id: UUID | None = None,
-    dependency_type: str | None = None,
+    dependency_type: DependencyTypeLiteral | None = None,
     skip: int = 0,
     limit: int = 100,
 ) -> list[Dependency]:
@@ -63,7 +65,7 @@ async def list_source_dependencies(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    source_type: str,
+    source_type: DependencyEntityTypeLiteral,
     source_id: UUID,
     skip: int = 0,
     limit: int = 100,
@@ -79,7 +81,7 @@ async def list_target_dependencies(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    target_type: str,
+    target_type: DependencyEntityTypeLiteral,
     target_id: UUID,
     skip: int = 0,
     limit: int = 100,
@@ -122,7 +124,7 @@ async def analyze_reverse_impact(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    target_type: str,
+    target_type: DependencyEntityTypeLiteral,
     target_id: UUID,
 ) -> ImpactAnalysisResponse:
     """Analyze what would be affected if a target object is modified.

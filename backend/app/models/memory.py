@@ -16,7 +16,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 # Import Vector type conditionally for SQLite compatibility
 try:
-    from pgvector.sqlalchemy import Vector as PgVector
+    from pgvector.sqlalchemy import Vector as PgVector  # type: ignore[import-untyped]
 except ImportError:
     PgVector = None
 

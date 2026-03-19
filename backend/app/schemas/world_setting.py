@@ -1,7 +1,7 @@
 """WorldSetting schemas."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -29,16 +29,16 @@ WorldSettingCategoryLiteral = Literal[
 class WorldSettingCategory:
     """World setting category constants."""
 
-    MAGIC_SYSTEM = "magic_system"
-    GEOGRAPHY = "geography"
-    HISTORY = "history"
-    ORGANIZATION = "organization"
-    TECHNOLOGY = "technology"
-    CULTURE = "culture"
-    RELIGION = "religion"
-    ECONOMY = "economy"
-    RULES = "rules"
-    OTHER = "other"
+    MAGIC_SYSTEM: Final[WorldSettingCategoryLiteral] = "magic_system"
+    GEOGRAPHY: Final[WorldSettingCategoryLiteral] = "geography"
+    HISTORY: Final[WorldSettingCategoryLiteral] = "history"
+    ORGANIZATION: Final[WorldSettingCategoryLiteral] = "organization"
+    TECHNOLOGY: Final[WorldSettingCategoryLiteral] = "technology"
+    CULTURE: Final[WorldSettingCategoryLiteral] = "culture"
+    RELIGION: Final[WorldSettingCategoryLiteral] = "religion"
+    ECONOMY: Final[WorldSettingCategoryLiteral] = "economy"
+    RULES: Final[WorldSettingCategoryLiteral] = "rules"
+    OTHER: Final[WorldSettingCategoryLiteral] = "other"
 
 
 class WorldSettingBase(BaseModel):

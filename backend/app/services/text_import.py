@@ -10,16 +10,21 @@ from collections import Counter
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from time import time
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_service
 from app.core.exceptions import BadRequestException
-from app.schemas.chapter import ChapterCreate, ChapterStatus, VolumeCreate
+from app.schemas.chapter import ChapterCreate, VolumeCreate
 from app.schemas.character import CharacterCreate
-from app.schemas.dependency import DependencyCreate, DependencyType
+from app.schemas.dependency import (
+    DependencyCreate,
+    DependencyEntityTypeLiteral,
+    DependencyType,
+    DependencyTypeLiteral,
+)
 from app.schemas.memory import MemoryCreate, MemoryType
 from app.schemas.project import ProjectCreate
 from app.schemas.text_import import (
@@ -33,7 +38,11 @@ from app.schemas.text_import import (
     TextImportResponse,
 )
 from app.schemas.types import CONTENT_MAX_LENGTH
-from app.schemas.world_setting import WorldSettingCategory, WorldSettingCreate
+from app.schemas.world_setting import (
+    WorldSettingCategory,
+    WorldSettingCategoryLiteral,
+    WorldSettingCreate,
+)
 from app.services.chapter import chapter_service, volume_service
 from app.services.character import character_service
 from app.services.dependency import dependency_service
@@ -61,6 +70,12 @@ class _ChapterMarker:
 class _VolumeMarker:
     volume_number: int
     title: str | None
+    line_index: int
+
+
+@dataclass(slots=True)
+class _ChapterSegment:
+    chapter: DetectedChapter
     line_index: int
 
 
@@ -194,8 +209,12 @@ class TextImportService:
         """Analyze uploaded text and stream progress events."""
         normalized_text = self._normalize_text(text)
         preview = TextImportPreview(
+            preview_id=None,
+            compact_preview=False,
             project_name=project_name.strip() or "未命名项目",
             genre=self._clean_optional_text(genre),
+            summary=None,
+            story_outline=None,
             source_filename=source_filename,
             source_encoding=source_encoding,
         )
@@ -339,8 +358,11 @@ class TextImportService:
             obj_in=ProjectCreate(
                 name=resolved_preview.project_name,
                 genre=self._clean_optional_text(resolved_preview.genre),
+                target_audience=None,
+                target_word_count=None,
                 summary=self._clean_optional_text(resolved_preview.summary),
                 story_outline=self._clean_optional_text(resolved_preview.story_outline),
+                notes=None,
             ),
         )
 
@@ -358,6 +380,7 @@ class TextImportService:
                     volume_number=volume.volume_number,
                     title=self._clean_optional_text(volume.title),
                     outline=self._clean_optional_text(volume.outline),
+                    notes=None,
                 ),
                 project_id=project.id,
             )
@@ -379,7 +402,8 @@ class TextImportService:
                     title=self._clean_optional_text(chapter.title),
                     outline=self._clean_optional_text(chapter.outline),
                     content=chapter.content,
-                    status=ChapterStatus.DRAFT,
+                    status="draft",
+                    notes=None,
                 ),
                 project_id=project.id,
             )
@@ -433,6 +457,8 @@ class TextImportService:
                         "volume_number": chapter_to_volume_number.get(created_chapter.chapter_number),
                         "source": "text_import",
                     },
+                    embedding=None,
+                    auto_embed=False,
                 ),
                 project_id=project.id,
             )
@@ -478,7 +504,15 @@ class TextImportService:
         created_world_settings_by_name: dict[str, Any],
     ) -> list[DependencyCreate]:
         """Derive baseline structural and reference dependencies for an imported project."""
-        edges: set[tuple[str, Any, str, Any, str]] = set()
+        edges: set[
+            tuple[
+                DependencyEntityTypeLiteral,
+                Any,
+                DependencyEntityTypeLiteral,
+                Any,
+                DependencyTypeLiteral,
+            ]
+        ] = set()
 
         for volume in resolved_preview.volumes:
             created_volume = created_volumes_by_number.get(volume.volume_number)
@@ -731,37 +765,7 @@ class TextImportService:
 
     def _split_chapters(self, text: str) -> list[DetectedChapter]:
         """Split raw text into chapter previews using heading heuristics."""
-        lines = text.splitlines()
-        chapter_markers, _ = self._scan_structure(lines)
-        if not chapter_markers:
-            return [
-                DetectedChapter(
-                    chapter_number=1,
-                    title="导入正文",
-                    content=text.strip(),
-                    outline=None,
-                    content_length=len(text.strip()),
-                    content_truncated=False,
-                )
-            ]
-
-        chapters: list[DetectedChapter] = []
-        for index, marker in enumerate(chapter_markers):
-            next_line_index = chapter_markers[index + 1].line_index if index + 1 < len(chapter_markers) else len(lines)
-            raw_content = "\n".join(lines[marker.line_index + 1 : next_line_index]).strip()
-            title = self._clean_optional_text(marker.title) or f"第{marker.chapter_number}章"
-            content = raw_content or title
-            chapters.append(
-                DetectedChapter(
-                    chapter_number=marker.chapter_number,
-                    title=title,
-                    content=content,
-                    outline=None,
-                    content_length=len(content),
-                    content_truncated=False,
-                )
-            )
-        return chapters
+        return [segment.chapter for segment in self._build_chapter_segments(text)]
 
     def _detect_volumes(self, text: str, chapters: Sequence[DetectedChapter]) -> list[DetectedVolume]:
         """Detect volume grouping for chapters. Falls back to a single default volume."""
@@ -769,23 +773,24 @@ class TextImportService:
             return []
 
         lines = text.splitlines()
-        chapter_markers, volume_markers = self._scan_structure(lines)
+        chapter_segments = self._build_chapter_segments(text)
+        _, volume_markers = self._scan_structure(lines)
         if not volume_markers:
             return self._build_default_volumes(chapters)
 
         chapter_to_line = {
-            marker.chapter_number: marker.line_index
-            for marker in chapter_markers
+            segment.chapter.chapter_number: segment.line_index
+            for segment in chapter_segments
         }
         volumes: list[DetectedVolume] = []
         for index, volume_marker in enumerate(volume_markers):
             next_volume_line = volume_markers[index + 1].line_index if index + 1 < len(volume_markers) else None
             chapter_numbers = [
-                chapter.chapter_number
-                for chapter in chapters
-                if chapter_to_line.get(chapter.chapter_number) is not None
-                and chapter_to_line[chapter.chapter_number] > volume_marker.line_index
-                and (next_volume_line is None or chapter_to_line[chapter.chapter_number] < next_volume_line)
+                segment.chapter.chapter_number
+                for segment in chapter_segments
+                if chapter_to_line.get(segment.chapter.chapter_number) is not None
+                and chapter_to_line[segment.chapter.chapter_number] > volume_marker.line_index
+                and (next_volume_line is None or chapter_to_line[segment.chapter.chapter_number] < next_volume_line)
             ]
             if not chapter_numbers:
                 continue
@@ -799,6 +804,68 @@ class TextImportService:
             )
 
         return volumes or self._build_default_volumes(chapters)
+
+    def _build_chapter_segments(self, text: str) -> list[_ChapterSegment]:
+        """Build chapter payloads together with source line indexes."""
+        lines = text.splitlines()
+        chapter_markers, _ = self._scan_structure(lines)
+        if not chapter_markers:
+            content = text.strip()
+            return [
+                _ChapterSegment(
+                    chapter=DetectedChapter(
+                        chapter_number=1,
+                        title="导入正文",
+                        content=content,
+                        outline=None,
+                        content_length=len(content),
+                        content_truncated=False,
+                    ),
+                    line_index=0,
+                )
+            ]
+
+        segments: list[_ChapterSegment] = []
+        for index, marker in enumerate(chapter_markers):
+            next_line_index = chapter_markers[index + 1].line_index if index + 1 < len(chapter_markers) else len(lines)
+            raw_content = "\n".join(lines[marker.line_index + 1 : next_line_index]).strip()
+            title = self._clean_optional_text(marker.title) or f"第{marker.chapter_number}章"
+            content = raw_content or title
+            segments.append(
+                _ChapterSegment(
+                    chapter=DetectedChapter(
+                        chapter_number=marker.chapter_number,
+                        title=title,
+                        content=content,
+                        outline=None,
+                        content_length=len(content),
+                        content_truncated=False,
+                    ),
+                    line_index=marker.line_index,
+                )
+            )
+
+        return self._deduplicate_adjacent_chapter_segments(segments)
+
+    def _deduplicate_adjacent_chapter_segments(
+        self,
+        segments: Sequence[_ChapterSegment],
+    ) -> list[_ChapterSegment]:
+        """Collapse adjacent duplicate chapter blocks from noisy source files."""
+        deduplicated: list[_ChapterSegment] = []
+        for segment in segments:
+            if deduplicated and self._is_duplicate_chapter_segment(deduplicated[-1], segment):
+                continue
+            deduplicated.append(segment)
+        return deduplicated
+
+    def _is_duplicate_chapter_segment(self, previous: _ChapterSegment, current: _ChapterSegment) -> bool:
+        """Return whether two adjacent chapter blocks are effectively identical."""
+        previous_title = self._clean_optional_text(previous.chapter.title)
+        current_title = self._clean_optional_text(current.chapter.title)
+        if previous_title != current_title:
+            return False
+        return self._normalize_text(previous.chapter.content) == self._normalize_text(current.chapter.content)
 
     async def _generate_chapter_outline(self, chapter: DetectedChapter) -> _OutlineResult:
         """Generate a short outline for a chapter, with heuristic fallback."""
@@ -1288,23 +1355,38 @@ class TextImportService:
             "八": 8,
             "九": 9,
         }
-        units = {"十": 10, "百": 100, "千": 1000}
+        small_units = {"十": 10, "百": 100, "千": 1000}
+        large_units = {"万": 10000}
 
         total = 0
-        current = 0
-        unit = 1
-        for char in reversed(value):
+        section = 0
+        number = 0
+        for char in value:
             if char in numerals:
-                current += numerals[char] * unit
-            elif char in units:
-                if current == 0:
-                    current = 1
-                total += current * units[char]
-                current = 0
-                unit = 1
-            else:
-                return None
-        return total + current if total + current > 0 else None
+                number = numerals[char]
+                continue
+
+            if char in small_units:
+                unit = small_units[char]
+                if number == 0:
+                    number = 1
+                section += number * unit
+                number = 0
+                continue
+
+            if char in large_units:
+                unit = large_units[char]
+                if number == 0 and section == 0:
+                    section = 1
+                total += (section + number) * unit
+                section = 0
+                number = 0
+                continue
+
+            return None
+
+        result = total + section + number
+        return result if result > 0 else None
 
     def _build_default_volumes(self, chapters: Sequence[DetectedChapter]) -> list[DetectedVolume]:
         """Build a single fallback volume when no explicit volume structure is found."""
@@ -1335,6 +1417,12 @@ class TextImportService:
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    def _coerce_string_key_dict(self, value: Any) -> dict[str, Any]:
+        """Normalize arbitrary JSON-like objects into string-key dictionaries."""
+        if not isinstance(value, dict):
+            return {}
+        return {str(key): item for key, item in value.items()}
 
     def _llm_ready(self) -> bool:
         """Return whether the configured LLM client is available."""
@@ -1718,8 +1806,8 @@ class TextImportService:
                     DetectedCharacter(
                         name=str(item.get("name") or "").strip(),
                         role=self._clean_optional_text(str(item.get("role") or "")),
-                        profile=item.get("profile") if isinstance(item.get("profile"), dict) else {},
-                        relationships=item.get("relationships") if isinstance(item.get("relationships"), dict) else {},
+                        profile=self._coerce_string_key_dict(item.get("profile")),
+                        relationships=self._coerce_string_key_dict(item.get("relationships")),
                     )
                 )
             except Exception:
@@ -1789,7 +1877,7 @@ class TextImportService:
             key=lambda item: (-counts[(item.category, item.name)], item.category, item.name),
         )
 
-    def _normalize_world_setting_category(self, value: str) -> str:
+    def _normalize_world_setting_category(self, value: str) -> WorldSettingCategoryLiteral:
         """Normalize category aliases to the supported enum."""
         normalized = value.strip().lower()
         if normalized in {
@@ -1804,9 +1892,9 @@ class TextImportService:
             WorldSettingCategory.RULES,
             WorldSettingCategory.OTHER,
         }:
-            return normalized
+            return cast(WorldSettingCategoryLiteral, normalized)
 
-        alias_map = {
+        alias_map: dict[str, WorldSettingCategoryLiteral] = {
             "magic": WorldSettingCategory.MAGIC_SYSTEM,
             "system": WorldSettingCategory.MAGIC_SYSTEM,
             "location": WorldSettingCategory.GEOGRAPHY,

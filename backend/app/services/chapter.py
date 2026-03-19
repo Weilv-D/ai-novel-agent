@@ -179,6 +179,7 @@ class CRUDVolume(CRUDBase[Volume, VolumeCreate, VolumeUpdate]):
                 volume_number=1,
                 title="第一卷",
                 outline="默认兼容卷，用于承接尚未显式编排卷细纲的章节。",
+                notes=None,
             ),
             project_id=project_id,
         )

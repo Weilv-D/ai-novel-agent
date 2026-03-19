@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from sqlalchemy import text
+
 from app.schemas.text_import import (
     DetectedChapter,
     DetectedCharacter,
@@ -16,6 +19,20 @@ from app.services.text_import import text_import_service
 
 class TestTextImportService:
     """Covers text splitting, chunking, and commit persistence."""
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("十", 10),
+            ("十一", 11),
+            ("十二", 12),
+            ("二十", 20),
+            ("二十一", 21),
+            ("一百零二", 102),
+        ],
+    )
+    def test_parse_heading_number_handles_chinese_units(self, raw: str, expected: int) -> None:
+        assert text_import_service._parse_heading_number(raw) == expected
 
     def test_split_chapters_detects_chinese_headings(self) -> None:
         text = (
@@ -73,6 +90,22 @@ class TestTextImportService:
         assert [chapter.title for chapter in chapters] == ["初入江湖", "夜探山庄", "第一部", "第二部"]
         assert "部一内容" in chapters[2].content
         assert "部二内容" in chapters[3].content
+
+    def test_split_chapters_deduplicates_adjacent_duplicate_blocks(self) -> None:
+        text = (
+            "第十四章\n"
+            "甲内容\n\n"
+            "第十四章\n"
+            "甲内容\n\n"
+            "第十五章\n"
+            "乙内容\n"
+        )
+
+        chapters = text_import_service._split_chapters(text)
+
+        assert len(chapters) == 2
+        assert [chapter.title for chapter in chapters] == ["第十四章", "第十五章"]
+        assert [chapter.content for chapter in chapters] == ["甲内容", "乙内容"]
 
     def test_chunk_text_creates_overlap(self) -> None:
         text = "0123456789" * 40
@@ -176,6 +209,28 @@ class TestTextImportService:
         assert merged_preview.chapters[0].title == "第一章（已编辑）"
         assert merged_preview.chapters[0].outline == "编辑后章纲"
         assert merged_preview.chapters[0].content == stored_preview.chapters[0].content
+
+    def test_novel_fixture_regression_recovers_18_chapters(self) -> None:
+        fixture_path = Path(__file__).resolve().parents[3] / "others" / "九州·飘零书·商博良.txt"
+        raw_text = fixture_path.read_text(encoding="utf-8")
+        text = text_import_service._normalize_text(raw_text)
+        preview = TextImportPreview(project_name="九州·飘零书·商博良")
+
+        chapters = text_import_service._split_chapters(text)
+        volumes = text_import_service._detect_volumes(text, chapters)
+        normalized_chapters, normalized_volumes = text_import_service._normalize_detected_structure(
+            chapters=chapters,
+            volumes=volumes,
+            preview=preview,
+        )
+
+        assert len(normalized_chapters) == 18
+        assert [chapter.chapter_number for chapter in normalized_chapters] == list(range(1, 19))
+        assert normalized_chapters[10].title == "第十一章"
+        assert normalized_chapters[-1].title == "第十八章"
+        assert len(normalized_volumes) == 1
+        assert normalized_volumes[0].title == "第一卷"
+        assert normalized_volumes[0].chapter_numbers == list(range(1, 19))
 
     @pytest.mark.asyncio
     async def test_extract_characters_keeps_partial_results_when_subgroups_fail(

@@ -2424,7 +2424,7 @@ class AgentWorkflowService:
             updated_chapter = await chapter_service.update(
                 db,
                 db_obj=chapter,
-                obj_in=ChapterUpdate(**cast(dict[str, Any], payload["updates"])),
+                obj_in=ChapterUpdate.model_validate(cast(dict[str, Any], payload["updates"])),
             )
             operation.target_id = updated_chapter.id
             operation.target_display = f"第{updated_chapter.chapter_number}章 {updated_chapter.title or ''}".strip()
@@ -2447,7 +2447,7 @@ class AgentWorkflowService:
             updated_chapter = await chapter_service.update(
                 db,
                 db_obj=chapter,
-                obj_in=ChapterUpdate(content=next_content),
+                obj_in=ChapterUpdate.model_validate({"content": next_content}),
             )
             operation.target_id = updated_chapter.id
             operation.target_display = f"第{updated_chapter.chapter_number}章 {updated_chapter.title or ''}".strip()
@@ -2487,7 +2487,7 @@ class AgentWorkflowService:
             updated_scene = await scene_service.update(
                 db,
                 db_obj=scene,
-                obj_in=SceneUpdate(**cast(dict[str, Any], payload["updates"])),
+                obj_in=SceneUpdate.model_validate(cast(dict[str, Any], payload["updates"])),
             )
             operation.target_id = updated_scene.id
             operation.target_display = f"场景 {updated_scene.scene_order}"
@@ -2510,7 +2510,7 @@ class AgentWorkflowService:
             updated_scene = await scene_service.update(
                 db,
                 db_obj=scene,
-                obj_in=SceneUpdate(content=next_content),
+                obj_in=SceneUpdate.model_validate({"content": next_content}),
             )
             operation.target_id = updated_scene.id
             operation.target_display = f"场景 {updated_scene.scene_order}"

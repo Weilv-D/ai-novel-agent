@@ -1,7 +1,7 @@
 """Snapshot API routes for version control and rollback."""
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -14,6 +14,7 @@ from app.schemas.snapshot import (
     RollbackResponse,
     SnapshotCreate,
     SnapshotResponse,
+    SnapshotTargetTypeLiteral,
     SnapshotUpdate,
 )
 from app.services.snapshot import snapshot_service
@@ -52,7 +53,7 @@ async def list_target_snapshots(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    target_type: str,
+    target_type: SnapshotTargetTypeLiteral,
     target_id: UUID,
     skip: int = 0,
     limit: int = 100,
@@ -73,7 +74,7 @@ async def get_latest_snapshot(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    target_type: str,
+    target_type: SnapshotTargetTypeLiteral,
     target_id: UUID,
 ) -> Snapshot:
     """Get the latest snapshot for a specific target object."""
@@ -94,7 +95,7 @@ async def count_snapshots(
     *,
     db: AsyncSession = Depends(get_db),
     project_id: UUID,
-    target_type: str | None = None,
+    target_type: SnapshotTargetTypeLiteral | None = None,
 ) -> dict[str, Any]:
     """Count snapshots for a project, optionally filtered by target type."""
     count = await snapshot_service.count_by_project(db, project_id=project_id, target_type=target_type)
@@ -129,7 +130,7 @@ async def rollback_to_snapshot(
 
     return RollbackResponse(
         snapshot_id=snapshot.id,
-        target_type=snapshot.target_type,
+        target_type=cast(SnapshotTargetTypeLiteral, snapshot.target_type),
         target_id=snapshot.target_id,
         rolled_back_at=datetime.now(UTC),
         message=f"Rollback data prepared for {snapshot.target_type}:{snapshot.target_id}. "
