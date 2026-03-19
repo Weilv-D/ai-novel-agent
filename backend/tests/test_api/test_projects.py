@@ -8,7 +8,16 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.project import ProjectResponse
+from app.schemas.agent import AgentRunResponse, AgentThreadCheckpointResponse, AgentThreadResponse
+from app.schemas.project import (
+    ProjectAgentSettings,
+    ProjectResponse,
+    ProjectTreeChapterResponse,
+    ProjectTreeResponse,
+    ProjectTreeVolumeResponse,
+    ProjectWorkspaceResponse,
+    ProjectWorkspaceSummaryResponse,
+)
 
 
 class TestListProjects:
@@ -118,6 +127,43 @@ class TestCreateProject:
             assert response.status_code == status.HTTP_201_CREATED
             assert response.json()["agent_profile_id"] == "xianxia_intrigue"
             assert mock_create.await_args.kwargs["obj_in"].agent_profile_id == "xianxia_intrigue"
+
+    def test_create_project_accepts_agent_settings(self):
+        """Project creation should accept project-level agent settings."""
+        client = TestClient(app)
+
+        project_data = {
+            "name": "My Novel",
+            "agent_settings": {
+                "style_goal": "冷峻权谋",
+                "tone_keywords": ["克制", "压迫感"],
+                "continuity_mode": "strict",
+            },
+        }
+
+        mock_response = ProjectResponse(
+            id=uuid.uuid4(),
+            name="My Novel",
+            agent_settings=ProjectAgentSettings(
+                style_goal="冷峻权谋",
+                tone_keywords=["克制", "压迫感"],
+                continuity_mode="strict",
+            ),
+            status="drafting",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch(
+            "app.api.v1.projects.project_service.create_project", new_callable=AsyncMock
+        ) as mock_create:
+            mock_create.return_value = mock_response
+
+            response = client.post("/api/v1/projects", json=project_data)
+
+            assert response.status_code == status.HTTP_201_CREATED
+            assert response.json()["agent_settings"]["style_goal"] == "冷峻权谋"
+            assert mock_create.await_args.kwargs["obj_in"].agent_settings.style_goal == "冷峻权谋"
 
     def test_create_project_invalid_schema(self):
         """Test creating a project with invalid schema."""
@@ -262,6 +308,146 @@ class TestUpdateProject:
 
                 assert response.status_code == status.HTTP_200_OK
                 assert response.json()["agent_profile_id"] == "xianxia_intrigue"
+
+    def test_update_project_agent_settings(self):
+        """Project update should expose project-level agent settings."""
+        client = TestClient(app)
+        project_id = uuid.uuid4()
+
+        mock_response = ProjectResponse(
+            id=project_id,
+            name="Updated Name",
+            genre="Fantasy",
+            agent_settings=ProjectAgentSettings(
+                tone_keywords=["冷静"],
+                continuity_mode="standard",
+            ),
+            status="drafting",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch("app.api.v1.projects.project_service.get", new_callable=AsyncMock) as mock_get:
+            with patch(
+                "app.api.v1.projects.project_service.update", new_callable=AsyncMock
+            ) as mock_update:
+                mock_get.return_value = mock_response
+                mock_update.return_value = mock_response
+
+                response = client.patch(
+                    f"/api/v1/projects/{project_id}",
+                    json={"agent_settings": {"tone_keywords": ["冷静"], "continuity_mode": "standard"}},
+                )
+
+                assert response.status_code == status.HTTP_200_OK
+                assert response.json()["agent_settings"]["continuity_mode"] == "standard"
+                assert mock_update.await_args.kwargs["obj_in"].agent_settings.continuity_mode == "standard"
+
+
+class TestProjectWorkspaceEndpoints:
+    """Tests for aggregated tree/workspace project endpoints."""
+
+    def test_get_project_tree(self):
+        """Tree endpoint should return the nested volume/chapter structure."""
+        client = TestClient(app)
+        project_id = uuid.uuid4()
+
+        mock_response = ProjectTreeResponse(
+            project_id=project_id,
+            volumes=[
+                ProjectTreeVolumeResponse(
+                    id=uuid.uuid4(),
+                    project_id=project_id,
+                    volume_number=1,
+                    title="第一卷",
+                    chapters=[
+                        ProjectTreeChapterResponse(
+                            id=uuid.uuid4(),
+                            project_id=project_id,
+                            chapter_number=1,
+                            title="开篇",
+                            status="draft",
+                        )
+                    ],
+                )
+            ],
+        )
+
+        with patch("app.api.v1.projects.project_workspace_service.get_tree_response", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            response = client.get(f"/api/v1/projects/{project_id}/tree")
+
+            assert response.status_code == status.HTTP_200_OK
+            assert response.json()["volumes"][0]["chapters"][0]["title"] == "开篇"
+
+    def test_get_project_workspace(self):
+        """Workspace endpoint should return aggregate project + thread state data."""
+        client = TestClient(app)
+        project_id = uuid.uuid4()
+        thread_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+
+        mock_response = ProjectWorkspaceResponse(
+            project=ProjectResponse(
+                id=project_id,
+                name="测试项目",
+                agent_settings=ProjectAgentSettings(style_goal="冷峻", continuity_mode="strict"),
+                status="drafting",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            ),
+            agent_settings=ProjectAgentSettings(style_goal="冷峻", continuity_mode="strict"),
+            tree=ProjectTreeResponse(project_id=project_id),
+            default_thread=AgentThreadResponse(
+                id=thread_id,
+                project_id=project_id,
+                title="Default",
+                is_default=True,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            ),
+            latest_checkpoint=AgentThreadCheckpointResponse(
+                id=uuid.uuid4(),
+                thread_id=thread_id,
+                profile_id="default",
+                thread_summary="summary",
+                source_message_count=1,
+                source_run_count=1,
+                total_context_characters=42,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            ),
+            current_run=AgentRunResponse(
+                id=run_id,
+                thread_id=thread_id,
+                project_id=project_id,
+                status="awaiting_confirmation",
+                verification_status="pending",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            ),
+            recent_runs=[],
+            workspace_summary=ProjectWorkspaceSummaryResponse(
+                volume_count=0,
+                chapter_count=0,
+                scene_count=0,
+                character_count=0,
+                world_setting_count=0,
+                latest_run_status="awaiting_confirmation",
+                context_source="live_context",
+            ),
+        )
+
+        with patch("app.api.v1.projects.project_workspace_service.get_workspace_response", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            response = client.get(f"/api/v1/projects/{project_id}/workspace")
+
+            assert response.status_code == status.HTTP_200_OK
+            assert response.json()["project"]["name"] == "测试项目"
+            assert response.json()["agent_settings"]["style_goal"] == "冷峻"
+            assert response.json()["workspace_summary"]["context_source"] == "live_context"
 
 
 class TestDeleteProject:

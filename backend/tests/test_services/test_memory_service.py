@@ -494,10 +494,7 @@ class TestMemoryServiceCache:
             meta={"chapter": 1},
             similarity=0.93,
         )
-        db_session.execute.side_effect = [
-            FakeQueryResult(rows=[row]),
-            FakeQueryResult(scalar_value=3),
-        ]
+        db_session.execute.side_effect = [FakeQueryResult(rows=[row])]
 
         with patch("app.services.memory.cache_service.get", new_callable=AsyncMock) as mock_get:
             with patch("app.services.memory.cache_service.set", new_callable=AsyncMock) as mock_set:
@@ -514,7 +511,7 @@ class TestMemoryServiceCache:
                     ),
                 )
 
-        assert count == 3
+        assert count == 1
         assert result == [
             {
                 "id": row.id,
@@ -524,8 +521,112 @@ class TestMemoryServiceCache:
                 "similarity": 0.93,
             }
         ]
-        assert db_session.execute.await_count == 2
+        assert db_session.execute.await_count == 1
         mock_set.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_search_by_embedding_applies_meta_and_related_filters(self) -> None:
+        """Metadata, related ids, and scope filters should be enforced after vector retrieval."""
+        from unittest.mock import AsyncMock, patch
+
+        class FakeQueryResult:
+            def __init__(self, *, rows=None):
+                self._rows = rows or []
+
+            def all(self):
+                return self._rows
+
+        db_session = AsyncMock()
+        project_id = uuid.uuid4()
+        character_id = uuid.uuid4()
+        world_setting_id = uuid.uuid4()
+        chapter_id = uuid.uuid4()
+        matching_row = SimpleNamespace(
+            id=uuid.uuid4(),
+            memory_type="fact",
+            content="匹配事实",
+            meta={
+                "fact_kind": "timeline",
+                "character_ids": [str(character_id)],
+                "world_setting_ids": [str(world_setting_id)],
+                "chapter_id": str(chapter_id),
+            },
+            similarity=0.95,
+        )
+        skipped_row = SimpleNamespace(
+            id=uuid.uuid4(),
+            memory_type="fact",
+            content="不匹配事实",
+            meta={
+                "fact_kind": "setting",
+                "character_ids": [str(uuid.uuid4())],
+                "world_setting_ids": [str(uuid.uuid4())],
+                "chapter_id": str(uuid.uuid4()),
+            },
+            similarity=0.99,
+        )
+        db_session.execute.side_effect = [FakeQueryResult(rows=[matching_row, skipped_row])]
+
+        with patch("app.services.memory.cache_service.get", new_callable=AsyncMock) as mock_get:
+            with patch("app.services.memory.cache_service.set", new_callable=AsyncMock):
+                mock_get.return_value = None
+
+                result, count = await memory_service.search_by_embedding(
+                    db_session,
+                    project_id=project_id,
+                    search_params=VectorSearchRequest(
+                        query_embedding=[0.1] * EMBEDDING_DIMENSION,
+                        limit=5,
+                        threshold=0.7,
+                        memory_type="fact",
+                        meta_filters={"fact_kind": "timeline"},
+                        related_character_ids=[character_id],
+                        related_world_setting_ids=[world_setting_id],
+                        scope={"chapter_id": chapter_id},
+                    ),
+                )
+
+        assert count == 1
+        assert len(result) == 1
+        assert result[0]["content"] == "匹配事实"
+
+    @pytest.mark.asyncio
+    async def test_upsert_fact_merges_by_fingerprint(self, db_session: AsyncSession):
+        """Upserting the same fact fingerprint should merge into the existing row."""
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(name="Fact Project", genre="Fantasy"),
+        )
+
+        first = await memory_service.upsert_fact(
+            db_session,
+            project_id=project.id,
+            memory_type="fact",
+            content="苏砚在第三章夜探山门。",
+            meta={
+                "fact_kind": "timeline",
+                "chapter_id": "chapter-3",
+                "character_ids": ["char-1"],
+            },
+        )
+        second = await memory_service.upsert_fact(
+            db_session,
+            project_id=project.id,
+            memory_type="fact",
+            content="苏砚在第三章夜探山门。",
+            meta={
+                "fact_kind": "timeline",
+                "chapter_id": "chapter-3",
+                "character_ids": ["char-1"],
+                "timeline_marker": "night",
+            },
+        )
+
+        all_facts = await memory_service.get_by_project(db_session, project_id=project.id, memory_type="fact")
+
+        assert first.id == second.id
+        assert len(all_facts) == 1
+        assert all_facts[0].meta["timeline_marker"] == "night"
 
     @pytest.mark.asyncio
     async def test_create_with_project_invalidates_search_cache(self, db_session: AsyncSession):

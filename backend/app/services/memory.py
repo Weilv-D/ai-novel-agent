@@ -1,5 +1,7 @@
 """Memory service layer with vector similarity search."""
 
+import hashlib
+import json
 from typing import Any
 
 from sqlalchemy import select
@@ -34,13 +36,74 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
     @staticmethod
     def _build_search_cache_key(project_id: Any, search_params: VectorSearchRequest) -> str:
         """Build a stable cache key for vector search results."""
-        payload = {
+        payload: dict[str, Any] = {
             "query_embedding": search_params.query_embedding,
             "limit": search_params.limit,
             "threshold": search_params.threshold,
             "memory_type": search_params.memory_type,
+            "meta_filters": search_params.meta_filters,
+            "related_character_ids": [str(item) for item in search_params.related_character_ids],
+            "related_world_setting_ids": [str(item) for item in search_params.related_world_setting_ids],
+            "scope": {key: str(value) for key, value in search_params.scope.items()},
         }
         return f"vsearch:{project_id}:{cache_service.build_hash(payload)}"
+
+    @staticmethod
+    def _meta_matches(meta: dict[str, Any], search_params: VectorSearchRequest) -> bool:
+        """Apply metadata filters to one memory row."""
+        for key, expected in search_params.meta_filters.items():
+            actual = meta.get(key)
+            if isinstance(expected, list):
+                actual_values = actual if isinstance(actual, list) else [actual]
+                if not all(item in actual_values for item in expected):
+                    return False
+                continue
+            if actual != expected:
+                return False
+
+        if search_params.related_character_ids:
+            actual_ids = {
+                str(item)
+                for item in (meta.get("character_ids") or [])
+                if str(item).strip()
+            }
+            if not actual_ids.intersection({str(item) for item in search_params.related_character_ids}):
+                return False
+
+        if search_params.related_world_setting_ids:
+            actual_ids = {
+                str(item)
+                for item in (meta.get("world_setting_ids") or [])
+                if str(item).strip()
+            }
+            if not actual_ids.intersection({str(item) for item in search_params.related_world_setting_ids}):
+                return False
+
+        for key, scope_expected in search_params.scope.items():
+            actual = meta.get(key)
+            if actual is None or str(actual) != str(scope_expected):
+                return False
+        return True
+
+    @staticmethod
+    def build_fact_fingerprint(
+        *,
+        content: str,
+        meta: dict[str, Any],
+    ) -> str:
+        """Build a stable fingerprint for deduplicating narrative facts."""
+        payload = {
+            "content": " ".join(content.split()).strip().lower(),
+            "fact_kind": meta.get("fact_kind"),
+            "chapter_id": str(meta.get("chapter_id") or ""),
+            "scene_id": str(meta.get("scene_id") or ""),
+            "volume_id": str(meta.get("volume_id") or ""),
+            "character_ids": sorted(str(item) for item in meta.get("character_ids", []) if str(item).strip()),
+            "world_setting_ids": sorted(
+                str(item) for item in meta.get("world_setting_ids", []) if str(item).strip()
+            ),
+        }
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
     async def _invalidate_project_search_cache(self, project_id: Any) -> None:
         """Invalidate cached vector search results for a project."""
@@ -126,36 +189,28 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
             select(memory_subquery)
             .where(memory_subquery.c.similarity >= search_params.threshold)
             .order_by(memory_subquery.c.similarity.desc())
-            .limit(search_params.limit)
         )
 
         result = await db.execute(stmt)
         rows = result.all()
 
         # Convert to list of dicts with similarity
-        matches = [
-            {
-                "id": row.id,
-                "memory_type": row.memory_type,
-                "content": row.content,
-                "meta": row.meta,
-                "similarity": float(row.similarity),
-            }
-            for row in rows
-        ]
-
-        # Get total count of potential matches (without threshold or limit)
-        count_stmt = (
-            select(func.count())
-            .select_from(Memory)
-            .where(Memory.project_id == project_id)
-            .where(Memory.embedding.isnot(None))
-        )
-        if search_params.memory_type:
-            count_stmt = count_stmt.where(Memory.memory_type == search_params.memory_type)
-
-        count_result = await db.execute(count_stmt)
-        total_count = count_result.scalar() or 0
+        matches = []
+        for row in rows:
+            meta = dict(row.meta or {})
+            if not self._meta_matches(meta, search_params):
+                continue
+            matches.append(
+                {
+                    "id": row.id,
+                    "memory_type": row.memory_type,
+                    "content": row.content,
+                    "meta": meta,
+                    "similarity": float(row.similarity),
+                }
+            )
+        total_count = len(matches)
+        matches = matches[: search_params.limit]
 
         await cache_service.set(
             cache_key,
@@ -225,6 +280,49 @@ class CRUDMemory(CRUDBase[Memory, MemoryCreate, MemoryUpdate]):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def upsert_fact(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: Any,
+        memory_type: str,
+        content: str,
+        meta: dict[str, Any],
+        embedding: list[float] | None = None,
+    ) -> Memory:
+        """Upsert one memory fact using the normalized fingerprint."""
+        next_meta = dict(meta)
+        fingerprint = str(next_meta.get("fingerprint") or self.build_fact_fingerprint(content=content, meta=next_meta))
+        next_meta["fingerprint"] = fingerprint
+        existing_memories = await self.get_by_project(db, project_id=project_id, memory_type=memory_type, limit=1000)
+        for memory in existing_memories:
+            current_meta = memory.meta or {}
+            if current_meta.get("fingerprint") != fingerprint:
+                continue
+            merged_meta = dict(current_meta)
+            merged_meta.update(next_meta)
+            memory.content = content
+            memory.meta = merged_meta
+            if embedding is not None:
+                memory.embedding = embedding
+            await db.flush()
+            await db.refresh(memory)
+            await self._invalidate_project_search_cache(project_id)
+            return memory
+
+        return await self.create_with_project(
+            db,
+            project_id=project_id,
+            obj_in=MemoryCreate(
+                project_id=project_id,
+                memory_type=memory_type,
+                content=content,
+                meta=next_meta,
+                embedding=embedding,
+                auto_embed=False,
+            ),
+        )
 
     async def count_by_project(
         self, db: AsyncSession, *, project_id: Any, memory_type: str | None = None

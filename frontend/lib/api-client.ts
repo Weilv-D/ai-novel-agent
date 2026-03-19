@@ -256,6 +256,12 @@ export const projectApi = {
   get: (id: string) =>
     fetchApi<unknown>(`/api/v1/projects/${id}`),
 
+  getTree: (id: string) =>
+    fetchApi<ProjectTree>(`/api/v1/projects/${id}/tree`),
+
+  getWorkspace: (id: string) =>
+    fetchApi<ProjectWorkspace>(`/api/v1/projects/${id}/workspace`),
+
   create: (data: unknown) =>
     fetchApi<unknown>("/api/v1/projects", {
       method: "POST",
@@ -546,6 +552,8 @@ import type {
   TextImportProgress,
   TextImportResponse,
   InlineEditRequest,
+  ProjectTree,
+  ProjectWorkspace,
   Suggestion,
 } from "@/lib/types";
 

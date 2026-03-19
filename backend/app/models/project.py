@@ -1,7 +1,7 @@
 """Project model - the main container for a novel."""
 
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import JSON, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -9,6 +9,41 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 DEFAULT_AGENT_PROFILE_ID = "default"
+DEFAULT_AGENT_SETTINGS: dict[str, Any] = {
+    "style_goal": None,
+    "tone_keywords": [],
+    "voice_constraints": [],
+    "forbidden_patterns": [],
+    "terminology_glossary": [],
+    "chapter_target_chars": 6000,
+    "scene_target_chars": None,
+    "continuity_mode": "strict",
+}
+
+
+def normalize_agent_settings(value: dict[str, Any] | None) -> dict[str, Any]:
+    """Return a stable project-level agent settings payload."""
+    raw = value or {}
+    normalized = {
+        "style_goal": str(raw.get("style_goal")).strip() if raw.get("style_goal") else None,
+        "tone_keywords": [str(item).strip() for item in raw.get("tone_keywords", []) if str(item).strip()],
+        "voice_constraints": [str(item).strip() for item in raw.get("voice_constraints", []) if str(item).strip()],
+        "forbidden_patterns": [str(item).strip() for item in raw.get("forbidden_patterns", []) if str(item).strip()],
+        "terminology_glossary": [str(item).strip() for item in raw.get("terminology_glossary", []) if str(item).strip()],
+        "chapter_target_chars": raw.get("chapter_target_chars", DEFAULT_AGENT_SETTINGS["chapter_target_chars"]),
+        "scene_target_chars": raw.get("scene_target_chars"),
+        "continuity_mode": str(raw.get("continuity_mode") or DEFAULT_AGENT_SETTINGS["continuity_mode"]).strip()
+        or DEFAULT_AGENT_SETTINGS["continuity_mode"],
+    }
+    if not isinstance(normalized["chapter_target_chars"], int) or cast(int, normalized["chapter_target_chars"]) <= 0:
+        normalized["chapter_target_chars"] = DEFAULT_AGENT_SETTINGS["chapter_target_chars"]
+    if normalized["scene_target_chars"] is not None and (
+        not isinstance(normalized["scene_target_chars"], int) or cast(int, normalized["scene_target_chars"]) <= 0
+    ):
+        normalized["scene_target_chars"] = None
+    if normalized["continuity_mode"] not in {"standard", "strict"}:
+        normalized["continuity_mode"] = DEFAULT_AGENT_SETTINGS["continuity_mode"]
+    return normalized
 
 
 class ProjectStatus(str, Enum):
@@ -55,6 +90,21 @@ class Project(Base, UUIDMixin, TimestampMixin):
         normalized = (value or DEFAULT_AGENT_PROFILE_ID).strip() or DEFAULT_AGENT_PROFILE_ID
         next_meta = dict(self.meta or {})
         next_meta["agent_profile_id"] = normalized
+        self.meta = next_meta
+
+    @property
+    def agent_settings(self) -> dict[str, Any]:
+        """Project-level style and continuity controls used by the agent."""
+        raw = (self.meta or {}).get("agent_settings")
+        if not isinstance(raw, dict):
+            return dict(DEFAULT_AGENT_SETTINGS)
+        return normalize_agent_settings(raw)
+
+    @agent_settings.setter
+    def agent_settings(self, value: dict[str, Any] | None) -> None:
+        """Persist normalized agent settings inside project metadata."""
+        next_meta = dict(self.meta or {})
+        next_meta["agent_settings"] = normalize_agent_settings(value)
         self.meta = next_meta
 
     def __repr__(self) -> str:

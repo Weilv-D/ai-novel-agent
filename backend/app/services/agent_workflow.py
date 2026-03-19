@@ -10,7 +10,7 @@ import re
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from textwrap import dedent
 from typing import Any, Literal, cast
 
@@ -54,6 +54,9 @@ from app.schemas.agent import (
     AgentExecutionPhaseResponse,
     AgentMessageResponse,
     AgentOperationResponse,
+    AgentPipelineStepResponse,
+    AgentPlanBasisEntityVersionResponse,
+    AgentPlanBasisResponse,
     AgentPlannerWindowResponse,
     AgentProfileResponse,
     AgentRetainedWindowResponse,
@@ -89,7 +92,10 @@ from app.services.agent_risk import agent_risk_service
 from app.services.agent_skill import AgentSkillBundle, agent_skill_service
 from app.services.chapter import chapter_service, scene_service, volume_service
 from app.services.character import character_service
+from app.services.context_assembler import context_assembler
+from app.services.dependency import dependency_service
 from app.services.llm import LLMService, llm_service
+from app.services.memory import memory_service
 from app.services.project import project_service
 from app.services.snapshot import snapshot_service
 from app.services.world_setting import world_setting_service
@@ -147,6 +153,13 @@ INTERNAL_READ_SEARCH_TOOLS = (
     "resolve_current_scene",
     "load_latest_checkpoint",
 )
+PLAN_TTL_MINUTES = 30
+PROSE_OPERATION_TOOLS = {
+    "create_chapter",
+    "create_scene",
+    "write_chapter_content",
+    "write_scene_content",
+}
 
 
 class PlannedOperationSpec(BaseModel):
@@ -349,6 +362,13 @@ class CRUDAgentThread:
 
 class CRUDAgentMessage:
     """Persistence helpers for thread messages."""
+
+    async def get(self, db: AsyncSession, message_id: uuid.UUID) -> AgentMessage:
+        result = await db.execute(select(AgentMessage).where(AgentMessage.id == message_id))
+        message = result.scalar_one_or_none()
+        if message is None:
+            raise NotFoundException("Agent message not found")
+        return message
 
     async def create(
         self,
@@ -553,6 +573,7 @@ class CRUDAgentOperation:
                 verification_status=operation.get("verification_status", AgentVerificationStatus.PENDING.value),
                 verification_summary=operation.get("verification_summary"),
                 preview_content_hash=operation.get("preview_content_hash"),
+                execution_result=operation.get("execution_result"),
             )
             db.add(op)
             created.append(op)
@@ -861,6 +882,7 @@ class AgentWorkflowService:
         thread = await self.thread_store.get(db, thread_id)
         project = await project_service.get(db, id=thread.project_id)
         request_context = context or {}
+        context_request_context = {**request_context, "_user_message": content}
         prior_run = await self.run_store.get_latest_pending(db, thread_id=thread.id)
         full_history = await self.message_store.list_by_thread(db, thread_id=thread.id, limit=60)
         recent_runs = await self.run_store.list_recent_by_thread(db, thread_id=thread.id, limit=20)
@@ -893,7 +915,7 @@ class AgentWorkflowService:
         context_data = await self._load_project_context(
             db,
             project=project,
-            request_context=request_context,
+            request_context=context_request_context,
             latest_checkpoint=checkpoint,
         )
         context_data["retained_window"] = self._retained_window_payload(
@@ -943,8 +965,10 @@ class AgentWorkflowService:
             project_id=thread.project_id,
             request_context=request_context,
             operations=planner_output.operations,
+            context_data=context_data,
         )
         classified_operations = self._classify_operations(planned_operations, profile_id=profile_id)
+        run_precheck = self._plan_precheck_from_operations(classified_operations)
         risk_summary = agent_risk_service.build_run_risk_summary(
             classified_operations,
             profile_id=profile_id,
@@ -968,11 +992,22 @@ class AgentWorkflowService:
         blueprint = RunBlueprint(
             assistant_message=planner_output.assistant_message,
             summary=planner_output.summary,
-            warning_message=planner_output.warning_message,
+            warning_message=self._merge_warning_messages(
+                planner_output.warning_message,
+                [str(run_precheck["summary"])] if str(run_precheck.get("status")) == "warn" else [],
+            ),
             user_visible_operations=classified_operations,
             internal_subtasks=planned_subtasks,
             hook_trace=[precompact_hook, preplan_hook, subagent_stop_hook],
         )
+        plan_basis = await self._build_plan_basis(
+            db,
+            project=project,
+            request_context=request_context,
+            context_data=context_data,
+            operations=classified_operations,
+        )
+        plan_expires_at = datetime.now(UTC) + timedelta(minutes=PLAN_TTL_MINUTES)
 
         run = await self.run_store.create(
             db,
@@ -996,6 +1031,9 @@ class AgentWorkflowService:
                 "hook_trace": [entry.model_dump(mode="json") for entry in blueprint.hook_trace],
                 "permission_matrix": execution_contract_payload,
                 "risk_summary": risk_summary.model_dump(mode="json"),
+                "plan_expires_at": plan_expires_at.isoformat(),
+                "plan_basis": plan_basis,
+                "plan_precheck": run_precheck,
                 "blueprint": {
                     "operation_count": len(blueprint.user_visible_operations),
                     "subtask_count": len(blueprint.internal_subtasks),
@@ -1006,6 +1044,13 @@ class AgentWorkflowService:
         await self.operation_store.create_many(db, run_id=run.id, operations=blueprint.user_visible_operations)
         await self.subtask_store.create_many(db, run_id=run.id, subtasks=blueprint.internal_subtasks)
         await self.run_store.supersede_pending_runs(db, thread_id=thread.id, keep_run_id=run.id)
+        if str(run_precheck.get("status")) == "block":
+            run.status = AgentRunStatus.FAILED.value
+            run.error_message = str(run_precheck.get("summary") or "计划级连续性预检失败")
+            run.completed_at = datetime.now(UTC)
+            run.verification_status = AgentVerificationStatus.FAILED.value
+            run.verification_summary = run.error_message
+            await db.flush()
 
         return AgentThreadMessageResponse(
             thread=self._thread_response(thread),
@@ -1033,6 +1078,7 @@ class AgentWorkflowService:
         thread = await self.thread_store.get(db, thread_id)
         project = await project_service.get(db, id=thread.project_id)
         request_context = context or {}
+        context_request_context = {**request_context, "_user_message": content}
 
         yield AgentStreamEvent(
             type="status",
@@ -1084,7 +1130,7 @@ class AgentWorkflowService:
         context_data = await self._load_project_context(
             db,
             project=project,
-            request_context=request_context,
+            request_context=context_request_context,
             latest_checkpoint=checkpoint,
         )
         context_data["retained_window"] = self._retained_window_payload(
@@ -1162,12 +1208,17 @@ class AgentWorkflowService:
             detail={"operation_count": len(planner_output.operations)},
         )
 
+        pipeline_events: list[AgentStreamEvent] = []
         planned_operations = await self._prepare_operations(
             db,
             project_id=thread.project_id,
             request_context=request_context,
             operations=planner_output.operations,
+            context_data=context_data,
+            event_sink=pipeline_events,
         )
+        for event in pipeline_events:
+            yield event
 
         for i, operation in enumerate(planned_operations):
             yield AgentStreamEvent(
@@ -1183,6 +1234,7 @@ class AgentWorkflowService:
             )
 
         classified_operations = self._classify_operations(planned_operations, profile_id=profile_id)
+        run_precheck = self._plan_precheck_from_operations(classified_operations)
         risk_summary = agent_risk_service.build_run_risk_summary(
             classified_operations,
             profile_id=profile_id,
@@ -1219,11 +1271,22 @@ class AgentWorkflowService:
         blueprint = RunBlueprint(
             assistant_message=planner_output.assistant_message,
             summary=planner_output.summary,
-            warning_message=planner_output.warning_message,
+            warning_message=self._merge_warning_messages(
+                planner_output.warning_message,
+                [str(run_precheck["summary"])] if str(run_precheck.get("status")) == "warn" else [],
+            ),
             user_visible_operations=classified_operations,
             internal_subtasks=planned_subtasks,
             hook_trace=[precompact_hook, preplan_hook, subagent_stop_hook],
         )
+        plan_basis = await self._build_plan_basis(
+            db,
+            project=project,
+            request_context=request_context,
+            context_data=context_data,
+            operations=classified_operations,
+        )
+        plan_expires_at = datetime.now(UTC) + timedelta(minutes=PLAN_TTL_MINUTES)
 
         run = await self.run_store.create(
             db,
@@ -1247,6 +1310,9 @@ class AgentWorkflowService:
                 "hook_trace": [entry.model_dump(mode="json") for entry in blueprint.hook_trace],
                 "permission_matrix": execution_contract_payload,
                 "risk_summary": risk_summary.model_dump(mode="json"),
+                "plan_expires_at": plan_expires_at.isoformat(),
+                "plan_basis": plan_basis,
+                "plan_precheck": run_precheck,
                 "blueprint": {
                     "operation_count": len(blueprint.user_visible_operations),
                     "subtask_count": len(blueprint.internal_subtasks),
@@ -1257,6 +1323,19 @@ class AgentWorkflowService:
         await self.operation_store.create_many(db, run_id=run.id, operations=blueprint.user_visible_operations)
         await self.subtask_store.create_many(db, run_id=run.id, subtasks=blueprint.internal_subtasks)
         await self.run_store.supersede_pending_runs(db, thread_id=thread.id, keep_run_id=run.id)
+        if str(run_precheck.get("status")) == "block":
+            run.status = AgentRunStatus.FAILED.value
+            run.error_message = str(run_precheck.get("summary") or "计划级连续性预检失败")
+            run.completed_at = datetime.now(UTC)
+            run.verification_status = AgentVerificationStatus.FAILED.value
+            run.verification_summary = run.error_message
+            await db.flush()
+            yield AgentStreamEvent(
+                type="error",
+                stage="planning_precheck",
+                message=run.error_message,
+                detail={"status": "block", "code": "planning_precheck_blocked"},
+            )
 
         yield AgentStreamEvent(
             type="message_chunk",
@@ -1322,6 +1401,7 @@ class AgentWorkflowService:
         run = await self.run_store.get(db, run_id)
         if run.status != AgentRunStatus.AWAITING_CONFIRMATION.value:
             raise BadRequestException("Run is not awaiting confirmation")
+        await self._assert_run_plan_freshness(db, run=run)
 
         operations = await self.operation_store.list_by_run(db, run_id=run.id)
         if any(operation.requires_secondary_confirmation for operation in operations):
@@ -1343,6 +1423,7 @@ class AgentWorkflowService:
         run = await self.run_store.get(db, run_id)
         if run.status != AgentRunStatus.AWAITING_HIGH_RISK_CONFIRMATION.value:
             raise BadRequestException("Run is not awaiting high-risk confirmation")
+        await self._assert_run_plan_freshness(db, run=run)
         operations = await self.operation_store.list_by_run(db, run_id=run.id)
         run.secondary_confirmed_at = datetime.now(UTC)
         return await self._execute_run(db, run=run, operations=operations)
@@ -1371,6 +1452,7 @@ class AgentWorkflowService:
         failing_operation_id: uuid.UUID | None = None
         current_operation: AgentOperation | None = None
         failing_execution_result: dict[str, Any] | None = None
+        refresh_warnings: list[str] = []
         try:
             request_context = cast(dict[str, Any], run.meta.get("request_context", {}))
             continuity_summary = self._check_continuity_gate(operations)
@@ -1399,12 +1481,23 @@ class AgentWorkflowService:
                         project_id=run.project_id,
                         operation=operation,
                     )
+                    refresh_warning = await self._refresh_operation_artifacts(
+                        db,
+                        project_id=run.project_id,
+                        request_context=request_context,
+                        operation=operation,
+                    )
+                    if refresh_warning:
+                        refresh_warnings.append(refresh_warning)
                 finally:
                     if current_operation.id == failing_operation_id:
                         failing_execution_result = dict(current_operation.execution_result or {})
             run.status = AgentRunStatus.COMPLETED.value
             run.completed_at = datetime.now(UTC)
-            run.warning_message = self._execution_warning(operations)
+            run.warning_message = self._merge_warning_messages(
+                self._execution_warning(operations),
+                refresh_warnings,
+            )
             run.verification_status, run.verification_summary = self._aggregate_run_verification(
                 operations,
                 continuity_subtask=continuity_subtask,
@@ -1487,194 +1580,14 @@ class AgentWorkflowService:
         request_context: dict[str, Any],
         latest_checkpoint: AgentThreadCheckpoint | None = None,
     ) -> dict[str, Any]:
-        characters = await character_service.get_by_project(
+        return await context_assembler.build_context(
             db,
-            project_id=project.id,
-            limit=CHARACTER_CONTEXT_LIMIT,
+            project=project,
+            request_context=request_context,
+            user_message=str(request_context.get("_user_message", "")),
+            latest_checkpoint=latest_checkpoint,
+            mode="planning",
         )
-        world_settings = await world_setting_service.get_by_project(
-            db,
-            project_id=project.id,
-            limit=WORLD_SETTING_CONTEXT_LIMIT,
-        )
-        volumes = await volume_service.get_by_project(
-            db,
-            project_id=project.id,
-            limit=VOLUME_CONTEXT_LIMIT,
-        )
-        chapters = await chapter_service.get_by_project(
-            db,
-            project_id=project.id,
-            limit=CHAPTER_CONTEXT_LIMIT,
-        )
-
-        context_data: dict[str, Any] = {
-            "project": {
-                "id": str(project.id),
-                "name": project.name,
-                "genre": project.genre,
-                "summary": project.summary,
-                "story_outline": project.story_outline,
-                "notes": project.notes,
-            },
-            "characters": [
-                {
-                    "id": str(character.id),
-                    "name": character.name,
-                    "role": character.role,
-                }
-                for character in characters
-            ],
-            "world_settings": [
-                {
-                    "id": str(setting.id),
-                    "name": setting.name,
-                    "category": setting.category,
-                }
-                for setting in world_settings
-            ],
-            "volumes": [
-                {
-                    "id": str(volume.id),
-                    "volume_number": volume.volume_number,
-                    "title": volume.title,
-                    "outline": volume.outline,
-                }
-                for volume in volumes
-            ],
-            "chapters": [
-                {
-                    "id": str(chapter.id),
-                    "volume_id": str(chapter.volume_id) if chapter.volume_id is not None else None,
-                    "chapter_number": chapter.chapter_number,
-                    "title": chapter.title,
-                    "outline": chapter.outline,
-                }
-                for chapter in chapters
-            ],
-            "request_context": request_context,
-            "agent_profile_id": project.agent_profile_id,
-        }
-        context_data["current_project"] = {
-            "id": str(project.id),
-            "name": project.name,
-            "summary": project.summary,
-            "story_outline": project.story_outline,
-        }
-        if latest_checkpoint is not None:
-            context_data["latest_checkpoint"] = {
-                "id": str(latest_checkpoint.id),
-                "profile_id": latest_checkpoint.profile_id,
-                "thread_summary": latest_checkpoint.thread_summary,
-                "active_object_bundle": latest_checkpoint.active_object_bundle,
-                "recent_run_digest": latest_checkpoint.recent_run_digest,
-            }
-
-        volume_id = request_context.get("volume_id")
-        if volume_id:
-            try:
-                volume = await volume_service.get(db, id=uuid.UUID(str(volume_id)))
-                volume_chapters = await chapter_service.get_by_volume(
-                    db,
-                    volume_id=volume.id,
-                    limit=CHAPTER_CONTEXT_LIMIT,
-                )
-                context_data["current_volume"] = {
-                    "id": str(volume.id),
-                    "volume_number": volume.volume_number,
-                    "title": volume.title,
-                    "outline": volume.outline,
-                    "notes": volume.notes,
-                }
-                context_data["current_volume_chapters"] = [
-                    {
-                        "id": str(chapter.id),
-                        "chapter_number": chapter.chapter_number,
-                        "title": chapter.title,
-                        "outline": chapter.outline,
-                    }
-                    for chapter in volume_chapters
-                ]
-            except Exception:
-                logger.debug("Failed to load volume context for %s", volume_id)
-
-        chapter_id = request_context.get("chapter_id")
-        if chapter_id:
-            try:
-                chapter = await chapter_service.get(db, id=uuid.UUID(str(chapter_id)))
-                scenes = await scene_service.get_by_chapter(
-                    db,
-                    chapter_id=chapter.id,
-                    limit=SCENE_CONTEXT_LIMIT,
-                )
-                context_data["current_chapter"] = {
-                    "id": str(chapter.id),
-                    "volume_id": str(chapter.volume_id) if chapter.volume_id is not None else None,
-                    "chapter_number": chapter.chapter_number,
-                    "title": chapter.title,
-                    "outline": chapter.outline,
-                    "content": _excerpt(chapter.content, length=400),
-                }
-                context_data["current_scenes"] = [
-                    {
-                        "id": str(scene.id),
-                        "scene_order": scene.scene_order,
-                        "location": scene.location,
-                    }
-                    for scene in scenes
-                ]
-                if chapter.volume_id is not None and "current_volume" not in context_data:
-                    volume = await volume_service.get(db, id=chapter.volume_id)
-                    volume_chapters = await chapter_service.get_by_volume(
-                        db,
-                        volume_id=volume.id,
-                        limit=CHAPTER_CONTEXT_LIMIT,
-                    )
-                    context_data["current_volume"] = {
-                        "id": str(volume.id),
-                        "volume_number": volume.volume_number,
-                        "title": volume.title,
-                        "outline": volume.outline,
-                        "notes": volume.notes,
-                    }
-                    context_data["current_volume_chapters"] = [
-                        {
-                            "id": str(volume_chapter.id),
-                            "chapter_number": volume_chapter.chapter_number,
-                            "title": volume_chapter.title,
-                            "outline": volume_chapter.outline,
-                        }
-                        for volume_chapter in volume_chapters
-                    ]
-            except Exception:
-                logger.debug("Failed to load chapter context for %s", chapter_id)
-
-        scene_id = request_context.get("scene_id")
-        if scene_id:
-            try:
-                scene = await scene_service.get(db, id=uuid.UUID(str(scene_id)))
-                context_data["current_scene"] = {
-                    "id": str(scene.id),
-                    "scene_order": scene.scene_order,
-                    "location": scene.location,
-                    "content": _excerpt(scene.content, length=400),
-                }
-            except Exception:
-                logger.debug("Failed to load scene context for %s", scene_id)
-
-        character_id = request_context.get("character_id")
-        if character_id:
-            try:
-                character = await character_service.get(db, id=uuid.UUID(str(character_id)))
-                context_data["current_character"] = {
-                    "id": str(character.id),
-                    "name": character.name,
-                    "role": character.role,
-                }
-            except Exception:
-                logger.debug("Failed to load character context for %s", character_id)
-
-        return context_data
 
     async def _planner_history(
         self,
@@ -1845,13 +1758,44 @@ class AgentWorkflowService:
         )
         selected_skill_blocks = "\n\n".join(skill.prompt_block() for skill in selected_skills)
         reference_blocks = "\n\n".join(skill_bundle.load_reference_blocks(selected_skills))
+        focus_context = json.dumps(context_data.get("focus_context", {}), ensure_ascii=False, indent=2)
+        working_context = json.dumps(context_data.get("working_context", {}), ensure_ascii=False, indent=2)
+        thread_context = json.dumps(context_data.get("thread_context", {}), ensure_ascii=False, indent=2)
+        memory_facts = "\n".join(
+            f"- {item.get('content')} (sim={item.get('similarity')})"
+            for item in cast(list[dict[str, Any]], cast(dict[str, Any], context_data.get("memory_context", {})).get("facts", []))
+            if item.get("content")
+        )
+        agent_settings = json.dumps(context_data.get("agent_settings", {}), ensure_ascii=False, indent=2)
 
         prompt = dedent(
             f"""
             {skill_bundle.planner.prompt_block()}
 
-            当前项目上下文：
-            {json.dumps(context_data, ensure_ascii=False)}
+            项目级风格与质量约束：
+            {agent_settings}
+
+            聚焦上下文：
+            {focus_context}
+
+            工作上下文：
+            {working_context}
+
+            检索到的相关事实：
+            {memory_facts or "无"}
+
+            线程上下文：
+            {thread_context}
+
+            精简项目清单上下文：
+            {json.dumps({
+                "project": context_data.get("project", {}),
+                "characters": context_data.get("characters", []),
+                "world_settings": context_data.get("world_settings", []),
+                "volumes": context_data.get("volumes", []),
+                "chapters": context_data.get("chapters", []),
+                "context_summary": context_data.get("context_summary", {}),
+            }, ensure_ascii=False)}
 
             最近对话：
             {json.dumps(history_lines, ensure_ascii=False)}
@@ -1949,17 +1893,667 @@ class AgentWorkflowService:
         project_id: uuid.UUID,
         request_context: dict[str, Any],
         operations: list[PlannedOperationSpec],
+        context_data: dict[str, Any] | None = None,
+        event_sink: list[AgentStreamEvent] | None = None,
     ) -> list[dict[str, Any]]:
         prepared: list[dict[str, Any]] = []
-        for operation in operations:
+        for planned_operation in operations:
             normalized = await self._normalize_operation_payload(
                 db,
                 project_id=project_id,
                 request_context=request_context,
-                operation=operation,
+                operation=planned_operation,
             )
             prepared.append(normalized)
-        return prepared
+        if context_data is None:
+            return prepared
+
+        enhanced: list[dict[str, Any]] = []
+        for index, prepared_operation in enumerate(prepared, start=1):
+            enhanced_operation = await self._apply_planning_pipeline_to_operation(
+                db,
+                project_id=project_id,
+                request_context=request_context,
+                context_data=context_data,
+                operation=prepared_operation,
+                operation_position=index,
+                event_sink=event_sink,
+            )
+            if enhanced_operation.get("_rebuild_preview"):
+                rebuilt = await self._normalize_operation_payload(
+                    db,
+                    project_id=project_id,
+                    request_context=request_context,
+                    operation=PlannedOperationSpec(
+                        tool_name=str(enhanced_operation["tool_name"]),
+                        description=str(enhanced_operation["description"]),
+                        reason=cast(str | None, enhanced_operation.get("reason")),
+                        payload=cast(dict[str, Any], enhanced_operation["payload"]),
+                    ),
+                )
+                rebuilt["execution_result"] = enhanced_operation.get("execution_result")
+                enhanced.append(rebuilt)
+            else:
+                enhanced.append(enhanced_operation)
+
+        run_precheck = self._build_run_precheck(enhanced, context_data=context_data)
+        for prepared_operation in enhanced:
+            execution_result = dict(prepared_operation.get("execution_result") or {})
+            execution_result["run_precheck"] = run_precheck
+            prepared_operation["execution_result"] = execution_result
+        return enhanced
+
+    async def _apply_planning_pipeline_to_operation(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        request_context: dict[str, Any],
+        context_data: dict[str, Any],
+        operation: dict[str, Any],
+        operation_position: int,
+        event_sink: list[AgentStreamEvent] | None = None,
+    ) -> dict[str, Any]:
+        if str(operation["tool_name"]) not in PROSE_OPERATION_TOOLS:
+            return operation
+        candidate = (self._operation_content_candidate(operation) or "").strip()
+        if not candidate:
+            return operation
+
+        agent_settings = cast(dict[str, Any], context_data.get("agent_settings", {}))
+        pipeline_steps: list[dict[str, Any]] = []
+        facts_used = [
+            str(item.get("content"))
+            for item in cast(list[dict[str, Any]], cast(dict[str, Any], context_data.get("memory_context", {})).get("facts", []))
+            if item.get("content")
+        ][:5]
+        research_summary = (
+            f"已装配焦点上下文，命中 {len(facts_used)} 条事实，"
+            f"角色 {len(cast(list[Any], cast(dict[str, Any], context_data.get('working_context', {})).get('matched_characters', [])))}，"
+            f"设定 {len(cast(list[Any], cast(dict[str, Any], context_data.get('working_context', {})).get('matched_world_settings', [])))}。"
+        )
+        pipeline_steps.append(
+            self._make_pipeline_step(
+                role="researcher",
+                stage="research",
+                status="completed",
+                summary=research_summary,
+                facts_used=facts_used,
+            )
+        )
+        self._append_pipeline_event(
+            event_sink,
+            operation_position=operation_position,
+            stage="research",
+            status="completed",
+            summary=research_summary,
+        )
+
+        brief_prompt = dedent(
+            f"""
+            你是中文长篇小说写作总编。请为一个正文写作步骤产出简明写作 brief。
+            只返回 4 行以内的中文纯文本，不要列数字序号。
+
+            项目风格约束：
+            {json.dumps(agent_settings, ensure_ascii=False)}
+
+            请求上下文：
+            {json.dumps(context_data.get("focus_context", {}), ensure_ascii=False)}
+
+            相关事实：
+            {json.dumps(facts_used, ensure_ascii=False)}
+
+            当前步骤：
+            {json.dumps({
+                "tool_name": operation["tool_name"],
+                "description": operation["description"],
+                "reason": operation.get("reason"),
+                "payload": operation["payload"],
+            }, ensure_ascii=False)}
+
+            当前候选正文：
+            {candidate}
+            """
+        ).strip()
+        brief = (
+            await self.llm.generate(
+                [
+                    {"role": "system", "content": "你是严谨的写作 brief 生成器。只返回简洁中文纯文本。"},
+                    {"role": "user", "content": brief_prompt},
+                ],
+                temperature=0.2,
+                max_tokens=260,
+            )
+        )["content"].strip()
+        pipeline_steps.append(
+            self._make_pipeline_step(
+                role="writer",
+                stage="brief",
+                status="completed",
+                summary=_excerpt(brief, length=220) or "写作 brief 已生成。",
+                facts_used=facts_used,
+            )
+        )
+        self._append_pipeline_event(
+            event_sink,
+            operation_position=operation_position,
+            stage="brief",
+            status="completed",
+            summary=_excerpt(brief, length=120) or "写作 brief 已生成。",
+        )
+
+        target_chars = self._target_chars_for_operation(agent_settings=agent_settings, operation=operation)
+        draft_prompt = dedent(
+            f"""
+            你是中文长篇小说正文写手。请根据 brief 重写或补强正文，只返回正文。
+            必须遵守：
+            - 保留既有事实、人名、地名和核心事件。
+            - 保持与原候选接近的篇幅和信息密度。
+            - 目标篇幅约 {target_chars} 字，若原文更短则以原文规模为准。
+            - 禁止解释、列点、加标题。
+
+            项目风格约束：
+            {json.dumps(agent_settings, ensure_ascii=False)}
+
+            写作 brief：
+            {brief}
+
+            相关事实：
+            {json.dumps(facts_used, ensure_ascii=False)}
+
+            当前候选正文：
+            {candidate}
+            """
+        ).strip()
+        drafted_content = (
+            await self.llm.generate(
+                [
+                    {"role": "system", "content": "你是中文长篇小说作者。只返回正文。"},
+                    {"role": "user", "content": draft_prompt},
+                ],
+                temperature=0.45,
+                max_tokens=1800,
+            )
+        )["content"].strip()
+        pipeline_steps.append(
+            self._make_pipeline_step(
+                role="writer",
+                stage="draft",
+                status="completed",
+                summary=f"正文候选已重写，长度 {len(drafted_content)} 字。",
+                facts_used=facts_used,
+            )
+        )
+        self._append_pipeline_event(
+            event_sink,
+            operation_position=operation_position,
+            stage="draft",
+            status="completed",
+            summary=f"正文候选已重写，长度 {len(drafted_content)} 字。",
+        )
+
+        polish_prompt = dedent(
+            f"""
+            你是中文长篇小说润色编辑。请在不改变事实与情节顺序的前提下润色正文，只返回正文。
+            重点：
+            - 落实风格目标、语气约束与禁忌。
+            - 强化动作、画面、节奏和人物说话方式。
+            - 术语与设定名词保持一致。
+
+            项目风格约束：
+            {json.dumps(agent_settings, ensure_ascii=False)}
+
+            必须保留的事实：
+            {json.dumps(facts_used, ensure_ascii=False)}
+
+            待润色正文：
+            {drafted_content}
+            """
+        ).strip()
+        polished_content = (
+            await self.llm.generate(
+                [
+                    {"role": "system", "content": "你是中文长篇小说润色编辑。只返回润色后的正文。"},
+                    {"role": "user", "content": polish_prompt},
+                ],
+                temperature=0.25,
+                max_tokens=1800,
+            )
+        )["content"].strip()
+        pipeline_steps.append(
+            self._make_pipeline_step(
+                role="writer",
+                stage="polish",
+                status="completed",
+                summary=f"正文已润色，长度 {len(polished_content)} 字。",
+                facts_used=facts_used,
+            )
+        )
+        self._append_pipeline_event(
+            event_sink,
+            operation_position=operation_position,
+            stage="polish",
+            status="completed",
+            summary=f"正文已润色，长度 {len(polished_content)} 字。",
+        )
+
+        precheck = await self._run_planning_continuity_precheck(
+            db,
+            project_id=project_id,
+            request_context=request_context,
+            operation=operation,
+            operation_position=operation_position,
+            content=polished_content,
+            facts_used=facts_used,
+            agent_settings=agent_settings,
+        )
+        pipeline_steps.append(
+            self._make_pipeline_step(
+                role="continuity",
+                stage="continuity_precheck",
+                status="warning" if precheck["status"] == "warn" else ("failed" if precheck["status"] == "block" else "completed"),
+                summary=str(precheck["summary"]),
+                warnings=cast(list[str], precheck.get("warnings", [])),
+                facts_used=cast(list[str], precheck.get("facts_used", [])),
+            )
+        )
+        self._append_pipeline_event(
+            event_sink,
+            operation_position=operation_position,
+            stage="continuity_precheck",
+            status="warning" if precheck["status"] == "warn" else ("failed" if precheck["status"] == "block" else "completed"),
+            summary=str(precheck["summary"]),
+        )
+        pipeline_steps.append(
+            self._make_pipeline_step(
+                role="writer",
+                stage="plan_ready",
+                status="completed",
+                summary="正文候选已完成研究、起草、润色与连续性预检，可进入确认。",
+                warnings=cast(list[str], precheck.get("warnings", [])),
+                facts_used=facts_used,
+            )
+        )
+        self._append_pipeline_event(
+            event_sink,
+            operation_position=operation_position,
+            stage="plan_ready",
+            status="completed",
+            summary="正文候选已完成多阶段规划。",
+        )
+
+        next_operation = dict(operation)
+        next_payload = dict(cast(dict[str, Any], next_operation.get("payload", {})))
+        if str(next_operation["tool_name"]) in {"write_chapter_content", "write_scene_content", "create_chapter", "create_scene"}:
+            next_payload["content"] = polished_content
+        next_operation["payload"] = next_payload
+        next_operation["_rebuild_preview"] = True
+        next_operation["execution_result"] = {
+            **cast(dict[str, Any], next_operation.get("execution_result") or {}),
+            "planning_pipeline": pipeline_steps,
+            "planning_precheck": precheck,
+            "writing_brief": brief,
+        }
+        return next_operation
+
+    async def _run_planning_continuity_precheck(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        request_context: dict[str, Any],
+        operation: dict[str, Any],
+        operation_position: int,
+        content: str,
+        facts_used: list[str],
+        agent_settings: dict[str, Any],
+    ) -> dict[str, Any]:
+        warnings: list[str] = []
+        facts: list[str] = list(facts_used)
+        status = "pass"
+
+        forbidden_patterns = [str(item).strip() for item in cast(list[Any], agent_settings.get("forbidden_patterns", [])) if str(item).strip()]
+        matched_forbidden = [pattern for pattern in forbidden_patterns if pattern in content]
+        if matched_forbidden:
+            warnings.append(f"命中风格禁忌：{', '.join(matched_forbidden[:3])}")
+            status = "warn"
+
+        payload = cast(dict[str, Any], operation.get("payload", {}))
+        if str(operation["tool_name"]) == "create_scene" and payload.get("pov_character_id"):
+            try:
+                pov_character = await character_service.get(db, id=uuid.UUID(str(payload["pov_character_id"])))
+            except Exception:
+                return {
+                    "status": "block",
+                    "summary": "连续性预检失败：POV 人物不存在。",
+                    "warnings": [],
+                    "facts_used": facts,
+                }
+            if pov_character.project_id != project_id:
+                return {
+                    "status": "block",
+                    "summary": "连续性预检失败：POV 人物不属于当前项目。",
+                    "warnings": [],
+                    "facts_used": facts,
+                }
+
+        llm_summary = "连续性预检通过。"
+        if facts:
+            prompt = dedent(
+                f"""
+                你是小说连续性审核器。请根据正文和事实清单判断是否存在冲突。
+                只返回 JSON:
+                {{
+                  "status": "pass|warn|block",
+                  "summary": "一句中文结论",
+                  "warnings": ["..."],
+                  "facts_used": ["直接引用你实际用到的事实摘要"]
+                }}
+
+                模式：{agent_settings.get("continuity_mode", "strict")}
+                相关事实：
+                {json.dumps(facts, ensure_ascii=False)}
+
+                当前步骤：
+                {json.dumps({
+                    "operation_position": operation_position,
+                    "tool_name": operation["tool_name"],
+                    "description": operation["description"],
+                    "request_context": request_context,
+                }, ensure_ascii=False)}
+
+                正文：
+                {content}
+                """
+            ).strip()
+            llm_result = await self.llm.generate(
+                [
+                    {"role": "system", "content": "你是严谨的小说连续性审核器。始终返回 JSON。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=320,
+            )
+            parsed = _extract_json_object(llm_result["content"])
+            llm_status = str(parsed.get("status") or "pass")
+            if llm_status in {"pass", "warn", "block"}:
+                status = "block" if "block" in {status, llm_status} else ("warn" if "warn" in {status, llm_status} else "pass")
+            llm_summary = str(parsed.get("summary") or llm_summary)
+            warnings.extend(str(item) for item in cast(list[Any], parsed.get("warnings", [])) if str(item).strip())
+            facts = [str(item) for item in cast(list[Any], parsed.get("facts_used", [])) if str(item).strip()] or facts
+
+        return {
+            "status": status,
+            "summary": llm_summary if status != "warn" or not warnings else f"{llm_summary}；{'；'.join(warnings[:3])}",
+            "warnings": list(dict.fromkeys(warnings)),
+            "facts_used": facts,
+        }
+
+    def _build_run_precheck(
+        self,
+        operations: list[dict[str, Any]],
+        *,
+        context_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        duplicate_targets: dict[tuple[str, str], list[int]] = {}
+        warnings: list[str] = []
+        facts_used: list[str] = []
+        for index, operation in enumerate(operations, start=1):
+            execution_result = cast(dict[str, Any], operation.get("execution_result") or {})
+            planning_precheck = cast(dict[str, Any], execution_result.get("planning_precheck") or {})
+            warnings.extend(str(item) for item in cast(list[Any], planning_precheck.get("warnings", [])) if str(item).strip())
+            facts_used.extend(str(item) for item in cast(list[Any], planning_precheck.get("facts_used", [])) if str(item).strip())
+            if (
+                operation.get("target_type")
+                and operation.get("target_id")
+                and str(operation.get("tool_name")) in {"update_chapter", "write_chapter_content", "update_scene", "write_scene_content"}
+            ):
+                key = (str(operation["target_type"]), str(operation["target_id"]))
+                duplicate_targets.setdefault(key, []).append(index)
+
+        blocking_reasons = [
+            f"{target_type}:{target_id} 在同一计划中存在多个正文写入步骤（{positions}）。"
+            for (target_type, target_id), positions in duplicate_targets.items()
+            if len(positions) > 1
+        ]
+        if blocking_reasons:
+            return {
+                "status": "block",
+                "summary": "；".join(blocking_reasons),
+                "warnings": warnings,
+                "facts_used": list(dict.fromkeys(facts_used)),
+                "context_summary": context_data.get("context_summary", {}),
+            }
+        if warnings:
+            return {
+                "status": "warn",
+                "summary": "连续性预检发现需要人工复核的风险。",
+                "warnings": list(dict.fromkeys(warnings)),
+                "facts_used": list(dict.fromkeys(facts_used)),
+                "context_summary": context_data.get("context_summary", {}),
+            }
+        return {
+            "status": "pass",
+            "summary": "计划级连续性预检通过。",
+            "warnings": [],
+            "facts_used": list(dict.fromkeys(facts_used)),
+            "context_summary": context_data.get("context_summary", {}),
+        }
+
+    def _make_pipeline_step(
+        self,
+        *,
+        role: str,
+        stage: str,
+        status: str,
+        summary: str,
+        warnings: list[str] | None = None,
+        facts_used: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "id": f"{role}:{stage}:{uuid.uuid4().hex[:8]}",
+            "role": role,
+            "stage": stage,
+            "status": status,
+            "summary": summary,
+            "warnings": list(warnings or []),
+            "facts_used": list(facts_used or []),
+        }
+
+    def _append_pipeline_event(
+        self,
+        event_sink: list[AgentStreamEvent] | None,
+        *,
+        operation_position: int,
+        stage: str,
+        status: str,
+        summary: str,
+    ) -> None:
+        if event_sink is None:
+            return
+        event_sink.append(
+            AgentStreamEvent(
+                type="pipeline_stage",
+                stage=stage,
+                message=summary,
+                detail={
+                    "operation_position": operation_position,
+                    "stage": stage,
+                    "status": status,
+                    "summary": summary,
+                },
+            )
+        )
+
+    def _target_chars_for_operation(
+        self,
+        *,
+        agent_settings: dict[str, Any],
+        operation: dict[str, Any],
+    ) -> int:
+        if str(operation["tool_name"]) in {"create_scene", "write_scene_content"}:
+            scene_target = agent_settings.get("scene_target_chars")
+            if isinstance(scene_target, int) and scene_target > 0:
+                return scene_target
+        chapter_target = agent_settings.get("chapter_target_chars")
+        if isinstance(chapter_target, int) and chapter_target > 0:
+            return chapter_target
+        return 6000
+
+    async def _build_plan_basis(
+        self,
+        db: AsyncSession,
+        *,
+        project: Project,
+        request_context: dict[str, Any],
+        context_data: dict[str, Any],
+        operations: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        entities: dict[tuple[str, uuid.UUID], datetime] = {( "project", project.id): project.updated_at}
+        context_targets = [
+            ("volume", request_context.get("volume_id")),
+            ("chapter", request_context.get("chapter_id")),
+            ("scene", request_context.get("scene_id")),
+            ("character", request_context.get("character_id")),
+            ("world_setting", request_context.get("world_setting_id")),
+        ]
+        for entity_type, raw_id in context_targets:
+            if not raw_id:
+                continue
+            try:
+                entity_id = uuid.UUID(str(raw_id))
+            except ValueError:
+                continue
+            updated_at = await self._resolve_entity_updated_at(db, entity_type=entity_type, entity_id=entity_id)
+            if updated_at is not None:
+                entities[(entity_type, entity_id)] = updated_at
+
+        for operation in operations:
+            target_type = operation.get("target_type")
+            target_id = operation.get("target_id")
+            if not target_type or target_id is None:
+                continue
+            updated_at = await self._resolve_entity_updated_at(
+                db,
+                entity_type=str(target_type),
+                entity_id=uuid.UUID(str(target_id)),
+            )
+            if updated_at is not None:
+                entities[(str(target_type), uuid.UUID(str(target_id)))] = updated_at
+
+        return {
+            "entity_versions": [
+                {
+                    "entity_type": entity_type,
+                    "entity_id": str(entity_id),
+                    "updated_at": updated_at.isoformat(),
+                }
+                for (entity_type, entity_id), updated_at in sorted(
+                    entities.items(),
+                    key=lambda item: (item[0][0], str(item[0][1])),
+                )
+            ],
+            "context_fingerprint": context_assembler.context_fingerprint(context_data),
+        }
+
+    async def _assert_run_plan_freshness(self, db: AsyncSession, *, run: AgentRun) -> None:
+        meta = run.meta or {}
+        raw_expiry = meta.get("plan_expires_at")
+        if isinstance(raw_expiry, str):
+            try:
+                plan_expires_at = datetime.fromisoformat(raw_expiry)
+            except ValueError:
+                plan_expires_at = None
+            else:
+                if plan_expires_at is not None and plan_expires_at <= datetime.now(UTC):
+                    raise BadRequestException(
+                        "计划已过期，请重新生成后再确认。",
+                        details={"code": "plan_expired"},
+                    )
+
+        raw_plan_basis = meta.get("plan_basis")
+        if not isinstance(raw_plan_basis, dict):
+            return
+        entity_versions = cast(list[dict[str, Any]], raw_plan_basis.get("entity_versions", []))
+        for entity_version in entity_versions:
+            try:
+                entity_id = uuid.UUID(str(entity_version["entity_id"]))
+                expected_updated_at = datetime.fromisoformat(str(entity_version["updated_at"]))
+            except (KeyError, ValueError):
+                continue
+            current_updated_at = await self._resolve_entity_updated_at(
+                db,
+                entity_type=str(entity_version["entity_type"]),
+                entity_id=entity_id,
+            )
+            if current_updated_at is None or current_updated_at != expected_updated_at:
+                raise BadRequestException(
+                    "计划依赖的对象已变化，请重新生成后再确认。",
+                    details={
+                        "code": "stale_plan",
+                        "entity_type": entity_version.get("entity_type"),
+                        "entity_id": str(entity_id),
+                    },
+                )
+
+        project = await project_service.get(db, id=run.project_id)
+        latest_checkpoint = await self.checkpoint_store.latest_by_thread(db, thread_id=run.thread_id)
+        user_message = None
+        if run.user_message_id is not None:
+            try:
+                user_message = await self.message_store.get(db, run.user_message_id)
+            except NotFoundException:
+                user_message = None
+        request_context = cast(dict[str, Any], meta.get("request_context", {}))
+        current_context = await context_assembler.build_context(
+            db,
+            project=project,
+            request_context={**request_context, "_user_message": user_message.content if user_message is not None else ""},
+            user_message=user_message.content if user_message is not None else "",
+            latest_checkpoint=latest_checkpoint,
+            mode="planning",
+        )
+        current_fingerprint = context_assembler.context_fingerprint(current_context)
+        expected_fingerprint = str(raw_plan_basis.get("context_fingerprint") or "")
+        if expected_fingerprint and current_fingerprint != expected_fingerprint:
+            raise BadRequestException(
+                "工作区上下文已漂移，请重新生成计划后再确认。",
+                details={"code": "workspace_drift_detected"},
+            )
+
+    async def _resolve_entity_updated_at(
+        self,
+        db: AsyncSession,
+        *,
+        entity_type: str,
+        entity_id: uuid.UUID,
+    ) -> datetime | None:
+        if entity_type == "project":
+            return (await project_service.get(db, id=entity_id)).updated_at
+        if entity_type == "character":
+            return (await character_service.get(db, id=entity_id)).updated_at
+        if entity_type == "world_setting":
+            return (await world_setting_service.get(db, id=entity_id)).updated_at
+        if entity_type == "volume":
+            return (await volume_service.get(db, id=entity_id)).updated_at
+        if entity_type == "chapter":
+            return (await chapter_service.get(db, id=entity_id)).updated_at
+        if entity_type == "scene":
+            return (await scene_service.get(db, id=entity_id)).updated_at
+        return None
+
+    def _plan_precheck_from_operations(self, operations: list[dict[str, Any]]) -> dict[str, Any]:
+        for operation in operations:
+            execution_result = cast(dict[str, Any], operation.get("execution_result") or {})
+            run_precheck = execution_result.get("run_precheck")
+            if isinstance(run_precheck, dict):
+                return run_precheck
+        return {
+            "status": "pass",
+            "summary": "计划级连续性预检通过。",
+            "warnings": [],
+            "facts_used": [],
+        }
 
     async def _normalize_operation_payload(
         self,
@@ -2976,8 +3570,355 @@ class AgentWorkflowService:
     def _execution_warning(self, operations: list[AgentOperation]) -> str | None:
         write_tools = {"write_chapter_content", "write_scene_content", "update_world_setting", "update_character"}
         if any(operation.tool_name in write_tools for operation in operations):
-            return "本次执行已完成持久化；记忆与依赖未自动刷新，如有需要请手动复核。"
+            return "本次执行已完成持久化，并已尝试刷新记忆与依赖。"
         return None
+
+    def _merge_warning_messages(self, base: str | None, warnings: list[str]) -> str | None:
+        parts = [base] if base else []
+        parts.extend(warning for warning in warnings if warning)
+        if not parts:
+            return None
+        return "；".join(dict.fromkeys(parts))
+
+    async def _refresh_operation_artifacts(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        request_context: dict[str, Any],
+        operation: AgentOperation,
+    ) -> str | None:
+        if operation.tool_name not in {
+            "create_chapter",
+            "create_scene",
+            "write_chapter_content",
+            "write_scene_content",
+            "create_character",
+            "update_character",
+            "create_world_setting",
+            "update_world_setting",
+        }:
+            return None
+        try:
+            target = await self._load_operation_target(db, project_id=project_id, operation=operation)
+            if operation.tool_name in {"create_character", "update_character"} and isinstance(target, Character):
+                await self._refresh_character_memory(db, project_id=project_id, character=target)
+                return None
+            if operation.tool_name in {"create_world_setting", "update_world_setting"} and isinstance(target, WorldSetting):
+                await self._refresh_world_setting_memory(db, project_id=project_id, setting=target)
+                return None
+            if operation.tool_name in PROSE_OPERATION_TOOLS and isinstance(target, (Chapter, Scene)):
+                await self._refresh_prose_artifacts(
+                    db,
+                    project_id=project_id,
+                    request_context=request_context,
+                    operation=operation,
+                    target=target,
+                )
+            return None
+        except Exception as exc:
+            logger.warning("Artifact refresh failed for operation %s: %s", operation.id, exc)
+            execution_result = dict(operation.execution_result or {})
+            execution_result["artifact_refresh"] = {
+                "status": "failed",
+                "message": str(exc),
+            }
+            operation.execution_result = execution_result
+            await db.flush()
+            return f"步骤 {operation.position} 的记忆/依赖刷新失败：{exc}"
+
+    async def _refresh_character_memory(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        character: Character,
+    ) -> None:
+        content = (
+            f"{character.name} / {character.role or '未设定角色'} / "
+            f"{_excerpt(json.dumps(character.profile or {}, ensure_ascii=False), length=220) or '暂无详细档案'}"
+        )
+        embedding = await self._safe_embed_text(content)
+        await memory_service.upsert_fact(
+            db,
+            project_id=project_id,
+            memory_type="semantic",
+            content=content,
+            meta={
+                "fact_kind": "character_profile",
+                "character_ids": [str(character.id)],
+                "source_type": "character",
+                "source_id": str(character.id),
+            },
+            embedding=embedding,
+        )
+
+    async def _refresh_world_setting_memory(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        setting: WorldSetting,
+    ) -> None:
+        content = f"{setting.name} / {setting.category} / {_excerpt(setting.content, length=240) or '暂无内容'}"
+        embedding = await self._safe_embed_text(content)
+        await memory_service.upsert_fact(
+            db,
+            project_id=project_id,
+            memory_type="semantic",
+            content=content,
+            meta={
+                "fact_kind": "world_setting",
+                "world_setting_ids": [str(setting.id)],
+                "source_type": "world_setting",
+                "source_id": str(setting.id),
+            },
+            embedding=embedding,
+        )
+
+    async def _refresh_prose_artifacts(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        request_context: dict[str, Any],
+        operation: AgentOperation,
+        target: Chapter | Scene,
+    ) -> None:
+        raw_content = self._target_content(target)
+        if not raw_content or not raw_content.strip():
+            return
+        content = raw_content
+        project = await project_service.get(db, id=project_id)
+        context_data = await context_assembler.build_context(
+            db,
+            project=project,
+            request_context={**request_context, "_user_message": content[:120]},
+            user_message=content[:120],
+            latest_checkpoint=None,
+            mode="artifact_refresh",
+        )
+        refresh_payload = await self._extract_artifact_refresh_payload(
+            operation=operation,
+            content=content,
+            context_data=context_data,
+        )
+        await self._persist_prose_memories_and_dependencies(
+            db,
+            project_id=project_id,
+            operation=operation,
+            target=target,
+            refresh_payload=refresh_payload,
+            content=content,
+        )
+
+    async def _extract_artifact_refresh_payload(
+        self,
+        *,
+        operation: AgentOperation,
+        content: str,
+        context_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        prompt = dedent(
+            f"""
+            你是小说知识整理器。请根据正文整理 episode 和 facts。
+            始终返回 JSON：
+            {{
+              "episode_summary": "一段中文事件摘要",
+              "timeline_marker": "可选，时间锚点",
+              "character_names": ["..."],
+              "world_setting_names": ["..."],
+              "facts": [
+                {{
+                  "content": "具体事实",
+                  "fact_kind": "event|rule|relationship|character_state|setting_detail",
+                  "timeline_marker": "可选",
+                  "character_names": ["..."],
+                  "world_setting_names": ["..."]
+                }}
+              ]
+            }}
+
+            相关对象清单：
+            {json.dumps({
+                "characters": context_data.get("characters", []),
+                "world_settings": context_data.get("world_settings", []),
+            }, ensure_ascii=False)}
+
+            当前步骤：
+            {json.dumps({
+                "tool_name": operation.tool_name,
+                "target_type": operation.target_type,
+                "target_display": operation.target_display,
+            }, ensure_ascii=False)}
+
+            正文：
+            {content}
+            """
+        ).strip()
+        result = await self.llm.generate(
+            [
+                {"role": "system", "content": "你是严谨的小说知识整理器。始终返回 JSON。"},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.1,
+            max_tokens=700,
+        )
+        parsed = _extract_json_object(result["content"])
+        facts = [
+            fact
+            for fact in cast(list[dict[str, Any]], parsed.get("facts", []))
+            if isinstance(fact, dict) and str(fact.get("content", "")).strip()
+        ]
+        return {
+            "episode_summary": str(parsed.get("episode_summary") or _excerpt(content, length=200) or "正文事件摘要"),
+            "timeline_marker": str(parsed.get("timeline_marker") or "").strip() or None,
+            "character_names": [str(item) for item in cast(list[Any], parsed.get("character_names", [])) if str(item).strip()],
+            "world_setting_names": [
+                str(item) for item in cast(list[Any], parsed.get("world_setting_names", [])) if str(item).strip()
+            ],
+            "facts": facts[:5],
+        }
+
+    async def _persist_prose_memories_and_dependencies(
+        self,
+        db: AsyncSession,
+        *,
+        project_id: uuid.UUID,
+        operation: AgentOperation,
+        target: Chapter | Scene,
+        refresh_payload: dict[str, Any],
+        content: str,
+    ) -> None:
+        source_type = "chapter" if isinstance(target, Chapter) else "scene"
+        source_id = target.id
+        project_characters = await character_service.get_by_project(db, project_id=project_id, limit=300)
+        project_settings = await world_setting_service.get_by_project(db, project_id=project_id, limit=300)
+        matched_character_ids = self._match_object_ids_by_name(
+            names=cast(list[str], refresh_payload.get("character_names", [])),
+            objects=project_characters,
+        )
+        matched_world_setting_ids = self._match_object_ids_by_name(
+            names=cast(list[str], refresh_payload.get("world_setting_names", [])),
+            objects=project_settings,
+        )
+
+        episode_meta = {
+            "fact_kind": "episode_summary",
+            "character_ids": matched_character_ids,
+            "world_setting_ids": matched_world_setting_ids,
+            "chapter_id": str(target.id) if isinstance(target, Chapter) else str(target.chapter_id),
+            "scene_id": str(target.id) if isinstance(target, Scene) else None,
+            "timeline_marker": refresh_payload.get("timeline_marker"),
+            "source_type": source_type,
+            "source_id": str(source_id),
+        }
+        if isinstance(target, Chapter) and target.volume_id is not None:
+            episode_meta["volume_id"] = str(target.volume_id)
+        episode_embedding = await self._safe_embed_text(str(refresh_payload["episode_summary"]))
+        await memory_service.upsert_fact(
+            db,
+            project_id=project_id,
+            memory_type="episode",
+            content=str(refresh_payload["episode_summary"]),
+            meta=episode_meta,
+            embedding=episode_embedding,
+        )
+
+        for fact in cast(list[dict[str, Any]], refresh_payload.get("facts", [])):
+            fact_character_ids = self._match_object_ids_by_name(
+                names=[str(item) for item in cast(list[Any], fact.get("character_names", [])) if str(item).strip()],
+                objects=project_characters,
+            )
+            fact_setting_ids = self._match_object_ids_by_name(
+                names=[str(item) for item in cast(list[Any], fact.get("world_setting_names", [])) if str(item).strip()],
+                objects=project_settings,
+            )
+            fact_meta = {
+                "fact_kind": str(fact.get("fact_kind") or "event"),
+                "character_ids": fact_character_ids,
+                "world_setting_ids": fact_setting_ids,
+                "chapter_id": episode_meta.get("chapter_id"),
+                "scene_id": episode_meta.get("scene_id"),
+                "volume_id": episode_meta.get("volume_id"),
+                "timeline_marker": fact.get("timeline_marker") or refresh_payload.get("timeline_marker"),
+                "source_type": source_type,
+                "source_id": str(source_id),
+            }
+            fact_embedding = await self._safe_embed_text(str(fact["content"]))
+            await memory_service.upsert_fact(
+                db,
+                project_id=project_id,
+                memory_type="fact",
+                content=str(fact["content"]),
+                meta=fact_meta,
+                embedding=fact_embedding,
+            )
+
+        existing_dependencies = await dependency_service.get_by_source(
+            db,
+            project_id=project_id,
+            source_type=source_type,
+            source_id=source_id,
+            limit=500,
+        )
+        for dependency in existing_dependencies:
+            if dependency.target_type not in {"character", "world_setting"}:
+                continue
+            await db.delete(dependency)
+        await db.flush()
+        for character_id in matched_character_ids:
+            await dependency_service.get_or_create(
+                db,
+                project_id=project_id,
+                source_type=source_type,
+                source_id=source_id,
+                target_type="character",
+                target_id=uuid.UUID(character_id),
+                dependency_type="references",
+            )
+        for setting_id in matched_world_setting_ids:
+            await dependency_service.get_or_create(
+                db,
+                project_id=project_id,
+                source_type=source_type,
+                source_id=source_id,
+                target_type="world_setting",
+                target_id=uuid.UUID(setting_id),
+                dependency_type="references",
+            )
+
+        execution_result = dict(operation.execution_result or {})
+        execution_result["artifact_refresh"] = {
+            "status": "completed",
+            "episode_summary": refresh_payload.get("episode_summary"),
+            "fact_count": len(cast(list[Any], refresh_payload.get("facts", []))),
+            "dependency_character_count": len(matched_character_ids),
+            "dependency_world_setting_count": len(matched_world_setting_ids),
+        }
+        operation.execution_result = execution_result
+        await db.flush()
+
+    async def _safe_embed_text(self, text: str) -> list[float] | None:
+        if not text.strip():
+            return None
+        try:
+            return await self.llm.embed_single(text)
+        except Exception:
+            logger.debug("Embedding unavailable for artifact refresh text.")
+            return None
+
+    def _match_object_ids_by_name(self, *, names: list[str], objects: list[Any]) -> list[str]:
+        normalized_names = {re.sub(r"\s+", "", name).strip().lower() for name in names if name.strip()}
+        matched_ids: list[str] = []
+        for obj in objects:
+            obj_name = str(getattr(obj, "name", "") or "")
+            if not obj_name:
+                continue
+            if re.sub(r"\s+", "", obj_name).strip().lower() not in normalized_names:
+                continue
+            matched_ids.append(str(obj.id))
+        return matched_ids
 
     def _build_skill_snapshot(
         self,
@@ -3157,6 +4098,8 @@ class AgentWorkflowService:
             planner_window=self._planner_window_response(meta),
             retained_window=self._retained_window_response(meta),
             active_bundle_contract=self._active_bundle_contract_response(meta),
+            plan_expires_at=self._plan_expires_at_response(meta),
+            plan_basis=self._plan_basis_response(meta),
             meta=meta,
             confirmed_at=run.confirmed_at,
             secondary_confirmed_at=run.secondary_confirmed_at,
@@ -3216,6 +4159,36 @@ class AgentWorkflowService:
             logger.warning("Skipping invalid retained_window payload during response serialization.")
             return None
 
+    def _plan_expires_at_response(self, meta: dict[str, Any]) -> datetime | None:
+        raw = meta.get("plan_expires_at")
+        if not isinstance(raw, str):
+            return None
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            logger.warning("Skipping invalid plan_expires_at payload during response serialization.")
+            return None
+
+    def _plan_basis_response(self, meta: dict[str, Any]) -> AgentPlanBasisResponse | None:
+        raw = meta.get("plan_basis")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return AgentPlanBasisResponse(
+                entity_versions=[
+                    AgentPlanBasisEntityVersionResponse(
+                        entity_type=str(item["entity_type"]),
+                        entity_id=uuid.UUID(str(item["entity_id"])),
+                        updated_at=datetime.fromisoformat(str(item["updated_at"])),
+                    )
+                    for item in cast(list[dict[str, Any]], raw.get("entity_versions", []))
+                ],
+                context_fingerprint=str(raw["context_fingerprint"]),
+            )
+        except (ValidationError, KeyError, TypeError, ValueError):
+            logger.warning("Skipping invalid plan_basis payload during response serialization.")
+            return None
+
     def _active_bundle_contract_response(
         self,
         meta: dict[str, Any],
@@ -3273,6 +4246,7 @@ class AgentWorkflowService:
             summary=subtask.summary,
             error_message=subtask.error_message,
             child_trace=self._subtask_trace_response(meta),
+            pipeline_steps=self._pipeline_steps_response(meta),
             meta=meta,
             created_at=subtask.created_at,
             updated_at=subtask.updated_at,
@@ -3302,6 +4276,20 @@ class AgentWorkflowService:
         except (ValidationError, KeyError, TypeError, ValueError):
             logger.warning("Skipping invalid child_trace payload during response serialization.")
             return None
+
+    def _pipeline_steps_response(self, meta: dict[str, Any]) -> list[AgentPipelineStepResponse]:
+        raw = meta.get("pipeline_steps")
+        if not isinstance(raw, list):
+            return []
+        steps: list[AgentPipelineStepResponse] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                steps.append(AgentPipelineStepResponse.model_validate(item))
+            except ValidationError:
+                logger.warning("Skipping invalid pipeline step payload during response serialization.")
+        return steps
 
     def _execution_contract_response(self, meta: dict[str, Any]) -> AgentExecutionContractResponse | None:
         raw = meta.get("permission_matrix")
@@ -3548,6 +4536,14 @@ class AgentWorkflowService:
             for operation in operations
             if operation["tool_name"] in writer_tools and self._operation_content_candidate(operation)
         ]
+        pipeline_steps = [
+            step
+            for operation in writer_ops
+            for step in cast(
+                list[dict[str, Any]],
+                cast(dict[str, Any], operation.get("execution_result") or {}).get("planning_pipeline", []),
+            )
+        ]
         return PlannedSubtaskSpec(
             role="writer",
             title="Writer candidate",
@@ -3561,6 +4557,7 @@ class AgentWorkflowService:
             meta={
                 "depends_on": ["planner", "researcher"],
                 "operation_positions": [int(operation["position"]) for operation in writer_ops if "position" in operation],
+                "pipeline_steps": pipeline_steps,
             },
         )
 
@@ -3605,20 +4602,35 @@ class AgentWorkflowService:
         operations: list[dict[str, Any]],
     ) -> PlannedSubtaskSpec:
         """Build the continuity unit before the execution-time gate runs."""
+        run_precheck = self._plan_precheck_from_operations(operations)
         relevant_targets = [
             f"{operation.get('target_type') or 'unknown'}:{operation.get('target_display') or operation.get('target_id') or operation['tool_name']}"
             for operation in operations
         ]
+        pipeline_steps = [
+            step
+            for operation in operations
+            for step in cast(
+                list[dict[str, Any]],
+                cast(dict[str, Any], operation.get("execution_result") or {}).get("planning_pipeline", []),
+            )
+            if str(step.get("stage")) == "continuity_precheck"
+        ]
         return PlannedSubtaskSpec(
             role="continuity",
             title="Continuity gate",
-            status="planned",
+            status="failed" if str(run_precheck.get("status")) == "block" else "completed",
             summary=_excerpt(
-                "执行前将验证目标对象、写入一致性与多步修改冲突。"
+                f"{run_precheck.get('summary') or '执行前将验证目标对象、写入一致性与多步修改冲突。'}"
                 + (f" 本轮涉及：{', '.join(relevant_targets[:4])}。" if relevant_targets else ""),
                 length=SUBTASK_SUMMARY_LIMIT,
             ),
-            meta={"depends_on": ["planner", "researcher", "writer", "editor"]},
+            error_message=str(run_precheck.get("summary")) if str(run_precheck.get("status")) == "block" else None,
+            meta={
+                "depends_on": ["planner", "researcher", "writer", "editor"],
+                "pipeline_steps": pipeline_steps,
+                "precheck": run_precheck,
+            },
         )
 
     def _materialize_subtask_unit(

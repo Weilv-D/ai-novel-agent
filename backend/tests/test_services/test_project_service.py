@@ -124,6 +124,25 @@ class TestProjectServiceCreateProject:
 
         assert result.story_outline == "明确的项目大纲"
 
+    @pytest.mark.asyncio
+    async def test_create_project_persists_agent_settings(self, db_session: AsyncSession):
+        """Project creation should persist normalized project-level agent settings."""
+        result = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(
+                name="Settings Project",
+                agent_settings={
+                    "style_goal": "冷峻叙事",
+                    "tone_keywords": ["克制", "压迫感"],
+                    "continuity_mode": "strict",
+                },
+            ),
+        )
+
+        assert result.agent_settings["style_goal"] == "冷峻叙事"
+        assert result.agent_settings["tone_keywords"] == ["克制", "压迫感"]
+        assert result.agent_settings["continuity_mode"] == "strict"
+
 
 class TestProjectServiceGet:
     """Tests for project_service.get with real database."""
@@ -189,6 +208,33 @@ class TestProjectServiceUpdate:
 
         assert updated.name == "Updated"
         assert updated.genre == "Sci-Fi"
+
+    @pytest.mark.asyncio
+    async def test_update_project_agent_settings_and_meta(self, db_session: AsyncSession):
+        """Updating meta should preserve agent metadata while allowing agent settings overrides."""
+        project = await project_service.create_project(
+            db_session,
+            obj_in=ProjectCreate(
+                name="Original",
+                genre="Fantasy",
+                agent_profile_id="xianxia_intrigue",
+                agent_settings={"style_goal": "旧风格", "continuity_mode": "strict"},
+            ),
+        )
+
+        updated = await project_service.update(
+            db_session,
+            db_obj=project,
+            obj_in=ProjectUpdate(
+                agent_settings={"style_goal": "新风格", "continuity_mode": "standard"},
+                meta={"custom": True},
+            ),
+        )
+
+        assert updated.meta["custom"] is True
+        assert updated.agent_profile_id == "xianxia_intrigue"
+        assert updated.agent_settings["style_goal"] == "新风格"
+        assert updated.agent_settings["continuity_mode"] == "standard"
 
 
 class TestProjectServiceDelete:

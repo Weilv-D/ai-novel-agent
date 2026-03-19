@@ -133,33 +133,35 @@ class TestProjectContextLoading:
             recent_run_digest={"runs": 1},
         )
 
-        with patch("app.services.agent_workflow.character_service.get_by_project", new_callable=AsyncMock) as mock_chars:
-            with patch("app.services.agent_workflow.world_setting_service.get_by_project", new_callable=AsyncMock) as mock_settings:
-                with patch("app.services.agent_workflow.volume_service.get_by_project", new_callable=AsyncMock) as mock_volumes:
-                    with patch("app.services.agent_workflow.chapter_service.get_by_project", new_callable=AsyncMock) as mock_chapters:
-                        with patch("app.services.agent_workflow.volume_service.get", new_callable=AsyncMock) as mock_get_volume:
-                            with patch("app.services.agent_workflow.chapter_service.get_by_volume", new_callable=AsyncMock) as mock_volume_chapters:
-                                with patch("app.services.agent_workflow.scene_service.get", new_callable=AsyncMock) as mock_get_scene:
-                                    with patch("app.services.agent_workflow.character_service.get", new_callable=AsyncMock) as mock_get_character:
-                                        mock_chars.return_value = [character]
-                                        mock_settings.return_value = [setting]
-                                        mock_volumes.return_value = [volume]
-                                        mock_chapters.return_value = [chapter]
-                                        mock_get_volume.return_value = volume
-                                        mock_volume_chapters.return_value = [chapter]
-                                        mock_get_scene.return_value = scene
-                                        mock_get_character.return_value = character
+        with patch("app.services.context_assembler.character_service.get_by_project", new_callable=AsyncMock) as mock_chars:
+            with patch("app.services.context_assembler.world_setting_service.get_by_project", new_callable=AsyncMock) as mock_settings:
+                with patch("app.services.context_assembler.volume_service.get_by_project", new_callable=AsyncMock) as mock_volumes:
+                    with patch("app.services.context_assembler.chapter_service.get_by_project", new_callable=AsyncMock) as mock_chapters:
+                        with patch("app.services.context_assembler.volume_service.get", new_callable=AsyncMock) as mock_get_volume:
+                                with patch("app.services.context_assembler.chapter_service.get_by_volume", new_callable=AsyncMock) as mock_volume_chapters:
+                                    with patch("app.services.context_assembler.scene_service.get", new_callable=AsyncMock) as mock_get_scene:
+                                        with patch("app.services.context_assembler.scene_service.get_by_chapter", new_callable=AsyncMock) as mock_scenes:
+                                            with patch("app.services.context_assembler.character_service.get", new_callable=AsyncMock) as mock_get_character:
+                                                mock_chars.return_value = [character]
+                                                mock_settings.return_value = [setting]
+                                                mock_volumes.return_value = [volume]
+                                                mock_chapters.return_value = [chapter]
+                                                mock_get_volume.return_value = volume
+                                                mock_volume_chapters.return_value = [chapter]
+                                                mock_get_scene.return_value = scene
+                                                mock_scenes.return_value = [scene]
+                                                mock_get_character.return_value = character
 
-                                        context = await workflow_service._load_project_context(
-                                            MagicMock(),
-                                            project=project,
-                                            request_context={
-                                                "volume_id": str(volume.id),
-                                                "scene_id": str(scene.id),
-                                                "character_id": str(character.id),
-                                            },
-                                            latest_checkpoint=checkpoint,
-                                        )
+                                                context = await workflow_service._load_project_context(
+                                                    MagicMock(),
+                                                    project=project,
+                                                    request_context={
+                                                        "volume_id": str(volume.id),
+                                                        "scene_id": str(scene.id),
+                                                        "character_id": str(character.id),
+                                                    },
+                                                    latest_checkpoint=checkpoint,
+                                                )
 
         assert context["agent_profile_id"] == "default"
         assert context["latest_checkpoint"]["id"] == str(checkpoint.id)
@@ -203,16 +205,16 @@ class TestProjectContextLoading:
             meta={},
         )
 
-        with patch("app.services.agent_workflow.character_service.get_by_project", new_callable=AsyncMock) as mock_chars:
-            with patch("app.services.agent_workflow.world_setting_service.get_by_project", new_callable=AsyncMock) as mock_settings:
-                with patch("app.services.agent_workflow.volume_service.get_by_project", new_callable=AsyncMock) as mock_volumes:
-                    with patch("app.services.agent_workflow.chapter_service.get_by_project", new_callable=AsyncMock) as mock_chapters:
-                        with patch("app.services.agent_workflow.volume_service.get", new_callable=AsyncMock) as mock_get_volume:
-                            with patch("app.services.agent_workflow.chapter_service.get", new_callable=AsyncMock) as mock_get_chapter:
-                                with patch("app.services.agent_workflow.chapter_service.get_by_volume", new_callable=AsyncMock) as mock_volume_chapters:
-                                    with patch("app.services.agent_workflow.scene_service.get_by_chapter", new_callable=AsyncMock) as mock_scenes:
-                                        with patch("app.services.agent_workflow.scene_service.get", new_callable=AsyncMock) as mock_get_scene:
-                                            with patch("app.services.agent_workflow.character_service.get", new_callable=AsyncMock) as mock_get_character:
+        with patch("app.services.context_assembler.character_service.get_by_project", new_callable=AsyncMock) as mock_chars:
+            with patch("app.services.context_assembler.world_setting_service.get_by_project", new_callable=AsyncMock) as mock_settings:
+                with patch("app.services.context_assembler.volume_service.get_by_project", new_callable=AsyncMock) as mock_volumes:
+                    with patch("app.services.context_assembler.chapter_service.get_by_project", new_callable=AsyncMock) as mock_chapters:
+                        with patch("app.services.context_assembler.volume_service.get", new_callable=AsyncMock) as mock_get_volume:
+                            with patch("app.services.context_assembler.chapter_service.get", new_callable=AsyncMock) as mock_get_chapter:
+                                with patch("app.services.context_assembler.chapter_service.get_by_volume", new_callable=AsyncMock) as mock_volume_chapters:
+                                    with patch("app.services.context_assembler.scene_service.get_by_chapter", new_callable=AsyncMock) as mock_scenes:
+                                        with patch("app.services.context_assembler.scene_service.get", new_callable=AsyncMock) as mock_get_scene:
+                                            with patch("app.services.context_assembler.character_service.get", new_callable=AsyncMock) as mock_get_character:
                                                 mock_chars.return_value = []
                                                 mock_settings.return_value = []
                                                 mock_volumes.return_value = [volume]

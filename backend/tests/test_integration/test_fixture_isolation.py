@@ -4,11 +4,13 @@ This test verifies that UUID type replacements are properly isolated between tes
 The key insight: during a test, types are SQLiteUUID (not UUID instance), but
 fixture cleanup restores them to original UUID for next test.
 """
+import pytest
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models import Base
 
 
+@pytest.mark.asyncio
 class TestEngineFixtureIsolation:
     """Verify that db_engine fixture properly isolates UUID type changes."""
 
@@ -55,6 +57,7 @@ class TestEngineFixtureIsolation:
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
 
 
+@pytest.mark.asyncio
 class TestMetadataStateAcrossTests:
     """Verify metadata state is consistent across test runs."""
 

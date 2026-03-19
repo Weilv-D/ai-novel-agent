@@ -3,6 +3,7 @@
 from uuid import UUID, uuid4
 
 import pytest
+import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, NotFoundException
@@ -13,7 +14,7 @@ from app.services.project import project_service
 from app.services.suggestion import suggestion_service
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_project(db_session: AsyncSession) -> Project:
     """Create a test project for suggestion tests."""
     from app.schemas.project import ProjectCreate

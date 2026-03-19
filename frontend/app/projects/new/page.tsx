@@ -9,6 +9,8 @@ import type { AgentProfile, ProjectCreate } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
+import { ProjectAgentSettingsFields } from "@/components/projects/ProjectAgentSettingsFields";
+import { DEFAULT_PROJECT_AGENT_SETTINGS } from "@/lib/project-agent-settings";
 
 const FALLBACK_PROFILES: AgentProfile[] = [
   {
@@ -37,6 +39,7 @@ export default function NewProjectPage() {
     summary: "",
     story_outline: "",
     agent_profile_id: "default",
+    agent_settings: DEFAULT_PROJECT_AGENT_SETTINGS,
   });
   const [profiles, setProfiles] = useState<AgentProfile[]>(FALLBACK_PROFILES);
   const [loading, setLoading] = useState(false);
@@ -167,6 +170,11 @@ export default function NewProjectPage() {
                   {(profiles.find((profile) => profile.id === (formData.agent_profile_id || "default")) || profiles[0])?.description}
                 </p>
               </div>
+
+              <ProjectAgentSettingsFields
+                value={formData.agent_settings || DEFAULT_PROJECT_AGENT_SETTINGS}
+                onChange={(agent_settings) => setFormData({ ...formData, agent_settings })}
+              />
 
               {error && <div className="ink-alert ink-alert-danger">{error}</div>}
 

@@ -2,13 +2,15 @@
 
 import { type ReactNode, useEffect, useRef, useState, useTransition } from "react";
 
-import { agentWorkflowApi, ApiError, chapterApi, projectApi, volumeApi } from "@/lib/api-client";
+import { agentWorkflowApi, ApiError, projectApi } from "@/lib/api-client";
+import { normalizeProjectAgentSettings } from "@/lib/project-agent-settings";
 import type {
   AgentExecutionChildUnit,
   AgentAppliedRiskPolicy,
   AgentExecutionContractPhase,
   AgentHookTraceEntry,
   AgentOperation,
+  AgentPipelineStep,
   Chapter,
   AgentRun,
   AgentRunRiskSummary,
@@ -17,7 +19,10 @@ import type {
   AgentThread,
   AgentThreadCheckpoint,
   AgentThreadMessage,
+  ProjectAgentSettings,
   Project,
+  ProjectTree,
+  ProjectWorkspaceSummary,
   Volume,
 } from "@/lib/types";
 import { getRunStatusMeta } from "@/lib/presentation";
@@ -381,6 +386,117 @@ function getRelatedChapterOutlines(run: AgentRun | null, chapters: Chapter[], fo
     .slice(0, 4);
 }
 
+function flattenWorkspaceTree(tree: ProjectTree | null): { volumes: Volume[]; chapters: Chapter[] } {
+  if (!tree) {
+    return { volumes: [], chapters: [] };
+  }
+
+  const volumeNodes = [...tree.volumes].sort((left, right) => (left.volume_number || 0) - (right.volume_number || 0));
+  const volumes: Volume[] = volumeNodes.map((volume) => ({
+    id: volume.id,
+    project_id: volume.project_id,
+    volume_number: volume.volume_number || undefined,
+    title: volume.title || undefined,
+    outline: volume.outline || undefined,
+    notes: undefined,
+    created_at: "",
+    updated_at: "",
+  }));
+
+  const allChapters = [...volumeNodes.flatMap((volume) => volume.chapters), ...tree.ungrouped_chapters]
+    .sort((left, right) => left.chapter_number - right.chapter_number);
+  const chapters: Chapter[] = allChapters.map((chapter) => ({
+    id: chapter.id,
+    project_id: chapter.project_id,
+    volume_id: chapter.volume_id || undefined,
+    chapter_number: chapter.chapter_number,
+    title: chapter.title || undefined,
+    outline: chapter.outline || undefined,
+    content: undefined,
+    status: chapter.status as Chapter["status"],
+    notes: undefined,
+    created_at: "",
+    updated_at: "",
+  }));
+
+  return { volumes, chapters };
+}
+
+function findSceneChapterId(tree: ProjectTree | null, sceneId: string): string | null {
+  if (!tree) {
+    return null;
+  }
+  for (const chapter of [...tree.ungrouped_chapters, ...tree.volumes.flatMap((volume) => volume.chapters)]) {
+    if (chapter.scenes.some((scene) => scene.id === sceneId)) {
+      return chapter.id;
+    }
+  }
+  return null;
+}
+
+function getOperationTargetHref(operation: AgentOperation, projectId: string, tree: ProjectTree | null): string | null {
+  if (operation.target_type === "chapter" && operation.target_id) {
+    return `/projects/${projectId}/chapters/${operation.target_id}`;
+  }
+  if (operation.target_type === "scene" && operation.target_id) {
+    const chapterId = findSceneChapterId(tree, operation.target_id);
+    return chapterId ? `/projects/${projectId}/chapters/${chapterId}/scenes/${operation.target_id}` : null;
+  }
+
+  const payload = asRecord(operation.payload);
+  const updates = asRecord(payload?.updates);
+  const chapterId = asString(payload?.chapter_id) || asString(updates?.chapter_id);
+  if (chapterId) {
+    return `/projects/${projectId}/chapters/${chapterId}`;
+  }
+  return null;
+}
+
+function formatListSummary(items: string[] | undefined, fallback: string): string {
+  if (!items || items.length === 0) {
+    return fallback;
+  }
+  return items.slice(0, 4).join(" / ");
+}
+
+function extractRunContextSummary(run: AgentRun | null): Record<string, unknown> | null {
+  return asRecord(run?.meta.context_summary);
+}
+
+function getPlanningPrecheck(operation: AgentOperation): Record<string, unknown> | null {
+  return asRecord(asRecord(operation.execution_result)?.planning_precheck);
+}
+
+function getPlanningPipeline(operation: AgentOperation): AgentPipelineStep[] {
+  const raw = asRecord(operation.execution_result)?.planning_pipeline;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((step): step is AgentPipelineStep => {
+    const record = asRecord(step);
+    return Boolean(record && typeof record.id === "string" && typeof record.stage === "string" && typeof record.summary === "string");
+  });
+}
+
+function formatWorkspaceError(error: ApiError | Error): string {
+  if (!(error instanceof ApiError)) {
+    return error.message || "执行操作失败";
+  }
+  const payload = asRecord(error.data);
+  const details = asRecord(asRecord(payload?.error)?.details);
+  const code = asString(details?.code);
+  if (code === "stale_plan") {
+    return "计划依赖对象已变化，旧预览已失效，请重新生成计划。";
+  }
+  if (code === "plan_expired") {
+    return "计划已过期，请重新生成后再确认。";
+  }
+  if (code === "workspace_drift_detected") {
+    return "工作区上下文已漂移，请重新生成计划。";
+  }
+  return error.detail;
+}
+
 function MessageBubble({ message }: { message: AgentThreadMessage }) {
   const isUser = message.role === "user";
   return (
@@ -441,15 +557,60 @@ function SubtaskCard({ subtask }: { subtask: AgentSubtask }) {
       {subtask.error_message && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--danger))]">{subtask.error_message}</p>
       )}
+      {subtask.pipeline_steps.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {subtask.pipeline_steps.map((step) => (
+            <div
+              key={step.id}
+              className="rounded-[0.95rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.04)] px-3 py-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">
+                  {step.stage}
+                </div>
+                <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">{step.status}</div>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-900))]">{step.summary}</p>
+              {step.facts_used.length > 0 && (
+                <p className="mt-2 text-xs leading-6 text-[rgb(var(--ink-800))]">
+                  事实依据：{step.facts_used.join(" / ")}
+                </p>
+              )}
+              {step.warnings.length > 0 && (
+                <p className="mt-2 text-xs leading-6 text-[rgb(var(--danger))]">
+                  预警：{step.warnings.join(" / ")}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function OperationCard({ operation }: { operation: AgentOperation }) {
+function OperationCard({
+  operation,
+  projectId,
+  tree,
+}: {
+  operation: AgentOperation;
+  projectId: string;
+  tree: ProjectTree | null;
+}) {
   const toolLabel = TOOL_LABELS[operation.tool_name] || operation.tool_name;
   const preview = operation.preview;
   const riskMeta = RISK_META[operation.risk_level] || RISK_META.medium;
   const verificationMeta = VERIFICATION_META[operation.verification_status] || VERIFICATION_META.pending;
+  const targetHref = getOperationTargetHref(operation, projectId, tree);
+  const planningPrecheck = getPlanningPrecheck(operation);
+  const pipelineSteps = getPlanningPipeline(operation);
+  const precheckWarnings = Array.isArray(planningPrecheck?.warnings)
+    ? planningPrecheck.warnings.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+  const precheckFacts = Array.isArray(planningPrecheck?.facts_used)
+    ? planningPrecheck.facts_used.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
   return (
     <div className="rounded-[1.4rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-elevated)] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -474,6 +635,14 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
           },
         ]}
       />
+      {targetHref && (
+        <a
+          href={targetHref}
+          className="mb-3 inline-flex text-xs font-medium tracking-[0.12em] text-[rgb(var(--ink-900))] underline decoration-[rgba(var(--ink-900),0.35)] underline-offset-4"
+        >
+          跳转到目标对象
+        </a>
+      )}
       <p className="text-sm leading-7 text-[rgb(var(--ink-800))]">{operation.description}</p>
       {operation.reason && (
         <p className="mt-2 text-sm leading-7 text-[rgb(var(--ink-800))]">原因：{operation.reason}</p>
@@ -494,6 +663,41 @@ function OperationCard({ operation }: { operation: AgentOperation }) {
         <pre className="mt-4 overflow-x-auto rounded-[1rem] bg-[rgba(var(--ink-950),0.92)] p-4 text-xs leading-6 text-[rgb(var(--paper-soft))]">
           {preview.diff}
         </pre>
+      )}
+      {pipelineSteps.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {pipelineSteps.map((step) => (
+            <div
+              key={step.id}
+              className="rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[rgba(var(--ink-950),0.04)] px-3 py-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">
+                  {step.stage}
+                </div>
+                <div className="text-xs tracking-[0.12em] text-[rgb(var(--ink-800))]">{step.status}</div>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-900))]">{step.summary}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {(precheckWarnings.length > 0 || precheckFacts.length > 0) && (
+        <div className="mt-4 rounded-[1rem] border border-[rgba(var(--amber),0.18)] bg-[rgba(var(--amber),0.08)] px-4 py-3">
+          <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">
+            Continuity Precheck
+          </div>
+          {precheckFacts.length > 0 && (
+            <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-900))]">
+              事实依据：{precheckFacts.join(" / ")}
+            </p>
+          )}
+          {precheckWarnings.length > 0 && (
+            <p className="mt-2 text-sm leading-6 text-[rgb(var(--danger))]">
+              预警：{precheckWarnings.join(" / ")}
+            </p>
+          )}
+        </div>
       )}
       {operation.verification_summary && (
         <p className="mt-3 text-sm leading-7 text-[rgb(var(--ink-800))]">校验：{operation.verification_summary}</p>
@@ -647,8 +851,11 @@ export function AgentWorkspace({
   onProjectRefresh,
 }: AgentWorkspaceProps) {
   const [project, setProject] = useState<Project | null>(null);
+  const [tree, setTree] = useState<ProjectTree | null>(null);
   const [volumes, setVolumes] = useState<Volume[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [agentSettings, setAgentSettings] = useState<ProjectAgentSettings>(normalizeProjectAgentSettings());
+  const [workspaceSummary, setWorkspaceSummary] = useState<ProjectWorkspaceSummary | null>(null);
   const [thread, setThread] = useState<AgentThread | null>(null);
   const [messages, setMessages] = useState<AgentThreadMessage[]>([]);
   const [recentRuns, setRecentRuns] = useState<AgentRun[]>([]);
@@ -666,6 +873,7 @@ export function AgentWorkspace({
   const focusedVolume = getFocusedVolumeSummary(currentRun, volumes, chapters);
   const relatedChapters = getRelatedChapterOutlines(currentRun, chapters, focusedVolume);
   const relatedChapterPreviews = relatedChapters.slice(0, 2);
+  const contextSummary = extractRunContextSummary(currentRun);
   const hasRunDiagnostics = Boolean(
     currentRun &&
       (currentRun.planner_window ||
@@ -686,43 +894,38 @@ export function AgentWorkspace({
     scrollToBottom();
   }, [messages, streamingEvents]);
 
-  async function loadOutlineHierarchy() {
-    try {
-      const [projectData, volumeData, chapterData] = await Promise.all([
-        projectApi.get(projectId) as Promise<Project>,
-        volumeApi.list(projectId) as Promise<Volume[]>,
-        chapterApi.list(projectId) as Promise<Chapter[]>,
-      ]);
-      setProject(projectData);
-      setVolumes(volumeData.sort((left, right) => (left.volume_number || 0) - (right.volume_number || 0)));
-      setChapters(chapterData.sort((left, right) => left.chapter_number - right.chapter_number));
-    } catch (err) {
-      console.error("Failed to load outline hierarchy:", err);
-    }
-  }
-
-  async function loadThreadState(existingThreadId?: string) {
+  async function loadWorkspace(existingThreadId?: string) {
     setError(null);
     setLoading(true);
     try {
-      const threadRecord = existingThreadId
-        ? thread
-        : await agentWorkflowApi.createThread(projectId);
-      const activeThread = existingThreadId
-        ? thread
-        : threadRecord;
-      const threadId = existingThreadId || activeThread?.id;
-      if (!threadId || !activeThread) {
-        throw new Error("无法初始化 Agent 线程");
+      const workspace = await projectApi.getWorkspace(projectId);
+      const flattened = flattenWorkspaceTree(workspace.tree);
+
+      setProject(workspace.project);
+      setTree(workspace.tree);
+      setVolumes(flattened.volumes);
+      setChapters(flattened.chapters);
+      setAgentSettings(normalizeProjectAgentSettings(workspace.agent_settings));
+      setWorkspaceSummary(workspace.workspace_summary);
+      setRecentRuns(workspace.recent_runs);
+      setCurrentRun(workspace.current_run || null);
+      setLatestCheckpoint(workspace.latest_checkpoint || null);
+      setThread(workspace.default_thread || null);
+
+      let activeThreadId = existingThreadId || workspace.default_thread?.id;
+      if (!activeThreadId) {
+        const createdThread = await agentWorkflowApi.createThread(projectId);
+        activeThreadId = createdThread.id;
+        setThread(createdThread);
       }
-      const state = await agentWorkflowApi.getThread(threadId);
-      setThread(state.thread);
-      setMessages(state.messages);
-      setRecentRuns(state.recent_runs);
-      setCurrentRun(state.current_run || null);
-      setLatestCheckpoint(state.latest_checkpoint || null);
+      const threadState = await agentWorkflowApi.getThread(activeThreadId);
+      setThread(threadState.thread);
+      setMessages(threadState.messages);
+      setRecentRuns(threadState.recent_runs);
+      setCurrentRun(threadState.current_run || workspace.current_run || null);
+      setLatestCheckpoint(threadState.latest_checkpoint || workspace.latest_checkpoint || null);
     } catch (err) {
-      const message = err instanceof ApiError ? err.detail : "加载 Agent 工作台失败";
+      const message = err instanceof ApiError ? formatWorkspaceError(err) : "加载 Agent 工作台失败";
       setError(message);
     } finally {
       setLoading(false);
@@ -730,17 +933,13 @@ export function AgentWorkspace({
   }
 
   useEffect(() => {
-    loadThreadState();
-    loadOutlineHierarchy();
+    void loadWorkspace();
     // projectId change means a different workspace.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function refreshAfterMutation() {
-    if (thread?.id) {
-      await loadThreadState(thread.id);
-    }
-    await loadOutlineHierarchy();
+    await loadWorkspace(thread?.id);
     if (onProjectRefresh) {
       await onProjectRefresh();
     }
@@ -800,7 +999,7 @@ export function AgentWorkspace({
         }
       }
     } catch (err) {
-      const message = err instanceof ApiError ? err.detail : "发送指令失败";
+      const message = err instanceof ApiError ? formatWorkspaceError(err) : "发送指令失败";
       setError(message);
     } finally {
       setIsStreaming(false);
@@ -823,7 +1022,7 @@ export function AgentWorkspace({
         }
         await refreshAfterMutation();
       } catch (err) {
-        const message = err instanceof ApiError ? err.detail : "执行操作失败";
+        const message = err instanceof ApiError ? formatWorkspaceError(err) : "执行操作失败";
         setError(message);
       }
     });
@@ -884,6 +1083,36 @@ export function AgentWorkspace({
                 </p>
               </div>
             </div>
+            <CompactMetaGrid
+              className="mt-3"
+              items={[
+                { label: "卷", value: workspaceSummary?.volume_count ?? null },
+                { label: "章", value: workspaceSummary?.chapter_count ?? null },
+                { label: "场景", value: workspaceSummary?.scene_count ?? null },
+                { label: "上下文来源", value: workspaceSummary?.context_source ?? null },
+              ]}
+              columns={4}
+            />
+            <div className="mt-3 rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">风格与连续性</div>
+              <CompactMetaLine
+                className="mt-2"
+                items={[
+                  { label: "风格目标", value: agentSettings.style_goal || null },
+                  { label: "连续性", value: agentSettings.continuity_mode },
+                  { label: "章目标", value: agentSettings.chapter_target_chars ? `${agentSettings.chapter_target_chars} 字` : null },
+                  { label: "场景目标", value: agentSettings.scene_target_chars ? `${agentSettings.scene_target_chars} 字` : "未限制" },
+                ]}
+              />
+              <p className="mt-2 text-sm leading-6 text-[rgb(var(--ink-900))]">
+                语气：{formatListSummary(agentSettings.tone_keywords, "未指定")} · 约束：{formatListSummary(agentSettings.voice_constraints, "未指定")}
+              </p>
+              {agentSettings.forbidden_patterns.length > 0 && (
+                <p className="mt-2 text-sm leading-6 text-[rgb(var(--danger))]">
+                  禁忌：{formatListSummary(agentSettings.forbidden_patterns, "无")}
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
             {messages.length === 0 ? (
@@ -910,6 +1139,8 @@ export function AgentWorkspace({
                             ? "bg-[rgb(var(--jade))]"
                             : event.type === "status"
                               ? "bg-[rgb(var(--ink-800))]"
+                              : event.type === "pipeline_stage"
+                                ? "bg-[rgb(var(--seal))]"
                               : event.type === "operation_progress"
                                 ? "bg-[rgb(var(--amber))]"
                                 : event.type === "error"
@@ -938,6 +1169,11 @@ export function AgentWorkspace({
                         {event.type === "operation_progress" && typeof event.detail.target_display === "string" && (
                           <div className="mt-1 text-xs text-[rgb(var(--ink-800))]">
                             目标: {event.detail.target_display as string}
+                          </div>
+                        )}
+                        {event.type === "pipeline_stage" && (
+                          <div className="mt-1 text-xs text-[rgb(var(--ink-800))]">
+                            {typeof event.detail.summary === "string" ? event.detail.summary : "流水线阶段更新"}
                           </div>
                         )}
                       </div>
@@ -977,9 +1213,9 @@ export function AgentWorkspace({
               <div>
                 <p className="ink-kicker">Current Run</p>
                 <CardTitle className="mt-3 text-2xl">当前待执行计划</CardTitle>
-                {agentProfileId && (
+                {(project?.agent_profile_id || agentProfileId) && (
                   <p className="mt-3 text-sm leading-6 text-[rgb(var(--ink-800))]">
-                    当前项目 profile：<span className="font-medium text-[rgb(var(--ink-900))]">{agentProfileId}</span>
+                    当前项目 profile：<span className="font-medium text-[rgb(var(--ink-900))]">{project?.agent_profile_id || agentProfileId}</span>
                   </p>
                 )}
               </div>
@@ -1007,6 +1243,17 @@ export function AgentWorkspace({
                     {currentRun.error_message}
                   </div>
                 )}
+                <CompactMetaGrid
+                  items={[
+                    { label: "计划有效期", value: currentRun.plan_expires_at ? formatTimestamp(currentRun.plan_expires_at) : null },
+                    { label: "上下文来源", value: workspaceSummary?.context_source || null },
+                    { label: "最近运行", value: workspaceSummary?.latest_run_status || null },
+                    {
+                      label: "版本锚点",
+                      value: currentRun.plan_basis?.entity_versions.length ? currentRun.plan_basis.entity_versions.length : null,
+                    },
+                  ]}
+                />
                 {currentRun.risk_summary && <RiskSummaryCard riskSummary={currentRun.risk_summary} />}
                 <div className="rounded-[1.15rem] border border-[rgba(var(--line),0.16)] bg-[var(--surface-strong)] px-4 py-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1072,10 +1319,29 @@ export function AgentWorkspace({
                       )}
                     </div>
                   </div>
+                  {contextSummary && (
+                    <div className="mt-3 rounded-[1rem] border border-[rgba(var(--line),0.12)] bg-[var(--surface-elevated)] px-4 py-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--ink-800))]">Context Sources</div>
+                      <CompactMetaGrid
+                        className="mt-3"
+                        items={[
+                          {
+                            label: "聚焦对象",
+                            value: Array.isArray(contextSummary.focus_keys)
+                              ? contextSummary.focus_keys.filter((item): item is string => typeof item === "string").join(" / ")
+                              : null,
+                          },
+                          { label: "命中人物", value: asNumber(contextSummary.matched_character_count) },
+                          { label: "命中设定", value: asNumber(contextSummary.matched_world_setting_count) },
+                          { label: "记忆事实", value: asNumber(contextSummary.memory_fact_count) },
+                        ]}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-3">
                   {currentRun.operations.map((operation) => (
-                    <OperationCard key={operation.id} operation={operation} />
+                    <OperationCard key={operation.id} operation={operation} projectId={projectId} tree={tree} />
                   ))}
                 </div>
                 {hasRunDiagnostics && (

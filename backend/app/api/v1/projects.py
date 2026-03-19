@@ -7,8 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.models.project import Project
-from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectResponse,
+    ProjectTreeResponse,
+    ProjectUpdate,
+    ProjectWorkspaceResponse,
+)
 from app.services.project import project_service
+from app.services.project_workspace import project_workspace_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -42,6 +49,26 @@ async def get_project(
 ) -> Project:
     """Get a project by ID."""
     return await project_service.get(db, id=project_id)
+
+
+@router.get("/{project_id}/tree", response_model=ProjectTreeResponse)
+async def get_project_tree(
+    *,
+    db: AsyncSession = Depends(get_db),
+    project_id: UUID,
+) -> ProjectTreeResponse:
+    """Get the navigable volume/chapter/scene tree for one project."""
+    return await project_workspace_service.get_tree_response(db, project_id=project_id)
+
+
+@router.get("/{project_id}/workspace", response_model=ProjectWorkspaceResponse)
+async def get_project_workspace(
+    *,
+    db: AsyncSession = Depends(get_db),
+    project_id: UUID,
+) -> ProjectWorkspaceResponse:
+    """Get the aggregated workspace payload for one project."""
+    return await project_workspace_service.get_workspace_response(db, project_id=project_id)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)

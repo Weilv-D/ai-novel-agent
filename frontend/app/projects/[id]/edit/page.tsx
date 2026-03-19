@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
+import { ProjectAgentSettingsFields } from "@/components/projects/ProjectAgentSettingsFields";
+import { normalizeProjectAgentSettings } from "@/lib/project-agent-settings";
 import { useProjectStore } from "@/lib/stores/projectStore";
 import type { AgentProfile, ProjectStatus, ProjectUpdate } from "@/lib/types";
 
@@ -52,6 +54,7 @@ export default function EditProjectPage() {
     target_audience: "",
     target_word_count: undefined,
     agent_profile_id: "default",
+    agent_settings: normalizeProjectAgentSettings(),
     status: undefined as ProjectStatus | undefined,
   });
   const [profiles, setProfiles] = useState<AgentProfile[]>(FALLBACK_PROFILES);
@@ -94,6 +97,7 @@ export default function EditProjectPage() {
         target_audience: project.target_audience || "",
         target_word_count: project.target_word_count,
         agent_profile_id: project.agent_profile_id || "default",
+        agent_settings: normalizeProjectAgentSettings(project.agent_settings),
         status: project.status,
       });
     }
@@ -269,6 +273,11 @@ export default function EditProjectPage() {
                   {(profiles.find((profile) => profile.id === (formData.agent_profile_id || "default")) || profiles[0])?.description}
                 </p>
               </div>
+
+              <ProjectAgentSettingsFields
+                value={normalizeProjectAgentSettings(formData.agent_settings)}
+                onChange={(agent_settings) => setFormData({ ...formData, agent_settings })}
+              />
 
               {submitError && <div className="ink-alert ink-alert-danger">{submitError}</div>}
 

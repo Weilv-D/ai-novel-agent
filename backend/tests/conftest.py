@@ -10,6 +10,7 @@ from typing import Any
 
 import fastapi.testclient
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import String, TypeDecorator, create_engine
 from sqlalchemy.dialects.postgresql import UUID
@@ -279,7 +280,7 @@ def db_session(db_engine: Any) -> Generator[AsyncSession, None, None]:
         session._session.close()
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create test HTTP client with test database dependency override."""
     from app.api.deps import get_db

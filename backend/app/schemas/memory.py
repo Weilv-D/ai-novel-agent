@@ -121,6 +121,16 @@ class VectorSearchRequest(BaseModel):
     memory_type: MemoryTypeLiteral | None = Field(
         None, description="Optional filter by memory type"
     )
+    meta_filters: dict[str, str | list[str] | int | float | bool] = Field(
+        default_factory=dict,
+        description="Optional metadata filters applied after similarity ranking",
+    )
+    related_character_ids: list[UUID] = Field(default_factory=list)
+    related_world_setting_ids: list[UUID] = Field(default_factory=list)
+    scope: dict[str, UUID] = Field(
+        default_factory=dict,
+        description="Optional scope hint such as chapter_id/scene_id/volume_id",
+    )
 
     @field_validator("query_embedding")
     @classmethod

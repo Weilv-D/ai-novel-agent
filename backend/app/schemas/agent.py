@@ -44,11 +44,14 @@ ChildUnitRoleLiteral = Literal["planner", "researcher", "writer", "editor", "con
 ChildUnitStageLiteral = Literal["preview", "pre_execution", "execution"]
 PlannerHistoryModeLiteral = Literal["recent_window", "checkpoint_delta"]
 InlineEditOperationLiteral = Literal["rewrite", "expand", "condense", "change_pov"]
+PipelineStageLiteral = Literal["research", "brief", "draft", "polish", "continuity_precheck", "plan_ready"]
+PipelineStepStatusLiteral = Literal["planned", "completed", "failed", "skipped", "warning"]
 
 AgentStreamEventTypeLiteral = Literal[
     "status",
     "thinking",
     "operation_progress",
+    "pipeline_stage",
     "verification",
     "message_chunk",
     "result",
@@ -197,6 +200,18 @@ class AgentSubtaskTraceResponse(BaseModel):
     attempts: list[AgentSubtaskAttemptResponse] = Field(default_factory=list)
 
 
+class AgentPipelineStepResponse(BaseModel):
+    """One visible pipeline step for prose-oriented planning."""
+
+    id: str
+    role: SubtaskRoleLiteral
+    stage: PipelineStageLiteral
+    status: PipelineStepStatusLiteral
+    summary: str
+    warnings: list[str] = Field(default_factory=list)
+    facts_used: list[str] = Field(default_factory=list)
+
+
 class AgentSubtaskResponse(BaseModel):
     """Internal subtask summary exposed with a run."""
 
@@ -209,6 +224,7 @@ class AgentSubtaskResponse(BaseModel):
     summary: str | None = None
     error_message: str | None = None
     child_trace: AgentSubtaskTraceResponse | None = None
+    pipeline_steps: list[AgentPipelineStepResponse] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
@@ -411,6 +427,21 @@ class AgentRunRiskSummaryResponse(BaseModel):
     summary: str
 
 
+class AgentPlanBasisEntityVersionResponse(BaseModel):
+    """One entity version checkpoint captured when the plan was created."""
+
+    entity_type: str
+    entity_id: UUID
+    updated_at: datetime
+
+
+class AgentPlanBasisResponse(BaseModel):
+    """Freshness metadata for one run."""
+
+    entity_versions: list[AgentPlanBasisEntityVersionResponse] = Field(default_factory=list)
+    context_fingerprint: str
+
+
 class AgentRunResponse(BaseModel):
     """An executable plan generated from one user request."""
 
@@ -432,6 +463,8 @@ class AgentRunResponse(BaseModel):
     planner_window: AgentPlannerWindowResponse | None = None
     retained_window: AgentRetainedWindowResponse | None = None
     active_bundle_contract: AgentActiveBundleContractResponse | None = None
+    plan_expires_at: datetime | None = None
+    plan_basis: AgentPlanBasisResponse | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
     confirmed_at: datetime | None = None
     secondary_confirmed_at: datetime | None = None

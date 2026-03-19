@@ -9,8 +9,10 @@ Run with:
     pytest tests/test_integration/test_http_integration.py -v
 """
 
-
+import pytest
 from httpx import AsyncClient
+
+pytestmark = pytest.mark.asyncio
 
 
 class TestHealthEndpoint:

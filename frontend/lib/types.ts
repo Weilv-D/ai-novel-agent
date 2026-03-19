@@ -17,6 +17,19 @@ export enum ProjectStatus {
   COMPLETED = "completed",
 }
 
+export type ProjectContinuityMode = "standard" | "strict";
+
+export interface ProjectAgentSettings {
+  style_goal?: string | null;
+  tone_keywords: string[];
+  voice_constraints: string[];
+  forbidden_patterns: string[];
+  terminology_glossary: string[];
+  chapter_target_chars?: number | null;
+  scene_target_chars?: number | null;
+  continuity_mode: ProjectContinuityMode;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -27,6 +40,7 @@ export interface Project {
   story_outline?: string;
   notes?: string;
   agent_profile_id: string;
+  agent_settings: ProjectAgentSettings;
   meta?: Record<string, unknown>;
   status: ProjectStatus;
   created_at: string;
@@ -42,6 +56,7 @@ export interface ProjectCreate {
   story_outline?: string;
   notes?: string;
   agent_profile_id?: string;
+  agent_settings?: ProjectAgentSettings;
   meta?: Record<string, unknown>;
   status?: ProjectStatus;
 }
@@ -55,8 +70,53 @@ export interface ProjectUpdate {
   story_outline?: string;
   notes?: string;
   agent_profile_id?: string;
+  agent_settings?: ProjectAgentSettings | null;
   meta?: Record<string, unknown>;
   status?: ProjectStatus;
+}
+
+export interface ProjectTreeScene {
+  id: string;
+  chapter_id: string;
+  scene_order: number;
+  location?: string | null;
+  pov_character_id?: string | null;
+}
+
+export interface ProjectTreeChapter {
+  id: string;
+  project_id: string;
+  volume_id?: string | null;
+  chapter_number: number;
+  title?: string | null;
+  outline?: string | null;
+  status: string;
+  scenes: ProjectTreeScene[];
+}
+
+export interface ProjectTreeVolume {
+  id: string;
+  project_id: string;
+  volume_number?: number | null;
+  title?: string | null;
+  outline?: string | null;
+  chapters: ProjectTreeChapter[];
+}
+
+export interface ProjectTree {
+  project_id: string;
+  volumes: ProjectTreeVolume[];
+  ungrouped_chapters: ProjectTreeChapter[];
+}
+
+export interface ProjectWorkspaceSummary {
+  volume_count: number;
+  chapter_count: number;
+  scene_count: number;
+  character_count: number;
+  world_setting_count: number;
+  latest_run_status?: string | null;
+  context_source: string;
 }
 
 // Character types
@@ -499,6 +559,8 @@ export type AgentRiskPolicyId =
   | "long_form_overwrite"
   | "multi_object_write";
 export type AgentRiskPolicyScope = "operation" | "run";
+export type AgentPipelineStage = "research" | "brief" | "draft" | "polish" | "continuity_precheck" | "plan_ready";
+export type AgentPipelineStepStatus = "planned" | "completed" | "failed" | "skipped" | "warning";
 
 export interface OperationPreview {
   changed_fields: string[];
@@ -562,9 +624,20 @@ export interface AgentSubtask {
   summary?: string | null;
   error_message?: string | null;
   child_trace?: AgentSubtaskTrace | null;
+  pipeline_steps: AgentPipelineStep[];
   meta: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface AgentPipelineStep {
+  id: string;
+  role: AgentSubtaskRole;
+  stage: AgentPipelineStage;
+  status: AgentPipelineStepStatus;
+  summary: string;
+  warnings: string[];
+  facts_used: string[];
 }
 
 export interface AgentSubtaskAttempt {
@@ -807,6 +880,8 @@ export interface AgentRun {
   planner_window?: AgentPlannerWindow | null;
   retained_window?: AgentRetainedWindow | null;
   active_bundle_contract?: AgentActiveBundleContract | null;
+  plan_expires_at?: string | null;
+  plan_basis?: AgentPlanBasis | null;
   meta: Record<string, unknown>;
   confirmed_at?: string | null;
   secondary_confirmed_at?: string | null;
@@ -816,6 +891,17 @@ export interface AgentRun {
   updated_at: string;
   operations: AgentOperation[];
   subtasks: AgentSubtask[];
+}
+
+export interface AgentPlanBasisEntityVersion {
+  entity_type: string;
+  entity_id: string;
+  updated_at: string;
+}
+
+export interface AgentPlanBasis {
+  entity_versions: AgentPlanBasisEntityVersion[];
+  context_fingerprint: string;
 }
 
 export interface AgentThreadState {
@@ -843,6 +929,7 @@ export type AgentStreamEventType =
   | "status"
   | "thinking"
   | "operation_progress"
+  | "pipeline_stage"
   | "verification"
   | "message_chunk"
   | "result"
@@ -881,6 +968,17 @@ export interface AgentSkillCatalog {
   source_roots: string[];
   planner: AgentSkillSummary;
   operations: AgentSkillSummary[];
+}
+
+export interface ProjectWorkspace {
+  project: Project;
+  agent_settings: ProjectAgentSettings;
+  tree: ProjectTree;
+  default_thread?: AgentThread | null;
+  latest_checkpoint?: AgentThreadCheckpoint | null;
+  current_run?: AgentRun | null;
+  recent_runs: AgentRun[];
+  workspace_summary: ProjectWorkspaceSummary;
 }
 
 export type TextImportPhase =

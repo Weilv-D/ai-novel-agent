@@ -58,6 +58,7 @@ class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
         """Create a new project."""
         obj_dict = obj_in.model_dump()
         profile_id = str(obj_dict.pop("agent_profile_id", DEFAULT_AGENT_PROFILE_ID))
+        agent_settings = cast(dict[str, Any] | None, obj_dict.pop("agent_settings", None))
         meta = dict(obj_dict.pop("meta", {}) or {})
         obj_dict["story_outline"] = build_initial_story_outline(
             summary=cast(str | None, obj_dict.get("summary")),
@@ -67,6 +68,7 @@ class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
         meta.setdefault("agent_profile_id", profile_id)
         db_obj = Project(**obj_dict, meta=meta)
         db_obj.agent_profile_id = profile_id
+        db_obj.agent_settings = agent_settings
         db.add(db_obj)
         await db.flush()
         await db.refresh(db_obj)
@@ -86,6 +88,7 @@ class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
             update_data = dict(obj_in)
 
         next_profile_id = cast(str | None, update_data.pop("agent_profile_id", None))
+        next_agent_settings = cast(dict[str, Any] | None, update_data.pop("agent_settings", None))
         if "story_outline" in update_data:
             update_data["story_outline"] = build_initial_story_outline(
                 story_outline=cast(str | None, update_data.get("story_outline")),
@@ -95,6 +98,7 @@ class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
         if "meta" in update_data:
             next_meta = dict(update_data.pop("meta") or {})
             next_meta.setdefault("agent_profile_id", db_obj.agent_profile_id)
+            next_meta.setdefault("agent_settings", db_obj.agent_settings)
             db_obj.meta = next_meta
 
         for field, value in update_data.items():
@@ -103,6 +107,8 @@ class CRUDProject(CRUDBase[Project, ProjectCreate, ProjectUpdate]):
 
         if next_profile_id is not None:
             db_obj.agent_profile_id = next_profile_id
+        if next_agent_settings is not None:
+            db_obj.agent_settings = next_agent_settings
 
         await db.flush()
         await db.refresh(db_obj)
