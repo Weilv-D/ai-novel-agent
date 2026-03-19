@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import text
@@ -176,6 +177,66 @@ class TestTextImportService:
         assert client_preview.compact_preview is True
         assert client_preview.chapters[0].content_truncated is True
         assert client_preview.chapters[0].content_length == len(preview.chapters[0].content)
+
+    @pytest.mark.asyncio
+    async def test_analyze_reports_normalized_chapter_count_in_structure_detection(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        oversized_content = "甲" * (text_import_service.MAX_STORED_CHAPTER_CHARS + 20)
+        text = f"第一章\n{oversized_content}"
+
+        monkeypatch.setattr(text_import_service, "_llm_ready", lambda: True)
+
+        async def fake_generate_chapter_outline(_chapter: DetectedChapter) -> SimpleNamespace:
+            return SimpleNamespace(content="章纲", used_fallback=False)
+
+        async def fake_generate_project_summary(
+            _chapters: list[DetectedChapter],
+            *,
+            project_name: str,
+            genre: str | None,
+        ) -> dict[str, str | bool | None]:
+            return {
+                "summary": "摘要",
+                "story_outline": "总纲",
+                "genre": genre,
+                "used_fallback": False,
+            }
+
+        async def fake_generate_volume_outlines(
+            volumes: list[DetectedVolume],
+            _chapters: list[DetectedChapter],
+        ) -> list[str | None]:
+            return [volume.outline for volume in volumes]
+
+        async def fake_extract_characters(_chapters: list[DetectedChapter]) -> list[DetectedCharacter]:
+            return []
+
+        async def fake_extract_world_settings(_chapters: list[DetectedChapter]) -> list[DetectedWorldSetting]:
+            return []
+
+        async def fake_build_client_preview(preview: TextImportPreview) -> TextImportPreview:
+            return preview
+
+        monkeypatch.setattr(text_import_service, "_generate_chapter_outline", fake_generate_chapter_outline)
+        monkeypatch.setattr(text_import_service, "_generate_project_summary", fake_generate_project_summary)
+        monkeypatch.setattr(text_import_service, "_generate_volume_outlines", fake_generate_volume_outlines)
+        monkeypatch.setattr(text_import_service, "_extract_characters", fake_extract_characters)
+        monkeypatch.setattr(text_import_service, "_extract_world_settings", fake_extract_world_settings)
+        monkeypatch.setattr(text_import_service, "_build_client_preview", fake_build_client_preview)
+
+        events = [event async for event in text_import_service.analyze(text, "超长章节项目")]
+
+        structure_event = next(
+            event
+            for event in events
+            if event.phase == "structure_detection" and event.progress > 0.1
+        )
+
+        assert structure_event.message == "已识别 1 个卷 / 2 个章节"
+        assert structure_event.data["chapters"] == 2
+        assert any("超长章节已自动拆分" in warning for warning in structure_event.data["warnings"])
 
     def test_merge_confirmed_preview_preserves_full_content_from_compact_preview(self) -> None:
         stored_preview = TextImportPreview(

@@ -344,7 +344,7 @@ class TextImportService:
         yield TextImportProgress(
             phase="structure_detection",
             progress=0.15,
-            message=f"已识别 {len(preview.volumes)} 个卷 / {len(chapters)} 个章节",
+            message=f"已识别 {len(preview.volumes)} 个卷 / {len(preview.chapters)} 个章节",
             data={
                 "volumes": len(preview.volumes),
                 "chapters": len(preview.chapters),
