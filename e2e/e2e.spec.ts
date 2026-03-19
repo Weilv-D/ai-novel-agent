@@ -47,6 +47,42 @@ test.describe("E2E 测试套件", () => {
         timeout: 30000,
       });
     });
+
+    test("人物关系图谱正确解析导入常见的 name-to-label 关系结构", async ({
+      authenticatedPage,
+      apiContext,
+      testProjectId,
+    }) => {
+      const sourceCharacterResponse = await apiContext.post("/api/v1/characters", {
+        data: {
+          project_id: testProjectId,
+          name: "林霄",
+          role: "主角",
+          relationships: {
+            苏晚: "同行者",
+          },
+        },
+      });
+      expect(sourceCharacterResponse.ok()).toBeTruthy();
+
+      const targetCharacterResponse = await apiContext.post("/api/v1/characters", {
+        data: {
+          project_id: testProjectId,
+          name: "苏晚",
+          role: "搭档",
+          relationships: {},
+        },
+      });
+      expect(targetCharacterResponse.ok()).toBeTruthy();
+
+      await authenticatedPage.goto(`/projects/${testProjectId}/relationships`);
+
+      await expect(authenticatedPage.getByText("人物关系网络", { exact: true })).toBeVisible();
+      await expect(authenticatedPage.getByText("同行者", { exact: true })).toBeVisible();
+      await expect(authenticatedPage.getByText("待补人物", { exact: true })).toHaveCount(0);
+      await expect(authenticatedPage.getByText("人物 2", { exact: true })).toBeVisible();
+      await expect(authenticatedPage.getByText("关系 1", { exact: true })).toBeVisible();
+    });
   });
 
   test.describe("Agent 工作流", () => {

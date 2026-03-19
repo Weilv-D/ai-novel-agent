@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 
 import { SortableList } from "@/components/dnd/SortableList";
 import { ApiError, chapterApi, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import { getChapterStatusMeta } from "@/lib/presentation";
 import type { Chapter, Volume } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -14,8 +14,7 @@ import { LoadingSpinner } from "@/components/ui/Loading";
 import { useToast } from "@/components/ui/Toast";
 
 export default function ChaptersPage() {
-  const params = useParams();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
   const toast = useToast();
 
   const [chapters, setChapters] = useState<Chapter[]>([]);

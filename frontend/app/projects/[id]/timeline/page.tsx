@@ -2,18 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 
 import { TimelineView } from "@/components/timeline/TimelineView";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { ApiError, timelineApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { ProjectTimelineResponse } from "@/lib/types";
 
 export default function ProjectTimelinePage() {
-  const params = useParams();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
 
   const [timeline, setTimeline] = useState<ProjectTimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);

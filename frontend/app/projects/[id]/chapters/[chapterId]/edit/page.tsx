@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { TipTapEditor } from "@/components/editor";
@@ -10,14 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { ApiError, agentApi, chapterApi, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import { hasRichTextContent, normalizeRichTextContent, richTextToPlainText } from "@/lib/rich-text";
 import type { Chapter, ChapterStatus, ChapterUpdate, Volume } from "@/lib/types";
 
 export default function EditChapterPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const chapterId = params.chapterId as string;
+  const projectId = useRouteParam("id");
+  const chapterId = useRouteParam("chapterId");
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [volumes, setVolumes] = useState<Volume[]>([]);

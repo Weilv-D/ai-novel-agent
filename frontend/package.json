@@ -7,7 +7,8 @@
     "dev": "node ./node_modules/next/dist/bin/next dev",
     "build": "npm run clean:next && node ./node_modules/next/dist/bin/next build",
     "start": "node ./node_modules/next/dist/bin/next start",
-    "lint": "node ./node_modules/eslint/bin/eslint.js app components lib scripts --ext .ts,.tsx --max-warnings=0",
+    "lint": "node ./node_modules/eslint/bin/eslint.js app components lib pages scripts --ext .ts,.tsx --max-warnings=0",
+    "test:unit": "node --import tsx --test components/graph/character-relationships.test.ts",
     "type-check": "node ./node_modules/next/dist/bin/next typegen && node ./node_modules/typescript/bin/tsc --noEmit",
     "test:api": "node ./node_modules/tsx/dist/cli.mjs scripts/test-api-integration.ts"
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/Button";
@@ -9,18 +9,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { ApiError, chapterApi, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { ChapterCreate, ChapterStatus, Volume } from "@/lib/types";
 
 export default function NewChapterPage() {
-  const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
 
   const [volumes, setVolumes] = useState<Volume[]>([]);
   const [volumeLoading, setVolumeLoading] = useState(true);
   const [formData, setFormData] = useState<Omit<ChapterCreate, "project_id">>({
-    volume_id: searchParams.get("volumeId") || "",
+    volume_id: searchParams?.get("volumeId") || "",
     chapter_number: 1,
     title: "",
     outline: "",
@@ -37,7 +37,7 @@ export default function NewChapterPage() {
         const data = await volumeApi.list(projectId) as Volume[];
         const sorted = data.sort((a, b) => (a.volume_number || 0) - (b.volume_number || 0));
         setVolumes(sorted);
-        if (!searchParams.get("volumeId") && sorted[0]?.id) {
+        if (!searchParams?.get("volumeId") && sorted[0]?.id) {
           setFormData((prev) => ({ ...prev, volume_id: prev.volume_id || sorted[0].id }));
         }
       } catch (err) {

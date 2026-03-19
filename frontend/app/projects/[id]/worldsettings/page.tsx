@@ -2,17 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 
 import { ApiError, worldSettingApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { WorldSetting } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/Loading";
 
 export default function WorldSettingsPage() {
-  const params = useParams();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
 
   const [settings, setSettings] = useState<WorldSetting[]>([]);
   const [loading, setLoading] = useState(true);

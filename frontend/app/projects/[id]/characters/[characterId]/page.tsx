@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, characterApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { Character } from "@/lib/types";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 
@@ -46,10 +47,9 @@ function formatStructuredValue(value: unknown): string {
 }
 
 export default function CharacterDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const characterId = params.characterId as string;
+  const projectId = useRouteParam("id");
+  const characterId = useRouteParam("characterId");
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [loading, setLoading] = useState(true);

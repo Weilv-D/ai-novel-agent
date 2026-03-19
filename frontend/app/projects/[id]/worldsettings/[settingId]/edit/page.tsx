@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { worldSettingApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { WorldSetting, WorldSettingUpdate } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
@@ -24,10 +25,9 @@ const COMMON_CATEGORIES = [
 ];
 
 export default function EditWorldSettingPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const settingId = params.settingId as string;
+  const projectId = useRouteParam("id");
+  const settingId = useRouteParam("settingId");
 
   const [setting, setSetting] = useState<WorldSetting | null>(null);
   const [formData, setFormData] = useState<WorldSettingUpdate>({});

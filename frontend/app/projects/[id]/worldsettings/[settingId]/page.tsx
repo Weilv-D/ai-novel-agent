@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,13 +9,13 @@ import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, worldSettingApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { WorldSetting } from "@/lib/types";
 
 export default function WorldSettingDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const settingId = params.settingId as string;
+  const projectId = useRouteParam("id");
+  const settingId = useRouteParam("settingId");
 
   const [setting, setSetting] = useState<WorldSetting | null>(null);
   const [loading, setLoading] = useState(true);

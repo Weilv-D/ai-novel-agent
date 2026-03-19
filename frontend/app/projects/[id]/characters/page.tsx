@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 
 import { ApiError, characterApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { Character } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -30,8 +30,7 @@ function formatStructuredValue(value: unknown): string {
 }
 
 export default function CharactersPage() {
-  const params = useParams();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);

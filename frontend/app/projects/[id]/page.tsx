@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { AgentWorkspace } from "@/components/AgentWorkspace";
 import { Button } from "@/components/ui/Button";
@@ -11,14 +11,14 @@ import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, chapterApi, exportApi, projectPackageApi, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import { getProjectStatusMeta } from "@/lib/presentation";
 import { useProjectStore } from "@/lib/stores/projectStore";
 import type { Chapter, Volume } from "@/lib/types";
 
 export default function ProjectDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const id = params.id as string;
+  const id = useRouteParam("id");
 
   const {
     currentProject: project,

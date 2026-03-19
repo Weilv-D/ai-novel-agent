@@ -1,20 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { sceneApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { SceneCreate } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
 export default function NewScenePage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const chapterId = params.chapterId as string;
+  const projectId = useRouteParam("id");
+  const chapterId = useRouteParam("chapterId");
 
   const [formData, setFormData] = useState<Omit<SceneCreate, "chapter_id">>({
     scene_order: 1,

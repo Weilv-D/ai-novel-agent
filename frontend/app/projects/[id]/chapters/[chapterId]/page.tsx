@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 import { RichTextContent } from "@/components/content/RichTextContent";
@@ -13,15 +13,15 @@ import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, chapterApi, sceneApi, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import { getRichTextPreview } from "@/lib/rich-text";
 import { getChapterStatusMeta } from "@/lib/presentation";
 import type { Chapter, Scene, Volume } from "@/lib/types";
 
 export default function ChapterDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const chapterId = params.chapterId as string;
+  const projectId = useRouteParam("id");
+  const chapterId = useRouteParam("chapterId");
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [volume, setVolume] = useState<Volume | null>(null);

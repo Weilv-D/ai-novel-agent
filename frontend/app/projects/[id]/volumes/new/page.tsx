@@ -2,18 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { ApiError, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { VolumeCreate } from "@/lib/types";
 
 export default function NewVolumePage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
 
   const [formData, setFormData] = useState<Omit<VolumeCreate, "project_id">>({
     volume_number: 1,

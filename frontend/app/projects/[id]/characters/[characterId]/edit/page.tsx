@@ -1,21 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { characterApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { Character, CharacterUpdate } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
 export default function EditCharacterPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const characterId = params.characterId as string;
+  const projectId = useRouteParam("id");
+  const characterId = useRouteParam("characterId");
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [formData, setFormData] = useState<CharacterUpdate>({});

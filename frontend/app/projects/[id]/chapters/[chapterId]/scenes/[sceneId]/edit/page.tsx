@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TipTapEditor } from "@/components/editor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -9,16 +9,16 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { sceneApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import { hasRichTextContent, normalizeRichTextContent } from "@/lib/rich-text";
 import type { Scene, SceneUpdate } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 
 export default function EditScenePage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const chapterId = params.chapterId as string;
-  const sceneId = params.sceneId as string;
+  const projectId = useRouteParam("id");
+  const chapterId = useRouteParam("chapterId");
+  const sceneId = useRouteParam("sceneId");
 
   const [scene, setScene] = useState<Scene | null>(null);
   const [formData, setFormData] = useState<SceneUpdate>({});

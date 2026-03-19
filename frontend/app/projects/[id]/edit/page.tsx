@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { agentWorkflowApi, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { ProjectAgentSettingsFields } from "@/components/projects/ProjectAgentSettingsFields";
+import { useRouteParam } from "@/lib/navigation";
 import { normalizeProjectAgentSettings } from "@/lib/project-agent-settings";
 import { useProjectStore } from "@/lib/stores/projectStore";
 import type { AgentProfile, ProjectStatus, ProjectUpdate } from "@/lib/types";
@@ -32,9 +33,8 @@ const FALLBACK_PROFILES: AgentProfile[] = [
 ];
 
 export default function EditProjectPage() {
-  const params = useParams();
   const router = useRouter();
-  const id = params.id as string;
+  const id = useRouteParam("id");
 
   const {
     currentProject: project,

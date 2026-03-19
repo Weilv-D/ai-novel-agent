@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { CharacterRelationshipGraph } from "@/components/graph/CharacterRelationshipGraph";
 import { DependencyGraph } from "@/components/graph/DependencyGraph";
+import { useRouteParam } from "@/lib/navigation";
 
 type RelationshipTab = "characters" | "dependencies";
 
 export default function RelationshipGraphPage() {
-  const params = useParams();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
   const [activeTab, setActiveTab] = useState<RelationshipTab>("characters");
 
   return (

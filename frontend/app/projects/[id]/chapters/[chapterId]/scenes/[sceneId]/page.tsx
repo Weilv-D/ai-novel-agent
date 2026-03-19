@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -10,15 +10,15 @@ import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, sceneApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { Scene } from "@/lib/types";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
 
 export default function SceneDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const chapterId = params.chapterId as string;
-  const sceneId = params.sceneId as string;
+  const projectId = useRouteParam("id");
+  const chapterId = useRouteParam("chapterId");
+  const sceneId = useRouteParam("sceneId");
 
   const [scene, setScene] = useState<Scene | null>(null);
   const [loading, setLoading] = useState(true);

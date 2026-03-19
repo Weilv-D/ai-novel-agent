@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -10,13 +10,13 @@ import { LoadingSpinner } from "@/components/ui/Loading";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, chapterApi, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { Chapter, Volume } from "@/lib/types";
 
 export default function VolumeDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const volumeId = params.volumeId as string;
+  const projectId = useRouteParam("id");
+  const volumeId = useRouteParam("volumeId");
 
   const [volume, setVolume] = useState<Volume | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);

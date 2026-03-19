@@ -2,20 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/Loading";
 import { ApiError, volumeApi } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 import type { Volume, VolumeUpdate } from "@/lib/types";
 
 export default function EditVolumePage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
-  const volumeId = params.volumeId as string;
+  const projectId = useRouteParam("id");
+  const volumeId = useRouteParam("volumeId");
 
   const [formData, setFormData] = useState<VolumeUpdate>({
     volume_number: 1,

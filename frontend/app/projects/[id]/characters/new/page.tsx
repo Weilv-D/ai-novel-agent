@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { characterApi } from "@/lib/api-client";
 import type { CharacterCreate } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
+import { useRouteParam } from "@/lib/navigation";
 
 interface CharacterFormData {
   name: string;
@@ -23,9 +24,8 @@ interface CharacterFormData {
 }
 
 export default function NewCharacterPage() {
-  const params = useParams();
   const router = useRouter();
-  const projectId = params.id as string;
+  const projectId = useRouteParam("id");
 
   const [formData, setFormData] = useState<CharacterFormData>({
     name: "",
